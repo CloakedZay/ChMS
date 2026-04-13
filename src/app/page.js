@@ -127,6 +127,12 @@ export default function HomePage() {
             </Link>
             <a
               href="#features"
+              onClick={(e) => {
+                e.preventDefault();
+                document.querySelector("#features")?.scrollIntoView({
+                  behavior: "smooth",
+                });
+              }}
               className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors px-4 py-3.5"
             >
               See features <ChevronDown className="w-4 h-4" />
