@@ -1,80 +1,112 @@
-'use client'; // Required for interactive buttons and state
-import { useState } from "react";
-import { supabase } from "@/app/lib/supabase";
-import { useRouter } from "next/navigation";
-import { Mail, Lock, ArrowRight, ShieldCheck } from "lucide-react";
+'use client';
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+import { useState, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { supabase } from '@/app/lib/supabase';
+
+function LoginForm() {
+  const searchParams = useSearchParams();
   const router = useRouter();
+  const type = searchParams.get('type') || 'member';
+  const isAdmin = type === 'admin';
 
-  const handleLogin = async (e) => {
-    e.preventDefault(); // Stop the page from refreshing
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
     setLoading(true);
+    setError('');
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) {
-      alert(error.message); // Show error if login fails
-    } else {
-      router.push("/dashboard"); // Take them to the dashboard if successful
+    if (authError) {
+      setError(authError.message);
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .single();
+
+    const role = profile?.role || 'member';
+
+    if (role === 'admin' || role === 'pastor' || role === 'leader') {
+      router.push('/dashboard');
+    } else {
+      router.push('/member-dashboard');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#0f111a] flex items-center justify-center p-6 relative">
-      <div className="w-full max-w-md z-10">
-        <div className="bg-[#161925]/80 backdrop-blur-xl border border-slate-800/60 p-8 rounded-3xl">
-          <h2 className="text-xl font-bold text-white mb-8 text-center">Admin Login</h2>
-          
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-3.5 w-5 h-5 text-slate-500" />
-                <input 
-                  type="email" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@ggcf-gmi.com"
-                  className="w-full bg-[#0f111a] border border-slate-800 rounded-xl py-3.5 pl-12 text-white"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-3.5 w-5 h-5 text-slate-500" />
-                <input 
-                  type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-[#0f111a] border border-slate-800 rounded-xl py-3.5 pl-12 text-white"
-                  required
-                />
-              </div>
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-            >
-              {loading ? "Authenticating..." : "Sign In to Dashboard"}
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
+    <div className="min-h-screen bg-[#0f111a] flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-[#1a1d2e] rounded-3xl p-8 border border-white/10">
+        <div className="text-center mb-8">
+          <div className="text-4xl mb-3">⛪</div>
+          <h1 className="text-2xl font-black text-white">
+            {isAdmin ? 'Staff Login' : 'Member Login'}
+          </h1>
+          <p className="text-white/50 text-sm mt-1">
+            {isAdmin ? 'Access the full FaithSync dashboard' : 'View your church community'}
+          </p>
         </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-white/70 text-sm font-semibold block mb-1">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="yourname@email.com"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-indigo-500 transition"
+            />
+          </div>
+
+          <div>
+            <label className="text-white/70 text-sm font-semibold block mb-1">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-indigo-500 transition"
+            />
+          </div>
+
+          {error && (
+            <p className="text-red-400 text-sm bg-red-400/10 rounded-xl px-4 py-2">{error}</p>
+          )}
+
+          <button
+            onClick={handleLogin}
+            disabled={loading}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all mt-2"
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
+        </div>
+
+        <p className="text-center text-white/30 text-sm mt-6">
+          <a href="/" className="hover:text-white/60 transition">← Back to Home</a>
+        </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
