@@ -50,7 +50,7 @@ export default function FinancePage() {
     const { data, error } = await supabase
       .from('transactions')
       .select('*')
-      .order('date', { ascending: false });
+      .order('date_recorded', { ascending: false });
     if (!error) setTransactions(data || []);
     setLoading(false);
   }
@@ -353,7 +353,8 @@ export default function FinancePage() {
 
               <Field label="Amount (₱)" required>
                 <input type="number" name="amount" value={form.amount} onChange={handleChange}
-                  required placeholder="e.g. 500" min="0" step="0.01" className="input-style" />
+                    required placeholder="e.g. 500" min="0" step="0.01" className="input-style"
+                    onWheel={(e) => e.target.blur()} />
               </Field>
 
               <Field label="Date">

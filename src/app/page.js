@@ -75,14 +75,20 @@ export default function HomePage() {
             </div>
             <span className="text-xl font-black tracking-tight text-white uppercase italic">FaithSync</span>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
             <a href="#features" className="text-sm text-slate-400 hover:text-white transition-colors hidden sm:block">Features</a>
             <a href="#about" className="text-sm text-slate-400 hover:text-white transition-colors hidden sm:block">About</a>
             <Link
-              href="/login"
+              href="/login?type=member"
+              className="text-sm font-semibold text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 px-4 py-2 rounded-lg transition-colors"
+            >
+              Member Login
+            </Link>
+            <Link
+              href="/login?type=admin"
               className="text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg transition-colors"
             >
-              Sign In
+              Staff Login
             </Link>
           </div>
         </div>
@@ -119,24 +125,25 @@ export default function HomePage() {
 
           <div className="flex flex-col sm:flex-row gap-3 items-center">
             <Link
-              href="/login"
+              href="/login?type=admin"
               className="group flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-3.5 rounded-xl shadow-lg shadow-blue-900/20 transition-all active:scale-95"
             >
-              Sign In to FaithSync
+              Staff / Admin Login
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </Link>
-            <a
-              href="#features"
-              onClick={(e) => {
-                e.preventDefault();
-                document.querySelector("#features")?.scrollIntoView({
-                  behavior: "smooth",
-                });
-              }}
+            <Link
+              href="/login?type=member"
+              className="group flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-white font-bold px-8 py-3.5 rounded-xl transition-all active:scale-95"
+            >
+              Member Login
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </Link>
+            <button
+              onClick={() => document.querySelector("#features")?.scrollIntoView({ behavior: "smooth" })}
               className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors px-4 py-3.5"
             >
               See features <ChevronDown className="w-4 h-4" />
-            </a>
+            </button>
           </div>
         </div>
       </header>
@@ -164,7 +171,6 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Sidebar */}
           <div className="lg:col-span-2 flex flex-col gap-2">
             {FEATURES.map((f) => (
               <button
@@ -186,7 +192,6 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Detail Panel */}
           <div className="lg:col-span-3 bg-slate-900/50 border border-slate-800 rounded-2xl p-8 min-h-[320px]">
             <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mb-5">
               <active.Icon className="w-6 h-6 text-white" />
@@ -232,14 +237,23 @@ export default function HomePage() {
       <section className="py-20 text-center">
         <div className="max-w-xl mx-auto px-6">
           <h2 className="text-3xl font-black text-white mb-4">Ready to get started?</h2>
-          <p className="text-slate-400 text-sm mb-8">Sign in with your credentials to access the FaithSync dashboard.</p>
-          <Link
-            href="/login"
-            className="group inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold px-10 py-4 rounded-xl shadow-xl shadow-blue-900/20 transition-all active:scale-95"
-          >
-            Sign In to FaithSync
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </Link>
+          <p className="text-slate-400 text-sm mb-8">Sign in with your credentials to access FaithSync.</p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              href="/login?type=admin"
+              className="group inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold px-10 py-4 rounded-xl shadow-xl shadow-blue-900/20 transition-all active:scale-95"
+            >
+              Staff / Admin Login
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </Link>
+            <Link
+              href="/login?type=member"
+              className="group inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold px-10 py-4 rounded-xl transition-all active:scale-95"
+            >
+              Member Login
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
         </div>
       </section>
 

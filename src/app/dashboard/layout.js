@@ -1,11 +1,12 @@
 'use client';
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, Calendar, Wallet,
   ClipboardList, BarChart3, LogOut, ShieldCheck
 } from "lucide-react";
+import { useAuth } from "@/app/context/AuthContext";
 
 const NAV_LINKS = [
   { href: "/dashboard",            icon: LayoutDashboard, label: "Dashboard" },
@@ -18,6 +19,23 @@ const NAV_LINKS = [
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, role, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/');
+  };
+
+  // Get initials from email
+  const initials = user?.email
+    ? user.email.slice(0, 2).toUpperCase()
+    : 'AD';
+
+  // Format role label
+  const roleLabel = role
+    ? role.charAt(0).toUpperCase() + role.slice(1)
+    : 'Admin';
 
   return (
     <div className="flex min-h-screen bg-[#0f111a] text-slate-100">
@@ -61,25 +79,26 @@ export default function DashboardLayout({ children }) {
 
         {/* Bottom: User + Sign Out */}
         <div className="p-3 border-t border-slate-800/50 space-y-1">
+
           {/* User Info */}
           <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-800/30">
             <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/20 flex items-center justify-center shrink-0">
-              <span className="text-xs font-black text-blue-400">AD</span>
+              <span className="text-xs font-black text-blue-400">{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-white truncate">Admin</p>
-              <p className="text-[10px] text-slate-600 truncate">admin@faithsync.com</p>
+              <p className="text-xs font-bold text-white truncate">{roleLabel}</p>
+              <p className="text-[10px] text-slate-600 truncate">{user?.email || 'Loading...'}</p>
             </div>
           </div>
 
           {/* Sign Out */}
-          <Link
-            href="/login"
-            className="flex items-center gap-3 px-4 py-2.5 rounded-2xl text-slate-500 hover:text-red-400 hover:bg-red-500/5 transition-all group"
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-slate-500 hover:text-red-400 hover:bg-red-500/5 transition-all group"
           >
             <LogOut size={17} className="group-hover:text-red-400 transition-colors" />
             <span className="text-sm font-semibold">Sign Out</span>
-          </Link>
+          </button>
         </div>
       </aside>
 

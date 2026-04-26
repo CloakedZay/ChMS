@@ -246,7 +246,7 @@ export default function EventsPage() {
 
               <Field label="Budget (₱)">
                 <input type="number" name="budget" value={form.budget} onChange={handleChange}
-                  placeholder="e.g. 3000" min="0" className="input-style" />
+                  placeholder="e.g. 3000" min="0" className="input-style" onWheel={(e) => e.target.blur()} />
               </Field>
 
               <Field label="Status">

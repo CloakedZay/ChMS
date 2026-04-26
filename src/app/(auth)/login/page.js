@@ -16,35 +16,51 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    setLoading(true);
-    setError('');
+  setLoading(true);
+  setError('');
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  const { data, error: authError } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-      return;
-    }
+  if (authError) {
+    setError('Invalid email or password.');
+    setLoading(false);
+    return;
+  }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', data.user.id)
-      .single();
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', data.user.id)
+    .single();
 
-    const role = profile?.role || 'member';
+  const role = profile?.role || 'member';
+  const isStaffRole = role === 'admin' || role === 'pastor' || role === 'leader';
 
-    if (role === 'admin' || role === 'pastor' || role === 'leader') {
-      router.push('/dashboard');
-    } else {
-      router.push('/member-dashboard');
-    }
-  };
+  // Block wrong portal access
+  if (isAdmin && !isStaffRole) {
+    await supabase.auth.signOut();
+    setError('This account does not have staff access. Please use Member Login instead.');
+    setLoading(false);
+    return;
+  }
 
+  if (!isAdmin && isStaffRole) {
+    await supabase.auth.signOut();
+    setError('Staff accounts must use Staff Login instead.');
+    setLoading(false);
+    return;
+  }
+
+  // Redirect based on role
+  if (isStaffRole) {
+    router.push('/dashboard');
+  } else {
+    router.push('/member-dashboard');
+  }
+};
   return (
     <div className="min-h-screen bg-[#0f111a] flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-[#1a1d2e] rounded-3xl p-8 border border-white/10">
