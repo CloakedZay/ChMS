@@ -31,15 +31,16 @@ function getInitials(name = "") {
 }
 
 export default function MembersPage() {
-  const [members, setMembers]       = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [showModal, setShowModal]   = useState(false);
-  const [saving, setSaving]         = useState(false);
-  const [openMenuId, setOpenMenuId] = useState(null);
+  const [members, setMembers]             = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [showModal, setShowModal]         = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [openMenuId, setOpenMenuId]       = useState(null);
+  const [menuPos, setMenuPos]             = useState({ top: 0, right: 0 });
   const [editingMember, setEditingMember] = useState(null);
-  const [search, setSearch]         = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [form, setForm]             = useState(EMPTY_FORM);
+  const [search, setSearch]               = useState("");
+  const [filterStatus, setFilterStatus]   = useState("all");
+  const [form, setForm]                   = useState(EMPTY_FORM);
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,15 @@ export default function MembersPage() {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
 
+  function handleMenuOpen(e, memberId) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMenuPos({
+      top: rect.bottom + window.scrollY + 4,
+      right: window.innerWidth - rect.right,
+    });
+    setOpenMenuId(openMenuId === memberId ? null : memberId);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
@@ -103,9 +113,18 @@ export default function MembersPage() {
     const confirmed = window.confirm(`Delete "${member.full_name}"?`);
     if (!confirmed) return;
     setOpenMenuId(null);
-    const { error } = await supabase.from('members').delete().eq('id', member.id);
-    if (error) alert('Error deleting member: ' + error.message);
-    else setMembers(members.filter((m) => m.id !== member.id));
+
+    const { error } = await supabase
+      .from('members')
+      .delete()
+      .eq('id', member.id);
+
+    if (error) {
+      alert('Error deleting member: ' + error.message);
+      return;
+    }
+
+    await fetchMembers();
   }
 
   // ── Filtered list ─────────────────────────────────────────────────────────
@@ -127,6 +146,10 @@ export default function MembersPage() {
     inactive: members.filter((m) => m.status === "inactive").length,
     busy:     members.filter((m) => m.status === "busy").length,
   };
+
+  // ── Active member for dropdown ────────────────────────────────────────────
+
+  const activeMenuMember = members.find((m) => m.id === openMenuId) || null;
 
   // ── UI ────────────────────────────────────────────────────────────────────
 
@@ -244,29 +267,13 @@ export default function MembersPage() {
                       </span>
                     </td>
                     {/* Actions */}
-                    <td className="px-6 py-4 text-right relative">
+                    <td className="px-6 py-4 text-right">
                       <button
-                        onClick={() => setOpenMenuId(openMenuId === member.id ? null : member.id)}
+                        onClick={(e) => handleMenuOpen(e, member.id)}
                         className="text-slate-600 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800"
                       >
                         <MoreVertical size={15} />
                       </button>
-                      {openMenuId === member.id && (
-                        <div className="absolute right-6 top-10 z-50 bg-[#1a1d2e] border border-slate-700 rounded-xl shadow-xl w-36 overflow-hidden">
-                          <button
-                            onClick={() => openEdit(member)}
-                            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
-                          >
-                            <Pencil size={13} /> Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(member)}
-                            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
-                          >
-                            <Trash2 size={13} /> Delete
-                          </button>
-                        </div>
-                      )}
                     </td>
                   </tr>
                 ))
@@ -283,7 +290,33 @@ export default function MembersPage() {
         )}
       </div>
 
-      {/* Add / Edit Modal */}
+      {/* ── Dropdown Menu (rendered outside table) ── */}
+      {openMenuId && activeMenuMember && (
+        <>
+          {/* Backdrop to close on outside click */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+          {/* Menu */}
+          <div
+            className="fixed z-50 bg-[#1a1d2e] border border-slate-700 rounded-xl shadow-xl w-36 overflow-hidden"
+            style={{ top: menuPos.top, right: menuPos.right }}
+          >
+            <button
+              onClick={() => openEdit(activeMenuMember)}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
+            >
+              <Pencil size={13} /> Edit
+            </button>
+            <button
+              onClick={() => handleDelete(activeMenuMember)}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              <Trash2 size={13} /> Delete
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── Add / Edit Modal ── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-[#1a1d2e] border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4">
@@ -355,11 +388,6 @@ export default function MembersPage() {
             </form>
           </div>
         </div>
-      )}
-
-      {/* Close dropdown on outside click */}
-      {openMenuId && (
-        <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
       )}
 
       {/* Inline styles for form inputs */}
