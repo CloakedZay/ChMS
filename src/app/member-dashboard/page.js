@@ -7,7 +7,7 @@ import { supabase } from '@/app/lib/supabase';
 import {
   Users, CalendarDays, HandCoins, BookOpen,
   ChevronRight, CheckCircle, Clock, Lock,
-  ChevronUp, Send, Church
+  ChevronUp, Send, Church, FileText, Download
 } from 'lucide-react';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,6 +51,7 @@ export default function MemberDashboard() {
   const [answers, setAnswers]           = useState({});
   const [submitting, setSubmitting]     = useState(false);
   const [submitMsg, setSubmitMsg]       = useState({});
+  const [handouts, setHandouts]         = useState({});  // { [module_id]: [...] }
 
   // ── Auth guard ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -127,6 +128,33 @@ export default function MemberDashboard() {
     }
     fetchTraining();
   }, [user]);
+
+  // ── Fetch handouts for a module (read-only for members) ──────────────────
+  async function fetchHandouts(moduleId) {
+    const { data } = await supabase
+      .from('module_handouts')
+      .select('*')
+      .eq('module_id', moduleId)
+      .order('created_at', { ascending: false });
+    setHandouts(p => ({ ...p, [moduleId]: data || [] }));
+  }
+
+  function toggleModule(moduleId) {
+    if (expandedModule === moduleId) {
+      setExpandedModule(null);
+    } else {
+      setExpandedModule(moduleId);
+      if (!handouts[moduleId]) fetchHandouts(moduleId);
+    }
+  }
+
+  async function handleDownload(handout) {
+    const { data, error } = await supabase.storage
+      .from('handouts')
+      .createSignedUrl(handout.file_path, 60);
+    if (error) { alert('Could not generate download link.'); return; }
+    window.open(data.signedUrl, '_blank');
+  }
 
   // ── Training logic ────────────────────────────────────────────────────────
   const moduleQuestions = (moduleId) => questions.filter(q => q.module_id === moduleId);
@@ -424,7 +452,7 @@ export default function MemberDashboard() {
                   {/* Module row */}
                   <button
                     disabled={!unlocked}
-                    onClick={() => setExpandedModule(isOpen ? null : mod.id)}
+                    onClick={() => toggleModule(mod.id)}
                     className="w-full flex items-center justify-between gap-4 p-5 text-left"
                   >
                     <div className="flex items-center gap-4">
@@ -530,6 +558,44 @@ export default function MemberDashboard() {
                           </div>
                         );
                       })}
+
+                      {/* Handouts */}
+                      {(() => {
+                        const modHandouts = handouts[mod.id];
+                        if (!modHandouts) return null;
+                        return modHandouts.length > 0 ? (
+                          <div className="pt-2 border-t border-white/5">
+                            <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold mb-2">
+                              Module Handouts
+                            </p>
+                            <div className="space-y-2">
+                              {modHandouts.map((hf) => (
+                                <button
+                                  key={hf.id}
+                                  onClick={() => handleDownload(hf)}
+                                  className="w-full flex items-center gap-3 p-3 bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-blue-500/20 rounded-xl transition-colors group"
+                                >
+                                  <FileText className="w-4 h-4 text-blue-400 shrink-0" />
+                                  <div className="flex-1 min-w-0 text-left">
+                                    <p className="text-xs font-bold text-white truncate">{hf.file_name}</p>
+                                    {hf.description && (
+                                      <p className="text-[10px] text-white/30 mt-0.5">{hf.description}</p>
+                                    )}
+                                  </div>
+                                  <Download className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 transition-colors shrink-0" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="pt-2 border-t border-white/5">
+                            <p className="text-[10px] uppercase tracking-widest text-white/20 font-bold mb-1">
+                              Module Handouts
+                            </p>
+                            <p className="text-xs text-white/20">No handouts uploaded for this module yet.</p>
+                          </div>
+                        );
+                      })()}
 
                       {/* Submit */}
                       {!complete && (

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import {
   Users, Bell, Search, TrendingUp, UserCheck,
   CalendarDays, HandCoins, ChevronRight,
-  ArrowUpRight, BookOpen, TrendingDown, X
+  ArrowUpRight, BookOpen, TrendingDown, X,
+  CheckCheck, Zap, CheckCircle, XCircle, Clock,
+  ChevronDown, MessageSquare
 } from "lucide-react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -34,167 +36,52 @@ const STATUS_BADGE = {
 };
 
 const ACTIVITY_ICON = {
-  member:  { bg: "bg-blue-500/20 text-blue-400",      label: "M" },
-  finance: { bg: "bg-emerald-500/20 text-emerald-400", label: "₱" },
-  event:   { bg: "bg-violet-500/20 text-violet-400",   label: "E" },
+  member:  { bg: "bg-blue-500/20 text-blue-400",       label: "M" },
+  finance: { bg: "bg-emerald-500/20 text-emerald-400",  label: "₱" },
+  event:   { bg: "bg-violet-500/20 text-violet-400",    label: "E" },
 };
 
-// ─── Notification Types ───────────────────────────────────────────────────────
-const NOTIFICATION_TYPES = {
-  member_added: { icon: "👤", color: "text-blue-400", title: "New Member Added" },
-  transaction:  { icon: "💰", color: "text-emerald-400", title: "New Transaction" },
-  event_added:  { icon: "📅", color: "text-purple-400", title: "New Event Created" },
+const NOTIF_STYLE = {
+  member:  { bg: "bg-blue-500/10",    dot: "bg-blue-500",    icon: Users },
+  event:   { bg: "bg-violet-500/10",  dot: "bg-violet-500",  icon: CalendarDays },
+  finance: { bg: "bg-emerald-500/10", dot: "bg-emerald-500", icon: HandCoins },
 };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [search, setSearch] = useState("");
-  
-  // ── Notification State ────────────────────────────────────────────────────
-  const [notifications, setNotifications] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading]           = useState(true);
+  const [activeTab, setActiveTab]       = useState("overview");
+  const [search, setSearch]             = useState("");
+  const [showNotifs, setShowNotifs]     = useState(false);
+  const notifRef                        = useRef(null);
 
-  // ── Real database states ──────────────────────────────────────────────────
-  const [memberCount, setMemberCount]   = useState(0);
-  const [activeMembers, setActiveMembers] = useState(0);
-  const [totalFunds, setTotalFunds]     = useState(0);
-  const [totalIncome, setTotalIncome]   = useState(0);
-  const [totalExpense, setTotalExpense] = useState(0);
-  const [fundTotals, setFundTotals]     = useState({});
-  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  // ── DB states ────────────────────────────────────────────────────────────
+  const [memberCount, setMemberCount]         = useState(0);
+  const [activeMembers, setActiveMembers]     = useState(0);
+  const [totalFunds, setTotalFunds]           = useState(0);
+  const [totalIncome, setTotalIncome]         = useState(0);
+  const [totalExpense, setTotalExpense]        = useState(0);
+  const [fundTotals, setFundTotals]           = useState({});
+  const [upcomingEvents, setUpcomingEvents]   = useState([]);
   const [recentTransactions, setRecentTransactions] = useState([]);
-  const [recentMembers, setRecentMembers] = useState([]);
+  const [recentMembers, setRecentMembers]     = useState([]);
+  const [notifications, setNotifications]     = useState([]);
 
-  // ── Supabase Realtime Subscriptions ───────────────────────────────────────
-  useEffect(() => {
-    let memberChannel, transactionChannel, eventChannel;
+  // ── Training review states ────────────────────────────────────────────────
+  const [trainingModules, setTrainingModules]   = useState([]);
+  const [submissions, setSubmissions]           = useState([]); // all progress rows
+  const [memberProfiles, setMemberProfiles]     = useState({}); // { [member_id]: email }
+  const [expandedMember, setExpandedMember]     = useState(null);
+  const [expandedModReview, setExpandedModReview] = useState(null);
+  const [reviewNotes, setReviewNotes]           = useState({}); // { [progress_id]: text }
+  const [reviewing, setReviewing]               = useState({}); // { [progress_id]: bool }
 
-    // Subscribe to new members
-    memberChannel = supabase
-      .channel('members')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'members' }, 
-        (payload) => {
-          handleNewNotification('member_added', payload.new);
-          setMemberCount(prev => prev + 1);
-          if (payload.new.status === 'active') {
-            setActiveMembers(prev => prev + 1);
-          }
-          setRecentMembers(prev => [payload.new, ...prev.slice(0, 2)]);
-        }
-      )
-      .subscribe();
-
-    // Subscribe to new transactions
-    transactionChannel = supabase
-      .channel('transactions')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'transactions' }, 
-        (payload) => {
-          handleNewNotification('transaction', payload.new);
-          updateFinancialStats(payload.new);
-        }
-      )
-      .subscribe();
-
-    // Subscribe to new events
-    eventChannel = supabase
-      .channel('events')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'events' }, 
-        (payload) => {
-          handleNewNotification('event_added', payload.new);
-          if (new Date(payload.new.date) >= new Date()) {
-            setUpcomingEvents(prev => [payload.new, ...prev.slice(0, 3)]);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(memberChannel);
-      supabase.removeChannel(transactionChannel);
-      supabase.removeChannel(eventChannel);
-    };
-  }, []);
-
-  // ── Handle New Notifications ──────────────────────────────────────────────
-  const handleNewNotification = (type, data) => {
-    const notification = {
-      id: Date.now() + Math.random(),
-      type,
-      data,
-      timestamp: new Date().toISOString(),
-      read: false,
-      ...NOTIFICATION_TYPES[type]
-    };
-
-    setNotifications(prev => [notification, ...prev.slice(0, 9)]); // Keep last 10
-    setUnreadCount(prev => prev + 1);
-    
-    // Optional: Play notification sound
-    const audio = new Audio('/notification.mp3'); // Add sound file to public/
-    audio.play().catch(() => {}); // Silent fail if no sound
-    
-    // Browser notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(notification.title, {
-        body: formatNotificationBody(type, data),
-        icon: '/favicon.ico',
-        badge: '/favicon.ico'
-      });
-    }
-  };
-
-  const formatNotificationBody = (type, data) => {
-    switch (type) {
-      case 'member_added':
-        return `${data.full_name || 'New member'} joined ${data.ministry || 'the church'}`;
-      case 'transaction':
-        const amount = Number(data.amount || 0).toLocaleString('en-PH');
-        return `${data.type?.toUpperCase()} ₱${amount} - ${data.category || 'Transaction'}`;
-      case 'event_added':
-        return `${data.title || 'New event'} on ${data.date || 'TBD'}`;
-      default:
-        return 'New activity detected';
-    }
-  };
-
-  // ── Update Financial Stats on New Transaction ─────────────────────────────
-  const updateFinancialStats = (newTx) => {
-    const amount = Number(newTx.amount) || 0;
-    if (newTx.type === 'income') {
-      setTotalIncome(prev => prev + amount);
-      setFundTotals(prev => ({
-        ...prev,
-        [newTx.fund || 'General Fund']: (prev[newTx.fund || 'General Fund'] || 0) + amount
-      }));
-    } else {
-      setTotalExpense(prev => prev + amount);
-    }
-    setTotalFunds(prev => prev + (newTx.type === 'income' ? amount : -amount));
-    
-    setRecentTransactions(prev => [newTx, ...prev.slice(0, 4)]);
-  };
-
-  // ── Initial Data Fetch ────────────────────────────────────────────────────
+  // ── Fetch all live data ───────────────────────────────────────────────────
   useEffect(() => {
     async function fetchLiveStats() {
       setLoading(true);
       try {
-        // Load existing notifications from localStorage
-        const saved = localStorage.getItem('church_notifications');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          setNotifications(parsed.notifications || []);
-          setUnreadCount(parsed.unreadCount || 0);
-        }
-
-        // 1. Member count + active count
         const { count: mCount } = await supabase
           .from('members')
           .select('*', { count: 'exact', head: true });
@@ -204,21 +91,17 @@ export default function DashboardPage() {
           .select('*', { count: 'exact', head: true })
           .eq('status', 'active');
 
-        // 2. Latest members
         const { data: latestMembers } = await supabase
           .from('members')
           .select('full_name, status, ministry')
-          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
           .limit(3);
 
-        // 3. Transactions
         const { data: trans } = await supabase
           .from('transactions')
-          .select('amount, type, fund, category, member, date, created_at')
-          .order('created_at', { ascending: false })
-          .limit(20);
+          .select('amount, type, fund, category, member, date')
+          .order('date', { ascending: false });
 
-        // 4. Upcoming events
         const { data: evts } = await supabase
           .from('events')
           .select('*')
@@ -226,13 +109,12 @@ export default function DashboardPage() {
           .order('date', { ascending: true })
           .limit(4);
 
-        // Compute stats
         setMemberCount(mCount || 0);
         setActiveMembers(aCount || 0);
         setUpcomingEvents(evts || []);
         setRecentMembers(latestMembers || []);
 
-        if (trans?.length) {
+        if (trans) {
           const income  = trans.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
           const expense = trans.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
           setTotalIncome(income);
@@ -248,7 +130,6 @@ export default function DashboardPage() {
           }, {});
           setFundTotals(fTotals);
         }
-
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
       } finally {
@@ -259,28 +140,155 @@ export default function DashboardPage() {
     fetchLiveStats();
   }, []);
 
-  // ── Save notifications to localStorage ────────────────────────────────────
+  // ── Fetch notifications ───────────────────────────────────────────────────
   useEffect(() => {
-    localStorage.setItem('church_notifications', JSON.stringify({
-      notifications,
-      unreadCount,
-      timestamp: new Date().toISOString()
-    }));
-  }, [notifications, unreadCount]);
+    async function fetchNotifications() {
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      setNotifications(data || []);
+    }
 
-  // ── Mark as Read ──────────────────────────────────────────────────────────
-  const markAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    setUnreadCount(0);
-  };
+    fetchNotifications();
 
-  const markAsRead = (id) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    setUnreadCount(prev => Math.max(0, prev - 1));
-  };
+    // Real-time: new notifications appear instantly via Supabase channel
+    const channel = supabase
+      .channel('notifications-feed')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        (payload) => {
+          setNotifications((prev) => [payload.new, ...prev]);
+        }
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  // ── Fetch training submissions ────────────────────────────────────────────
+  useEffect(() => {
+    async function fetchTraining() {
+      const { data: mods } = await supabase
+        .from("discipleship_modules")
+        .select("*")
+        .order("order_index", { ascending: true });
+
+      const { data: subs } = await supabase
+        .from("discipleship_progress")
+        .select("*, discipleship_questions(question, order_index, module_id)")
+        .order("created_at", { ascending: false });
+
+      // Get unique member_ids then fetch their emails from auth.users via profiles
+      if (subs && subs.length > 0) {
+        const ids = [...new Set(subs.map(s => s.member_id))];
+        const { data: profiles } = await supabase
+          .from("members")
+          .select("id, full_name, email")
+          .in("auth_id", ids); // adjust column name if yours differs
+
+        const profileMap = {};
+        (profiles || []).forEach(p => { profileMap[p.auth_id || p.id] = p; });
+        setMemberProfiles(profileMap);
+      }
+
+      setTrainingModules(mods || []);
+      setSubmissions(subs || []);
+    }
+    fetchTraining();
+  }, []);
+
+  // ── Close notif panel on outside click ───────────────────────────────────
+  useEffect(() => {
+    function handleClick(e) {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setShowNotifs(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // ── Mark all as read ─────────────────────────────────────────────────────
+  async function markAllRead() {
+    const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
+    if (unreadIds.length === 0) return;
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .in('id', unreadIds);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  }
+
+  // ── Mark single as read ──────────────────────────────────────────────────
+  async function markOneRead(id) {
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+  }
+
+  // ── Review actions ────────────────────────────────────────────────────────
+  async function handleReview(progressId, status) {
+    setReviewing(p => ({ ...p, [progressId]: true }));
+    const note = reviewNotes[progressId]?.trim() || null;
+    await supabase
+      .from("discipleship_progress")
+      .update({ status, notes: note, reviewed_at: new Date().toISOString(), reviewed_by: "Pastor" })
+      .eq("id", progressId);
+    setSubmissions(prev =>
+      prev.map(s => s.id === progressId ? { ...s, status, notes: note } : s)
+    );
+    setReviewing(p => ({ ...p, [progressId]: false }));
+  }
 
   // ── Computed ──────────────────────────────────────────────────────────────
-  const attendanceRate = memberCount > 0 ? Math.round((activeMembers / memberCount) * 100) : 0;
+  const unreadCount     = notifications.filter(n => !n.is_read).length;
+  const attendanceRate  = memberCount > 0 ? Math.round((activeMembers / memberCount) * 100) : 0;
+  const q               = search.toLowerCase().trim();
+
+  // Filtered events (by title or ministry)
+  const filteredEvents = upcomingEvents.filter(ev =>
+    !q ||
+    ev.title?.toLowerCase().includes(q) ||
+    ev.ministry?.toLowerCase().includes(q) ||
+    ev.status?.toLowerCase().includes(q)
+  );
+
+  // Filtered transactions (by category, fund, or member)
+  const filteredTransactions = recentTransactions.filter(tx =>
+    !q ||
+    tx.category?.toLowerCase().includes(q) ||
+    tx.fund?.toLowerCase().includes(q) ||
+    tx.member?.toLowerCase().includes(q) ||
+    tx.type?.toLowerCase().includes(q)
+  );
+
+  // Activity feed
+  const activityFeed = [
+    ...recentTransactions.slice(0, 3).map((t) => ({
+      type: "finance",
+      text: `${t.type === 'income' ? 'Income' : 'Expense'}: ${t.category} — ₱${Number(t.amount).toLocaleString()}`,
+      time: t.date || "—",
+    })),
+    ...recentMembers.map((m) => ({
+      type: "member",
+      text: `${m.full_name} — ${m.status || 'active'} · ${m.ministry || 'Unassigned'}`,
+      time: "Member record",
+    })),
+    ...upcomingEvents.slice(0, 2).map((e) => ({
+      type: "event",
+      text: `${e.title} — ${e.status}`,
+      time: e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : "—",
+    })),
+  ].filter(a =>
+    !q ||
+    a.text.toLowerCase().includes(q) ||
+    a.type.toLowerCase().includes(q)
+  ).slice(0, 6);
 
   const STATS = [
     {
@@ -309,27 +317,7 @@ export default function DashboardPage() {
     },
   ];
 
-  // Build activity feed from real data
-  const activityFeed = [
-    ...recentTransactions.slice(0, 3).map((t) => ({
-      type: "finance",
-      text: `${t.type === 'income' ? 'Income' : 'Expense'}: ${t.category} — ₱${Number(t.amount).toLocaleString()}`,
-      time: t.date || t.created_at ? new Date(t.created_at || t.date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : "—",
-    })),
-    ...recentMembers.map((m) => ({
-      type: "member",
-      text: `${m.full_name} — ${m.status || 'active'} · ${m.ministry || 'Unassigned'}`,
-      time: "Member record",
-    })),
-    ...upcomingEvents.slice(0, 2).map((e) => ({
-      type: "event",
-      text: `${e.title} — ${e.status}`,
-      time: e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : "—",
-    })),
-  ].slice(0, 6);
-
   // ── UI ────────────────────────────────────────────────────────────────────
-
   return (
     <div className="p-8 min-h-screen bg-[#0f111a] text-slate-100">
 
@@ -339,128 +327,142 @@ export default function DashboardPage() {
           <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
           <h2 className="text-2xl font-black text-white">Dashboard Overview</h2>
           <p className="text-slate-500 text-sm mt-0.5">
-            {loading ? "Syncing with Supabase..." : `Live data + ${unreadCount} unread notifications`}
+            {loading ? "Syncing with Supabase..." : "Live data from all church modules."}
           </p>
         </div>
+
         <div className="flex items-center gap-3">
+          {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
             <input
               type="text"
-              placeholder="Search..."
+              placeholder="Search events, funds, members..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-[#1a1d2e] border border-slate-800 rounded-full py-2 pl-9 pr-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-blue-500 w-48 transition-colors"
+              className="bg-[#1a1d2e] border border-slate-800 rounded-full py-2 pl-9 pr-9 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-blue-500 w-64 transition-colors"
             />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
-          
-          {/* ── Notification Bell ── */}
-          <div className="relative">
+
+          {/* Notifications bell */}
+          <div className="relative" ref={notifRef}>
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2.5 bg-[#1a1d2e] rounded-full border-2 border-slate-800 text-slate-400 hover:text-white hover:border-blue-500 hover:bg-blue-500/10 transition-all duration-200 group focus:outline-none focus:border-blue-500"
+              onClick={() => setShowNotifs((v) => !v)}
+              className="relative p-2 bg-[#1a1d2e] rounded-full border border-slate-800 text-slate-400 hover:text-white transition-colors"
             >
-              <Bell size={20} className="group-hover:rotate-12 transition-transform duration-200" />
+              <Bell size={18} />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-gradient-to-r from-blue-500 to-indigo-500 text-xs font-black rounded-full flex items-center justify-center text-white shadow-lg ring-2 ring-[#0f111a] animate-pulse">
-                  {unreadCount > 99 ? '99+' : unreadCount}
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-blue-600 rounded-full ring-2 ring-[#0f111a] text-[10px] font-black text-white flex items-center justify-center">
+                  {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
             </button>
 
-            {/* Notifications Dropdown */}
-            {showNotifications && (
-              <>
-                {/* Backdrop */}
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setShowNotifications(false)}
-                />
-                {/* Dropdown */}
-                <div className="absolute top-14 right-0 w-96 bg-[#1a1d2e]/95 backdrop-blur-2xl border border-slate-700/60 rounded-3xl shadow-2xl shadow-black/60 z-50 animate-in slide-in-from-top-4 fade-in duration-200 max-h-[500px]">
-                  <div className="p-5 border-b border-slate-800/50 flex items-center justify-between sticky top-0 bg-[#1a1d2e]/50 backdrop-blur-sm z-10">
-                    <h3 className="font-black text-lg text-white flex items-center gap-2">
-                      🔔 Notifications
-                    </h3>
-                    {notifications.length > 0 && (
-                      <button
-                        onClick={markAllRead}
-                        className="text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-bold px-3 py-1.5 rounded-xl border border-blue-500/30 hover:border-blue-400 transition-all duration-200"
-                      >
-                        Mark all read ({unreadCount})
-                      </button>
+            {/* Notification panel */}
+            {showNotifs && (
+              <div className="absolute right-0 top-12 w-80 bg-[#1a1d2e] border border-slate-800 rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden">
+                {/* Panel header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="text-xs font-black text-white uppercase tracking-wider">Notifications</span>
+                    {unreadCount > 0 && (
+                      <span className="text-[10px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded-full">{unreadCount}</span>
                     )}
                   </div>
-                  
-                  <div className="overflow-y-auto max-h-[400px]">
-                    {notifications.length === 0 ? (
-                      <div className="p-12 text-center text-slate-600">
-                        <Bell className="w-12 h-12 mx-auto mb-4 text-slate-700 animate-pulse" />
-                        <p className="text-lg font-medium mb-1">All caught up!</p>
-                        <p className="text-sm">Real-time updates will appear here</p>
-                      </div>
-                    ) : (
-                      notifications.map((notif) => (
-                        <div
-                          key={notif.id}
-                          className={`p-5 border-b border-slate-800/30 hover:bg-slate-800/50 transition-all duration-200 cursor-pointer group ${
-                            !notif.read 
-                              ? 'bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border-l-4 border-blue-500/40 shadow-sm shadow-blue-500/20' 
-                              : 'hover:border-l-blue-500/20'
-                          }`}
-                          onClick={() => markAsRead(notif.id)}
-                        >
-                          <div className="flex items-start gap-4">
-                            <div className={`shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br from-white/20 to-transparent backdrop-blur-sm flex items-center justify-center shadow-lg ${notif.color}`}>
-                              <span className="text-2xl font-black drop-shadow-sm">{notif.icon}</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between mb-1">
-                                <p className={`text-sm font-black ${notif.color} group-hover:scale-[1.02] transition-transform`}>
-                                  {notif.title}
-                                </p>
-                                {!notif.read && (
-                                  <div className="w-2.5 h-2.5 bg-blue-400 rounded-full animate-ping ml-2 shrink-0" />
-                                )}
-                              </div>
-                              <p className="text-sm text-slate-300 mb-2 line-clamp-2 leading-relaxed">
-                                {formatNotificationBody(notif.type, notif.data)}
-                              </p>
-                              <p className="text-xs text-slate-500 font-mono tracking-wider">
-                                {new Date(notif.timestamp).toLocaleString('en-PH', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  
-                  <div className="p-4 border-t border-slate-800/50 text-xs text-slate-500 text-center bg-gradient-to-t from-slate-900/50 to-transparent">
-                    {notifications.length} total • Real-time via Supabase ✨
-                  </div>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllRead}
+                      className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors font-bold"
+                    >
+                      <CheckCheck className="w-3 h-3" />
+                      Mark all read
+                    </button>
+                  )}
                 </div>
-              </>
+
+                {/* Notification list */}
+                <div className="max-h-80 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="py-10 text-center">
+                      <Bell className="w-6 h-6 text-slate-700 mx-auto mb-2" />
+                      <p className="text-xs text-slate-600">No notifications yet.</p>
+                    </div>
+                  ) : (
+                    notifications.map((n) => {
+                      const style = NOTIF_STYLE[n.type] || NOTIF_STYLE.member;
+                      const Icon  = style.icon;
+                      return (
+                        <button
+                          key={n.id}
+                          onClick={() => markOneRead(n.id)}
+                          className={`w-full text-left flex items-start gap-3 px-4 py-3 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/40 transition-colors ${!n.is_read ? style.bg : ""}`}
+                        >
+                          <div className={`mt-0.5 w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${style.bg}`}>
+                            <Icon className={`w-3.5 h-3.5 ${!n.is_read ? "text-white" : "text-slate-500"}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className={`text-xs font-bold truncate ${!n.is_read ? "text-white" : "text-slate-400"}`}>
+                                {n.title}
+                              </p>
+                              {!n.is_read && (
+                                <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed line-clamp-2">{n.body}</p>
+                            <p className="text-[10px] text-slate-700 mt-1">
+                              {new Date(n.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Footer */}
+                {notifications.length > 0 && (
+                  <div className="px-4 py-2.5 border-t border-slate-800 text-center">
+                    <p className="text-[10px] text-slate-600">{notifications.length} total notifications</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
       </div>
 
+      {/* Search result banner */}
+      {q && (
+        <div className="mb-6 flex items-center gap-2 text-sm text-slate-400 bg-[#1a1d2e]/60 border border-slate-800 rounded-xl px-4 py-2.5">
+          <Search className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+          <span>
+            Showing results for <span className="text-white font-bold">"{search}"</span>
+            {" "}— {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}, {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? "s" : ""}, {activityFeed.length} activit{activityFeed.length !== 1 ? "ies" : "y"}
+          </span>
+          <button onClick={() => setSearch("")} className="ml-auto text-slate-600 hover:text-slate-300 transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-1 bg-[#1a1d2e]/60 border border-slate-800 rounded-xl p-1 w-fit mb-8">
-        {["overview", "finance", "ministries"].map((tab) => (
+        {["overview", "finance", "ministries", "training"].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`px-5 py-1.5 rounded-lg text-sm font-bold capitalize transition-all ${
-              activeTab === tab 
-                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25" 
-                : "text-slate-500 hover:text-slate-200 hover:bg-slate-800/50"
+              activeTab === tab ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-200"
             }`}
           >
             {tab}
@@ -475,23 +477,14 @@ export default function DashboardPage() {
           {/* Stat Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
             {STATS.map((s) => (
-              <div key={s.label} className="group bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6 backdrop-blur-sm hover:border-slate-600/60 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-300 hover:-translate-y-1">
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800/30">
-                  <p className="text-[10px] uppercase font-bold tracking-widest text-slate-500 group-hover:text-slate-400 transition-colors">{s.label}</p>
-                  <s.icon className={`w-5 h-5 ${s.color} group-hover:scale-110 transition-transform`} />
+              <div key={s.label} className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6 backdrop-blur-sm hover:border-slate-700 transition-colors">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-slate-500">{s.label}</p>
+                  <s.icon className="w-4 h-4 text-slate-700" />
                 </div>
-                <p className={`text-3xl lg:text-4xl font-black mb-2 ${s.color} leading-none`}>
-                  {s.value}
-                </p>
-                <p className={`text-xs flex items-center gap-1.5 font-bold tracking-wide ${
-                  s.trend === "up" 
-                    ? "text-emerald-400" 
-                    : s.trend === "down" 
-                    ? "text-rose-400" 
-                    : "text-slate-500"
-                }`}>
-                  {s.trend === "up" && <TrendingUp className="w-3.5 h-3.5" />}
-                  {s.trend === "down" && <TrendingDown className="w-3.5 h-3.5" />}
+                <p className={`text-3xl font-black mb-1 ${s.color}`}>{s.value}</p>
+                <p className={`text-xs flex items-center gap-1 font-medium ${s.trend === "up" ? "text-emerald-400" : "text-slate-600"}`}>
+                  {s.trend === "up" && <ArrowUpRight className="w-3 h-3" />}
                   {s.sub}
                 </p>
               </div>
@@ -502,55 +495,40 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* Next Schedule */}
-            <div className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6 backdrop-blur-sm hover:border-slate-700/80 transition-all">
-              <div className="flex items-center justify-between mb-6 border-b border-slate-800/50 pb-4">
-                <h3 className="text-[10px] uppercase font-bold tracking-widest text-slate-500 flex items-center gap-2">
-                  <CalendarDays className="w-3.5 h-3.5" />
+            <div className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-5 border-b border-slate-800 pb-3">
+                <h3 className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
                   Next Schedule
+                  {q && <span className="ml-2 text-blue-400">· filtered</span>}
                 </h3>
-                <a href="/dashboard/events" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 font-bold transition-colors">
-                  View all <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5" />
+                <a href="/dashboard/events" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                  View all <ChevronRight className="w-3 h-3" />
                 </a>
               </div>
               {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                  <span className="ml-2 text-sm text-slate-600">Syncing...</span>
-                </div>
-              ) : upcomingEvents.length === 0 ? (
-                <div className="py-12 text-center border-2 border-dashed border-slate-800/50 rounded-2xl hover:border-blue-500/40 transition-colors">
-                  <CalendarDays className="w-12 h-12 text-slate-700 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm font-medium text-slate-600 mb-1">No upcoming events</p>
-                  <p className="text-xs text-slate-500">Events will appear here automatically</p>
+                <p className="text-slate-600 text-sm text-center py-8">Syncing...</p>
+              ) : filteredEvents.length === 0 ? (
+                <div className="py-10 text-center border border-dashed border-slate-800 rounded-2xl">
+                  <CalendarDays className="w-8 h-8 text-slate-800 mx-auto mb-2" />
+                  <p className="text-xs text-slate-600">
+                    {q ? `No events matching "${search}"` : "No upcoming events found."}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {upcomingEvents.map((ev) => (
-                    <div key={ev.id} className="group flex items-start justify-between gap-4 p-4 rounded-2xl bg-slate-900/30 hover:bg-slate-800/50 border border-slate-800/30 hover:border-blue-500/30 transition-all duration-200 hover:shadow-md">
+                  {filteredEvents.map((ev) => (
+                    <div key={ev.id} className="flex items-start justify-between gap-3 p-3 rounded-2xl bg-slate-900/50 hover:bg-slate-800/50 transition-colors">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-white truncate group-hover:text-blue-300 transition-colors">
-                          {ev.title}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                          <CalendarDays className="w-3 h-3" />
+                        <p className="text-sm font-bold text-white truncate">{ev.title}</p>
+                        <p className="text-xs text-slate-600 mt-0.5">
                           {ev.date
-                            ? new Date(ev.date + 'T00:00:00').toLocaleDateString('en-PH', { 
-                                weekday: 'short', 
-                                month: 'short', 
-                                day: 'numeric' 
-                              })
-                            : 'No date set'}
-                          {ev.ministry && (
-                            <span className="ml-2 px-2 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] rounded-full font-bold">
-                              {ev.ministry}
-                            </span>
-                          )}
+                            ? new Date(ev.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : 'No date'}
+                          {ev.ministry ? ` · ${ev.ministry}` : ''}
                         </p>
                       </div>
-                      <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold shrink-0 whitespace-nowrap ${
-                        STATUS_BADGE[ev.status] || STATUS_BADGE.planning
-                      }`}>
-                        {ev.status?.toUpperCase()}
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${STATUS_BADGE[ev.status] || STATUS_BADGE.planning}`}>
+                        {ev.status}
                       </span>
                     </div>
                   ))}
@@ -559,40 +537,34 @@ export default function DashboardPage() {
             </div>
 
             {/* Activity Log */}
-            <div className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6 backdrop-blur-sm hover:border-slate-700/80 transition-all">
-              <div className="mb-6 border-b border-slate-800/50 pb-4">
-                <h3 className="text-[10px] uppercase font-bold tracking-widest text-slate-500 flex items-center gap-2">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  Recent Activity
+            <div className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6 backdrop-blur-sm">
+              <div className="mb-5 border-b border-slate-800 pb-3">
+                <h3 className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
+                  Activity Log
+                  {q && <span className="ml-2 text-blue-400">· filtered</span>}
                 </h3>
               </div>
               {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
-                  <span className="ml-2 text-sm text-slate-600">Loading...</span>
-                </div>
+                <p className="text-slate-600 text-sm text-center py-8">Syncing...</p>
               ) : activityFeed.length === 0 ? (
-                <div className="py-12 text-center border-2 border-dashed border-slate-800/50 rounded-2xl hover:border-emerald-500/40 transition-colors">
-                  <TrendingUp className="w-12 h-12 text-slate-700 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm font-medium text-slate-600 mb-1">No recent activity</p>
-                  <p className="text-xs text-slate-500">Activity appears here live</p>
+                <div className="py-10 text-center border border-dashed border-slate-800 rounded-2xl">
+                  <TrendingUp className="w-8 h-8 text-slate-800 mx-auto mb-2" />
+                  <p className="text-xs text-slate-600">
+                    {q ? `No activity matching "${search}"` : "No recent activities logged."}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {activityFeed.map((a, i) => {
                     const ic = ACTIVITY_ICON[a.type];
                     return (
-                      <div key={i} className="flex items-start gap-3 group hover:bg-slate-900/30 p-3 rounded-xl transition-all">
-                        <span className={`mt-0.5 shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black ${ic.bg} group-hover:scale-105 transition-transform`}>
+                      <div key={i} className="flex items-start gap-3">
+                        <span className={`mt-0.5 shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${ic.bg}`}>
                           {ic.label}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-slate-200 leading-tight group-hover:text-white transition-colors">
-                            {a.text}
-                          </p>
-                          <p className="text-[10px] text-slate-600 mt-1 font-mono tracking-wider">
-                            {a.time}
-                          </p>
+                          <p className="text-xs text-slate-300 leading-relaxed">{a.text}</p>
+                          <p className="text-[10px] text-slate-600 mt-0.5">{a.time}</p>
                         </div>
                       </div>
                     );
@@ -606,121 +578,86 @@ export default function DashboardPage() {
 
       {/* ── FINANCE TAB ── */}
       {activeTab === "finance" && (
-        <div className="space-y-8">
-
-          {/* Balance summary */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: "Total Balance",  value: totalFunds,   icon: HandCoins,   color: "text-emerald-400 bg-emerald-500/10" },
-              { label: "Total Income",   value: totalIncome,  icon: TrendingUp,  color: "text-green-400 bg-green-500/10" },
-              { label: "Total Expenses", value: totalExpense, icon: TrendingDown, color: "text-rose-400 bg-rose-500/10" },
-            ].map((s, i) => (
-              <div key={s.label} className={`group bg-gradient-to-br ${s.color} border border-slate-800/60 rounded-3xl p-6 backdrop-blur-sm hover:shadow-xl hover:shadow-emerald-500/20 transition-all duration-300 hover:-translate-y-2 relative overflow-hidden`}>
-                <div className={`absolute inset-0 bg-gradient-to-br opacity-20 animate-pulse ${s.color}`} />
-                <div className="relative z-10 flex items-center gap-3 mb-4">
-                  <div className={`p-2.5 rounded-2xl bg-white/10 backdrop-blur-sm shadow-lg group-hover:scale-110 transition-all`}>
-                    <s.icon className="w-5 h-5" />
-                  </div>
-                  <p className="text-[11px] uppercase font-bold tracking-widest text-slate-400">{s.label}</p>
+              { label: "Total Balance",  value: totalFunds,   icon: HandCoins,    color: "text-blue-400" },
+              { label: "Total Income",   value: totalIncome,  icon: TrendingUp,   color: "text-emerald-400" },
+              { label: "Total Expenses", value: totalExpense, icon: TrendingDown, color: "text-rose-400" },
+            ].map((s) => (
+              <div key={s.label} className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-5 backdrop-blur-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <s.icon className={`w-4 h-4 ${s.color}`} />
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-slate-500">{s.label}</p>
                 </div>
-                <p className={`relative z-10 text-3xl lg:text-4xl font-black font-mono leading-none text-white drop-shadow-lg`}>
-                  {loading ? (
-                    <span className="animate-pulse">₱0.00</span>
-                  ) : (
-                    `₱${(s.value || 0).toLocaleString('en-PH', { 
-                      minimumFractionDigits: 2, 
-                      maximumFractionDigits: 2 
-                    })}`
-                  )}
+                <p className={`text-2xl font-black font-mono ${s.color}`}>
+                  {loading ? "..." : `₱${(s.value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
                 </p>
               </div>
             ))}
           </div>
 
-          {/* Fund Breakdown */}
-          <div className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-8 backdrop-blur-sm hover:border-slate-700/80 transition-all">
-            <h3 className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-6 border-b border-slate-800/50 pb-4 flex items-center gap-2">
-              <HandCoins className="w-4 h-4" />
-              Fund Breakdown (Live)
+          <div className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6 backdrop-blur-sm">
+            <h3 className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-5 border-b border-slate-800 pb-3">
+              Fund Breakdown
             </h3>
-            <div className="space-y-4 mb-8">
+            <div className="space-y-4 mb-6">
               {FUNDS.map((fund) => (
-                <div key={fund} className="flex justify-between items-center p-3 rounded-xl bg-slate-900/30 hover:bg-slate-800/50 border border-slate-800/30 hover:border-blue-500/30 transition-all group">
+                <div key={fund} className="flex justify-between items-center text-sm">
                   <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${FUND_DOTS[fund]} shadow-lg group-hover:scale-125 transition-transform`} />
-                    <span className="text-sm font-semibold text-slate-200">{fund}</span>
+                    <div className={`w-2 h-2 rounded-full ${FUND_DOTS[fund]}`} />
+                    <span className="text-slate-300">{fund}</span>
                   </div>
-                  <span className="text-lg font-black font-mono text-white tracking-tight">
-                    {loading ? (
-                      <span className="animate-pulse w-20 h-6 bg-slate-800 rounded inline-block"></span>
-                    ) : (
-                      `₱${(fundTotals[fund] || 0).toLocaleString('en-PH', { 
-                        minimumFractionDigits: 2 
-                      })}`
-                    )}
+                  <span className="font-black font-mono text-white">
+                    {loading ? "..." : `₱${(fundTotals[fund] || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
                   </span>
                 </div>
               ))}
             </div>
-
-            <div className="pt-6 border-t border-slate-800/50">
-              <p className="text-xs text-slate-500 mb-4 font-medium">Remainder allocation after Monthly Budget:</p>
-              <div className="grid grid-cols-3 gap-4">
+            <div className="pt-4 border-t border-slate-800">
+              <p className="text-xs text-slate-500 mb-3">Remainder allocation after Monthly Budget:</p>
+              <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: "General Fund", pct: "50%", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
-                  { label: "Project Fund", pct: "25%", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
-                  { label: "Lot Fund",     pct: "25%", color: "bg-pink-500/20 text-pink-400 border-pink-500/30" },
+                  { label: "General Fund", pct: "50%", color: "text-blue-400" },
+                  { label: "Project Fund", pct: "25%", color: "text-purple-400" },
+                  { label: "Lot Fund",     pct: "25%", color: "text-pink-400" },
                 ].map((item) => (
-                  <div key={item.label} className={`group ${item.color} border rounded-2xl p-4 text-center hover:shadow-lg hover:shadow-current/20 transition-all cursor-pointer`}>
-                    <p className="text-2xl font-black mb-1">{item.pct}</p>
-                    <p className="text-[10px] uppercase tracking-wider font-bold group-hover:scale-105 transition-transform">{item.label}</p>
+                  <div key={item.label} className="bg-slate-900/60 rounded-2xl p-3 text-center">
+                    <p className={`text-xl font-black ${item.color}`}>{item.pct}</p>
+                    <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">{item.label}</p>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Recent Transactions */}
+          {/* Recent Transactions — filtered by search */}
           <div className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-6 border-b border-slate-800/50 pb-4">
-              <h3 className="text-[10px] uppercase font-bold tracking-widest text-slate-500 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" />
+            <div className="flex items-center justify-between mb-5 border-b border-slate-800 pb-3">
+              <h3 className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
                 Recent Transactions
+                {q && <span className="ml-2 text-blue-400">· filtered</span>}
               </h3>
-              <a href="/dashboard/finance" className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-bold transition-colors">
+              <a href="/dashboard/finance" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
                 View all <ChevronRight className="w-3 h-3" />
               </a>
             </div>
             {loading ? (
-              <div className="space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="animate-pulse bg-slate-800 h-12 rounded-xl"></div>
-                ))}
-              </div>
-            ) : recentTransactions.length === 0 ? (
-              <div className="py-12 text-center border-2 border-dashed border-slate-800/50 rounded-2xl">
-                <HandCoins className="w-12 h-12 text-slate-700 mx-auto mb-3 opacity-50" />
-                <p className="text-sm font-medium text-slate-600">No transactions yet</p>
-              </div>
+              <p className="text-slate-600 text-sm text-center py-4">Syncing...</p>
+            ) : filteredTransactions.length === 0 ? (
+              <p className="text-slate-600 text-sm text-center py-4">
+                {q ? `No transactions matching "${search}"` : "No transactions yet."}
+              </p>
             ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {recentTransactions.map((tx, i) => (
-                  <div key={i} className="flex items-center justify-between py-3 px-4 rounded-xl bg-slate-900/30 hover:bg-slate-800/50 border border-slate-800/30 transition-all group">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{tx.category}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                        {tx.fund || 'General'} · {tx.member || 'Church'}
-                      </p>
+              <div className="space-y-3">
+                {filteredTransactions.map((tx, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-slate-800/30 last:border-0">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{tx.category}</p>
+                      <p className="text-[10px] text-slate-600">{tx.fund || '—'} · {tx.member || '—'}</p>
                     </div>
-                    <p className={`text-lg font-black font-mono tracking-tight ${
-                      tx.type === 'income' 
-                        ? 'text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-xl' 
-                        : 'text-rose-400 bg-rose-500/10 px-3 py-1 rounded-xl'
-                    }`}>
-                      {tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { 
-                        minimumFractionDigits: 2 
-                      })}
+                    <p className={`text-sm font-black font-mono ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
                 ))}
@@ -732,44 +669,258 @@ export default function DashboardPage() {
 
       {/* ── MINISTRIES TAB ── */}
       {activeTab === "ministries" && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {MINISTRIES.map((m, i) => (
-              <div 
-                key={m.name} 
-                className="group bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-7 flex flex-col hover:border-blue-500/60 hover:shadow-xl hover:shadow-blue-500/20 transition-all duration-300 hover:-translate-y-2 cursor-pointer backdrop-blur-sm"
-              >
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="group-hover:rotate-12 transition-transform w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600/20 to-indigo-600/20 border-2 border-blue-500/30 backdrop-blur-sm flex items-center justify-center shrink-0 shadow-xl">
-                    <span className="text-lg font-black text-blue-400 drop-shadow-lg">{m.initials}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-base font-black text-white leading-tight group-hover:text-blue-300 transition-colors">
-                      {m.name}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">Head: {m.head}</p>
-                  </div>
+        <div className="space-y-4">
+          {MINISTRIES.map((m) => (
+            <div key={m.name} className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-5 flex items-center justify-between hover:border-slate-700 transition-colors cursor-pointer group backdrop-blur-sm">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                  <span className="text-[11px] font-black text-blue-400">{m.initials}</span>
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-slate-800/30">
-                  <div className="text-2xl font-black text-slate-300">{m.members}</div>
-                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold bg-slate-900/50 px-3 py-1.5 rounded-xl group-hover:bg-blue-500/20 group-hover:text-blue-300 transition-all">
-                    Members
-                  </div>
+                <div>
+                  <p className="text-sm font-bold text-white">{m.name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Head: {m.head}</p>
                 </div>
               </div>
-            ))}
-          </div>
-          
-          <div className="bg-[#1a1d2e]/30 border-2 border-dashed border-slate-800/50 rounded-3xl p-12 text-center hover:border-blue-500/40 hover:bg-blue-500/5 transition-all group backdrop-blur-sm">
-            <BookOpen className="w-16 h-16 text-slate-700 mx-auto mb-4 group-hover:text-blue-500 group-hover:scale-110 transition-all duration-300" />
-            <h3 className="text-lg font-black text-slate-300 mb-2">Ministry Management</h3>
-            <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
-              Training records, attendance tracking, and discipleship progress coming soon. 
-              Notifications will alert you when members join ministries.
-            </p>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <p className="text-sm font-black text-white">{m.members}</p>
+                  <p className="text-[10px] text-slate-600 uppercase tracking-wider">members</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-700 group-hover:text-slate-400 transition-colors" />
+              </div>
+            </div>
+          ))}
+          <div className="bg-[#1a1d2e]/30 border border-dashed border-slate-800 rounded-3xl p-6 text-center">
+            <BookOpen className="w-5 h-5 text-slate-700 mx-auto mb-2" />
+            <p className="text-xs text-slate-700">Training records and discipleship tracking coming soon.</p>
           </div>
         </div>
       )}
+
+      {/* ── TRAINING TAB ── */}
+      {activeTab === "training" && (() => {
+        // Group submissions by member_id
+        const byMember = submissions.reduce((acc, s) => {
+          if (!acc[s.member_id]) acc[s.member_id] = [];
+          acc[s.member_id].push(s);
+          return acc;
+        }, {});
+
+        const pendingTotal = submissions.filter(s => s.status === "pending").length;
+
+        return (
+          <div className="space-y-5">
+
+            {/* Summary bar */}
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                { label: "Total Submissions", value: submissions.length,                                          color: "text-white"        },
+                { label: "Pending Review",    value: submissions.filter(s => s.status === "pending").length,     color: "text-yellow-400"   },
+                { label: "Approved",          value: submissions.filter(s => s.status === "approved").length,    color: "text-emerald-400"  },
+              ].map(s => (
+                <div key={s.label} className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-5 backdrop-blur-sm">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">{s.label}</p>
+                  <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* No submissions */}
+            {submissions.length === 0 && (
+              <div className="py-16 text-center border border-dashed border-slate-800 rounded-3xl">
+                <BookOpen className="w-8 h-8 text-slate-700 mx-auto mb-3" />
+                <p className="text-slate-600 text-sm">No submissions yet.</p>
+                <p className="text-slate-700 text-xs mt-1">Members will appear here once they submit their answers.</p>
+              </div>
+            )}
+
+            {/* Members with submissions */}
+            {Object.entries(byMember).map(([memberId, subs]) => {
+              const profile     = memberProfiles[memberId];
+              const displayName = profile?.full_name || profile?.email || `Member ${memberId.slice(0, 6)}`;
+              const pending     = subs.filter(s => s.status === "pending").length;
+              const approved    = subs.filter(s => s.status === "approved").length;
+              const isOpen      = expandedMember === memberId;
+
+              // Group this member's subs by module
+              const byModule = subs.reduce((acc, s) => {
+                const modId = s.discipleship_questions?.module_id || s.module_id;
+                if (!acc[modId]) acc[modId] = [];
+                acc[modId].push(s);
+                return acc;
+              }, {});
+
+              return (
+                <div key={memberId} className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl overflow-hidden backdrop-blur-sm">
+
+                  {/* Member row */}
+                  <button
+                    onClick={() => setExpandedMember(isOpen ? null : memberId)}
+                    className="w-full flex items-center justify-between gap-4 p-5 hover:bg-slate-800/20 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                        <span className="text-[11px] font-black text-blue-400">
+                          {displayName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-bold text-white">{displayName}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{subs.length} answer{subs.length !== 1 ? "s" : ""} submitted</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {pending > 0 && (
+                        <span className="text-[10px] px-2.5 py-1 rounded-full font-bold bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">
+                          {pending} pending
+                        </span>
+                      )}
+                      {approved > 0 && (
+                        <span className="text-[10px] px-2.5 py-1 rounded-full font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                          {approved} approved
+                        </span>
+                      )}
+                      {isOpen
+                        ? <ChevronDown className="w-4 h-4 text-slate-500" />
+                        : <ChevronRight className="w-4 h-4 text-slate-700" />
+                      }
+                    </div>
+                  </button>
+
+                  {/* Expanded: modules */}
+                  {isOpen && (
+                    <div className="border-t border-slate-800/60 px-5 py-4 space-y-3">
+                      {Object.entries(byModule).map(([modId, modSubs]) => {
+                        const mod       = trainingModules.find(m => m.id === Number(modId));
+                        const modOpen   = expandedModReview === `${memberId}-${modId}`;
+                        const modPending = modSubs.filter(s => s.status === "pending").length;
+
+                        return (
+                          <div key={modId} className="bg-slate-900/40 border border-slate-800/40 rounded-2xl overflow-hidden">
+
+                            {/* Module row */}
+                            <button
+                              onClick={() => setExpandedModReview(modOpen ? null : `${memberId}-${modId}`)}
+                              className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-800/30 transition-colors"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <BookOpen className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                <p className="text-sm font-bold text-white truncate">
+                                  {mod?.title || `Module ${modId}`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {modPending > 0 && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-yellow-500/15 text-yellow-400">
+                                    {modPending} pending
+                                  </span>
+                                )}
+                                {modOpen
+                                  ? <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                                  : <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                                }
+                              </div>
+                            </button>
+
+                            {/* Answers */}
+                            {modOpen && (
+                              <div className="border-t border-slate-800/40 px-4 py-4 space-y-5">
+                                {modSubs
+                                  .sort((a, b) => (a.discipleship_questions?.order_index || 0) - (b.discipleship_questions?.order_index || 0))
+                                  .map((sub, qi) => {
+                                    const isReviewing = reviewing[sub.id];
+                                    return (
+                                      <div key={sub.id} className="space-y-2">
+
+                                        {/* Question */}
+                                        <p className="text-xs font-bold text-slate-400">
+                                          <span className="text-blue-400 mr-1">Q{qi + 1}.</span>
+                                          {sub.discipleship_questions?.question || "—"}
+                                        </p>
+
+                                        {/* Answer bubble */}
+                                        <div className="bg-[#0f111a] border border-slate-800 rounded-xl px-4 py-3">
+                                          <p className="text-sm text-slate-200 leading-relaxed">{sub.answer}</p>
+                                          <p className="text-[10px] text-slate-600 mt-2">
+                                            Submitted {sub.created_at ? new Date(sub.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                                          </p>
+                                        </div>
+
+                                        {/* Status + actions */}
+                                        {sub.status === "approved" ? (
+                                          <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold">
+                                            <CheckCircle className="w-3.5 h-3.5" /> Approved
+                                            {sub.notes && <span className="text-slate-500 font-normal ml-1">· Note: {sub.notes}</span>}
+                                          </div>
+                                        ) : sub.status === "rejected" ? (
+                                          <div className="space-y-1.5">
+                                            <div className="flex items-center gap-2 text-xs text-rose-400 font-bold">
+                                              <XCircle className="w-3.5 h-3.5" /> Rejected
+                                              {sub.notes && <span className="text-slate-500 font-normal ml-1">· Note: {sub.notes}</span>}
+                                            </div>
+                                            {/* Allow re-review */}
+                                            <div className="flex gap-2 pt-1">
+                                              <button
+                                                onClick={() => handleReview(sub.id, "approved")}
+                                                disabled={isReviewing}
+                                                className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                                              >
+                                                <CheckCircle className="w-3 h-3" /> Approve
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          /* Pending — show review controls */
+                                          <div className="space-y-2 pt-1">
+                                            <div className="flex items-center gap-1.5 text-xs text-yellow-400 font-bold mb-2">
+                                              <Clock className="w-3.5 h-3.5" /> Awaiting Review
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <MessageSquare className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                              <input
+                                                type="text"
+                                                placeholder="Add note (optional, shown to member if rejected)"
+                                                value={reviewNotes[sub.id] || ""}
+                                                onChange={(e) => setReviewNotes(p => ({ ...p, [sub.id]: e.target.value }))}
+                                                className="flex-1 bg-[#0f111a] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                                              />
+                                            </div>
+                                            <div className="flex gap-2">
+                                              <button
+                                                onClick={() => handleReview(sub.id, "approved")}
+                                                disabled={isReviewing}
+                                                className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
+                                              >
+                                                <CheckCircle className="w-3.5 h-3.5" />
+                                                {isReviewing ? "Saving..." : "Approve"}
+                                              </button>
+                                              <button
+                                                onClick={() => handleReview(sub.id, "rejected")}
+                                                disabled={isReviewing}
+                                                className="flex items-center gap-1.5 text-xs font-bold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
+                                              >
+                                                <XCircle className="w-3.5 h-3.5" />
+                                                {isReviewing ? "Saving..." : "Reject"}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
     </div>
   );
