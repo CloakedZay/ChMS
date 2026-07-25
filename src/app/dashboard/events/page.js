@@ -14,6 +14,7 @@ const EMPTY_FORM = {
   budget: '',
   status: 'planning',
   description: '',
+  church_id: '', // NEW
 };
 
 const MINISTRIES = [
@@ -33,8 +34,13 @@ const STATUS_COLORS = {
 
 const FILTERS = ["all", "planning", "pending", "approved", "done"];
 
+// NEW — roles that see/manage every branch
+const GLOBAL_ROLES = ["admin", "pastor"];
+
 export default function EventsPage() {
   const [events, setEvents]         = useState([]);
+  const [churches, setChurches]     = useState([]); // NEW
+  const [profile, setProfile]       = useState(null); // NEW: { role, church_id }
   const [loading, setLoading]       = useState(true);
   const [showModal, setShowModal]   = useState(false);
   const [saving, setSaving]         = useState(false);
@@ -43,7 +49,39 @@ export default function EventsPage() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [form, setForm]             = useState(EMPTY_FORM);
 
+  const isGlobal = profile && GLOBAL_ROLES.includes(profile.role); // NEW
+
   // ── Data ──────────────────────────────────────────────────────────────────
+
+  // NEW — who's logged in, what's their role/branch
+  async function fetchProfile() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role, church_id')
+      .eq('id', user.id)
+      .single();
+    if (error) {
+      console.error('Error fetching profile:', error.message);
+      return null;
+    }
+    setProfile(data);
+    return data;
+  }
+
+  // NEW — branch list for the dropdown / badges
+  async function fetchChurches() {
+    const { data, error } = await supabase
+      .from('churches')
+      .select('id, name')
+      .order('name', { ascending: true });
+    if (error) {
+      console.error('Error fetching churches:', error.message);
+      return;
+    }
+    if (data) setChurches(data);
+  }
 
   async function fetchEvents() {
     setLoading(true);
@@ -55,13 +93,28 @@ export default function EventsPage() {
     setLoading(false);
   }
 
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => {
+    async function init() {
+      const p = await fetchProfile();
+      await fetchChurches();
+      await fetchEvents();
+      // NEW — non-global users always create events under their own branch
+      if (p && !GLOBAL_ROLES.includes(p.role)) {
+        setForm((f) => ({ ...f, church_id: p.church_id || '' }));
+      }
+    }
+    init();
+  }, []);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function openAdd() {
     setEditingEvent(null);
-    setForm(EMPTY_FORM);
+    setForm({
+      ...EMPTY_FORM,
+      // NEW — pre-fill branch for non-global users
+      church_id: isGlobal ? '' : (profile?.church_id || ''),
+    });
     setShowModal(true);
   }
 
@@ -74,6 +127,7 @@ export default function EventsPage() {
       budget:      event.budget      || '',
       status:      event.status      || 'planning',
       description: event.description || '',
+      church_id:   event.church_id   || '', // NEW
     });
     setShowModal(true);
   }
@@ -84,9 +138,21 @@ export default function EventsPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+
+    // NEW — guard: global-role users must pick a branch
+    if (isGlobal && !form.church_id) {
+      alert('Please select which branch this event belongs to.');
+      return;
+    }
+
     setSaving(true);
 
-    const payload = { ...form, budget: parseFloat(form.budget) || 0 };
+    const payload = {
+      ...form,
+      budget: parseFloat(form.budget) || 0,
+      // NEW — non-global users can never override their own branch
+      church_id: isGlobal ? form.church_id : profile?.church_id,
+    };
 
     if (editingEvent) {
       const { error } = await supabase.from('events').update(payload).eq('id', editingEvent.id);
@@ -106,6 +172,9 @@ export default function EventsPage() {
   function handleDeleteLocal(id) {
     setEvents((prev) => prev.filter((e) => e.id !== id));
   }
+
+  // NEW — quick lookup for branch names on cards
+  const churchName = (id) => churches.find((c) => c.id === id)?.name;
 
   // ── Filtered list ─────────────────────────────────────────────────────────
 
@@ -207,6 +276,7 @@ export default function EventsPage() {
             <EventCard
               key={event.id}
               event={event}
+              branchName={isGlobal ? churchName(event.church_id) : null} // NEW
               onEdit={openEdit}
               onDelete={handleDeleteLocal}
             />
@@ -232,6 +302,16 @@ export default function EventsPage() {
                 <input type="text" name="title" value={form.title} onChange={handleChange}
                   required placeholder="e.g. Youth Prayer Night" className="input-style" />
               </Field>
+
+              {/* NEW — only global roles (admin/pastor) choose a branch */}
+              {isGlobal && (
+                <Field label="Branch" required>
+                  <select name="church_id" value={form.church_id} onChange={handleChange} className="input-style">
+                    <option value="">Select a branch</option>
+                    {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </Field>
+              )}
 
               <Field label="Ministry">
                 <select name="ministry" value={form.ministry} onChange={handleChange} className="input-style">
@@ -301,7 +381,7 @@ export default function EventsPage() {
 
 // ── Event Card ────────────────────────────────────────────────────────────────
 
-function EventCard({ event, onEdit, onDelete }) {
+function EventCard({ event, branchName, onEdit, onDelete }) { // NEW: branchName prop
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -370,9 +450,16 @@ function EventCard({ event, onEdit, onDelete }) {
       <h3 className="text-base font-black text-white mb-1 group-hover:text-blue-400 transition-colors leading-snug">
         {event.title}
       </h3>
-      <p className="text-blue-400 text-[10px] font-bold uppercase tracking-wider mb-5">
+      <p className="text-blue-400 text-[10px] font-bold uppercase tracking-wider mb-1">
         {event.ministry || 'No ministry assigned'}
       </p>
+      {/* NEW — branch badge, only rendered for global-role viewers */}
+      {branchName && (
+        <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-4">
+          {branchName}
+        </p>
+      )}
+      {!branchName && <div className="mb-4" />}
 
       {/* Details */}
       <div className="space-y-2 mb-6">

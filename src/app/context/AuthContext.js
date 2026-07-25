@@ -20,11 +20,21 @@ export function AuthProvider({ children }) {
       }
     });
 
+    // IMPORTANT: this callback must NOT be async, and must NOT await any
+    // supabase.* call directly. Doing so deadlocks the client's internal
+    // lock — every future supabase call anywhere in the app hangs forever
+    // until a hard reload. See:
+    // https://supabase.com/docs/guides/troubleshooting/why-is-my-supabase-api-call-not-returning-PGzXw0
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         if (session?.user) {
           setUser(session.user);
-          await fetchRole(session.user.id);
+          // Deferred with setTimeout so it runs *after* this callback
+          // finishes and releases the auth lock, instead of blocking
+          // inside it.
+          setTimeout(() => {
+            fetchRole(session.user.id);
+          }, 0);
         } else {
           setUser(null);
           setRole(null);

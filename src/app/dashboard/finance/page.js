@@ -16,6 +16,7 @@ const EMPTY_FORM = {
   status: 'Verified',
   date: new Date().toISOString().split('T')[0],
   notes: '',
+  church_id: '', // NEW
 };
 
 const CATEGORIES = ['Tithe', 'Offering', 'Love Gift', 'Project Donation', 'Lot Fund Donation', 'Expense', 'Other'];
@@ -33,8 +34,14 @@ const STATUS_BADGE = {
   Unverified: "bg-slate-500/10 text-slate-400 border-slate-500/20",
 };
 
+// NEW — roles that see/manage every branch
+const GLOBAL_ROLES = ["admin", "pastor"];
+
 export default function FinancePage() {
   const [transactions, setTransactions] = useState([]);
+  const [churches, setChurches]         = useState([]); // NEW
+  const [profile, setProfile]           = useState(null); // NEW: { role, church_id }
+  const [selectedBranch, setSelectedBranch] = useState('all'); // NEW — admin/pastor branch filter
   const [loading, setLoading]           = useState(true);
   const [showModal, setShowModal]       = useState(false);
   const [saving, setSaving]             = useState(false);
@@ -43,7 +50,39 @@ export default function FinancePage() {
   const [filterType, setFilterType]     = useState("all");
   const [form, setForm]                 = useState(EMPTY_FORM);
 
+  const isGlobal = profile && GLOBAL_ROLES.includes(profile.role); // NEW
+
   // ── Data ──────────────────────────────────────────────────────────────────
+
+  // NEW — who's logged in, what's their role/branch
+  async function fetchProfile() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role, church_id')
+      .eq('id', user.id)
+      .single();
+    if (error) {
+      console.error('Error fetching profile:', error.message);
+      return null;
+    }
+    setProfile(data);
+    return data;
+  }
+
+  // NEW — branch list for the filter / dropdown / labels
+  async function fetchChurches() {
+    const { data, error } = await supabase
+      .from('churches')
+      .select('id, name')
+      .order('name', { ascending: true });
+    if (error) {
+      console.error('Error fetching churches:', error.message);
+      return;
+    }
+    if (data) setChurches(data);
+  }
 
   async function fetchTransactions() {
     setLoading(true);
@@ -55,13 +94,30 @@ export default function FinancePage() {
     setLoading(false);
   }
 
-  useEffect(() => { fetchTransactions(); }, []);
+  useEffect(() => {
+    async function init() {
+      const p = await fetchProfile();
+      await fetchChurches();
+      await fetchTransactions();
+      // NEW — non-global users always record entries under their own branch
+      if (p && !GLOBAL_ROLES.includes(p.role)) {
+        setForm((f) => ({ ...f, church_id: p.church_id || '' }));
+      }
+    }
+    init();
+  }, []);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function openAdd() {
     setEditingTx(null);
-    setForm(EMPTY_FORM);
+    setForm({
+      ...EMPTY_FORM,
+      // NEW — pre-fill branch: admin defaults to whatever filter they're viewing (if a specific one), else must choose
+      church_id: isGlobal
+        ? (selectedBranch !== 'all' ? selectedBranch : '')
+        : (profile?.church_id || ''),
+    });
     setShowModal(true);
   }
 
@@ -76,6 +132,7 @@ export default function FinancePage() {
       status:   tx.status   || 'Verified',
       date:     tx.date     || new Date().toISOString().split('T')[0],
       notes:    tx.notes    || '',
+      church_id: tx.church_id || '', // NEW
     });
     setShowModal(true);
   }
@@ -86,12 +143,21 @@ export default function FinancePage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+
+    // NEW — guard: global-role users must pick a branch
+    if (isGlobal && !form.church_id) {
+      alert('Please select which branch this entry belongs to.');
+      return;
+    }
+
     setSaving(true);
 
     const payload = {
       ...form,
       amount: parseFloat(form.amount) || 0,
       member: form.member || 'Anonymous',
+      // NEW — non-global users can never override their own branch
+      church_id: isGlobal ? form.church_id : profile?.church_id,
     };
 
     if (editingTx) {
@@ -117,21 +183,32 @@ export default function FinancePage() {
     else setTransactions((prev) => prev.filter((t) => t.id !== tx.id));
   }
 
+  // NEW — quick lookup for branch names
+  const churchName = (id) => churches.find((c) => c.id === id)?.name;
+
+  // ── Branch-scoped set ─────────────────────────────────────────────────────
+  // NEW — everything below (stats, fund breakdown, table) is computed from
+  // this, not from the raw `transactions` array. Non-admins are already
+  // scoped server-side by RLS, so this only actually filters for admin/pastor.
+  const branchScoped = isGlobal && selectedBranch !== 'all'
+    ? transactions.filter((t) => t.church_id === selectedBranch)
+    : transactions;
+
   // ── Computed ──────────────────────────────────────────────────────────────
 
-  const totalIncome  = transactions.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
-  const totalExpense = transactions.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
+  const totalIncome  = branchScoped.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
+  const totalExpense = branchScoped.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
   const totalBalance = totalIncome - totalExpense;
 
   // Fund breakdown — sum income per fund
   const fundTotals = FUNDS.reduce((acc, fund) => {
-    acc[fund] = transactions
+    acc[fund] = branchScoped
       .filter(t => t.fund === fund && t.type === 'income')
       .reduce((s, t) => s + (Number(t.amount) || 0), 0);
     return acc;
   }, {});
 
-  const filtered = transactions.filter((tx) => {
+  const filtered = branchScoped.filter((tx) => {
     const matchSearch =
       tx.category?.toLowerCase().includes(search.toLowerCase()) ||
       tx.member?.toLowerCase().includes(search.toLowerCase()) ||
@@ -159,6 +236,21 @@ export default function FinancePage() {
           <Plus size={16} /> New Entry
         </button>
       </div>
+
+      {/* NEW — Branch filter, admin/pastor only */}
+      {isGlobal && (
+        <div className="flex items-center gap-2 mb-6">
+          <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Viewing</span>
+          <select
+            value={selectedBranch}
+            onChange={(e) => setSelectedBranch(e.target.value)}
+            className="bg-[#1a1d2e] border border-slate-800 rounded-xl py-2 px-4 text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition-colors"
+          >
+            <option value="all">All Branches (combined)</option>
+            {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -245,6 +337,7 @@ export default function FinancePage() {
                 <th className="px-6 py-4">Category</th>
                 <th className="px-6 py-4">Fund</th>
                 <th className="px-6 py-4">Member / Payee</th>
+                {isGlobal && <th className="px-6 py-4">Branch</th>} {/* NEW */}
                 <th className="px-6 py-4">Amount</th>
                 <th className="px-6 py-4 text-center">Status</th>
                 <th className="px-6 py-4" />
@@ -253,11 +346,11 @@ export default function FinancePage() {
             <tbody className="divide-y divide-slate-800/40">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-14 text-slate-500 text-sm">Loading ledger...</td>
+                  <td colSpan={isGlobal ? 8 : 7} className="text-center py-14 text-slate-500 text-sm">Loading ledger...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-14">
+                  <td colSpan={isGlobal ? 8 : 7} className="text-center py-14">
                     <History className="w-8 h-8 text-slate-700 mx-auto mb-2" />
                     <p className="text-slate-500 text-sm">
                       {search || filterType !== "all" ? "No entries match your search." : "No transactions yet. Add one!"}
@@ -273,6 +366,9 @@ export default function FinancePage() {
                     <td className="px-6 py-4 font-semibold text-white text-sm">{tx.category}</td>
                     <td className="px-6 py-4 text-blue-400 text-xs font-medium">{tx.fund || '—'}</td>
                     <td className="px-6 py-4 text-slate-400 text-sm">{tx.member || '—'}</td>
+                    {isGlobal && ( // NEW
+                      <td className="px-6 py-4 text-slate-500 text-xs">{churchName(tx.church_id) || '—'}</td>
+                    )}
                     <td className={`px-6 py-4 font-black text-sm font-mono ${TYPE_COLORS[tx.type] || 'text-white'}`}>
                       {tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                     </td>
@@ -299,7 +395,7 @@ export default function FinancePage() {
         </div>
         {!loading && filtered.length > 0 && (
           <div className="px-6 py-3 border-t border-slate-800/40 text-[10px] text-slate-600 uppercase tracking-widest">
-            Showing {filtered.length} of {transactions.length} entries
+            Showing {filtered.length} of {branchScoped.length} entries
           </div>
         )}
       </div>
@@ -333,6 +429,16 @@ export default function FinancePage() {
                   </button>
                 ))}
               </div>
+
+              {/* NEW — only global roles (admin/pastor) choose a branch */}
+              {isGlobal && (
+                <Field label="Branch" required>
+                  <select name="church_id" value={form.church_id} onChange={handleChange} className="input-style">
+                    <option value="">Select a branch</option>
+                    {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </Field>
+              )}
 
               <Field label="Category">
                 <select name="category" value={form.category} onChange={handleChange} className="input-style">
