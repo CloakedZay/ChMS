@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { useTheme } from "@/app/context/ThemeContext";
 import {
   Calendar, Plus, Search, MoreHorizontal,
   CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays
@@ -14,7 +15,7 @@ const EMPTY_FORM = {
   budget: '',
   status: 'planning',
   description: '',
-  church_id: '', // NEW
+  church_id: '',
 };
 
 const MINISTRIES = [
@@ -33,14 +34,38 @@ const STATUS_COLORS = {
 };
 
 const FILTERS = ["all", "planning", "pending", "approved", "done"];
-
-// NEW — roles that see/manage every branch
 const GLOBAL_ROLES = ["admin", "pastor"];
 
+// ─── Theme token map — same pattern as DashboardPage.js ────────────────────
+function T(dark) {
+  return {
+    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-100",
+    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-white/80",
+    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-200",
+    textPrimary: dark ? "text-white"           : "text-slate-900",
+    textSub:     dark ? "text-slate-500"       : "text-slate-500",
+    textMuted:   dark ? "text-slate-600"       : "text-slate-400",
+    inputBg:     dark ? "bg-[#1a1d2e]"        : "bg-white",
+    inputBorder: dark ? "border-slate-800"     : "border-slate-300",
+    inputText:   dark ? "text-slate-200"       : "text-slate-800",
+    divider:     dark ? "border-slate-800/50"  : "border-slate-200",
+    filterInactive: dark ? "bg-[#1a1d2e] border-slate-800 text-slate-500 hover:text-slate-200" : "bg-white border-slate-300 text-slate-500 hover:text-slate-900",
+    modalBg:     dark ? "bg-[#1a1d2e]"        : "bg-white",
+    modalBorder: dark ? "border-slate-700"     : "border-slate-200",
+    cancelBtn:   dark ? "bg-slate-800 hover:bg-slate-700 text-white" : "bg-slate-200 hover:bg-slate-300 text-slate-900",
+    emptyIcon:   dark ? "text-slate-700"       : "text-slate-300",
+    menuBg:      dark ? "bg-[#1a1d2e] border-slate-700" : "bg-white border-slate-200",
+    menuHover:   dark ? "hover:bg-slate-800"    : "hover:bg-slate-100",
+  };
+}
+
 export default function EventsPage() {
+  const { dark } = useTheme();
+  const t = T(dark);
+
   const [events, setEvents]         = useState([]);
-  const [churches, setChurches]     = useState([]); // NEW
-  const [profile, setProfile]       = useState(null); // NEW: { role, church_id }
+  const [churches, setChurches]     = useState([]);
+  const [profile, setProfile]       = useState(null);
   const [loading, setLoading]       = useState(true);
   const [showModal, setShowModal]   = useState(false);
   const [saving, setSaving]         = useState(false);
@@ -49,11 +74,8 @@ export default function EventsPage() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [form, setForm]             = useState(EMPTY_FORM);
 
-  const isGlobal = profile && GLOBAL_ROLES.includes(profile.role); // NEW
+  const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
 
-  // ── Data ──────────────────────────────────────────────────────────────────
-
-  // NEW — who's logged in, what's their role/branch
   async function fetchProfile() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
@@ -62,33 +84,20 @@ export default function EventsPage() {
       .select('role, church_id')
       .eq('id', user.id)
       .single();
-    if (error) {
-      console.error('Error fetching profile:', error.message);
-      return null;
-    }
+    if (error) { console.error('Error fetching profile:', error.message); return null; }
     setProfile(data);
     return data;
   }
 
-  // NEW — branch list for the dropdown / badges
   async function fetchChurches() {
-    const { data, error } = await supabase
-      .from('churches')
-      .select('id, name')
-      .order('name', { ascending: true });
-    if (error) {
-      console.error('Error fetching churches:', error.message);
-      return;
-    }
+    const { data, error } = await supabase.from('churches').select('id, name').order('name', { ascending: true });
+    if (error) { console.error('Error fetching churches:', error.message); return; }
     if (data) setChurches(data);
   }
 
   async function fetchEvents() {
     setLoading(true);
-    const { data } = await supabase
-      .from('events')
-      .select('*')
-      .order('date', { ascending: true });
+    const { data } = await supabase.from('events').select('*').order('date', { ascending: true });
     if (data) setEvents(data);
     setLoading(false);
   }
@@ -98,7 +107,6 @@ export default function EventsPage() {
       const p = await fetchProfile();
       await fetchChurches();
       await fetchEvents();
-      // NEW — non-global users always create events under their own branch
       if (p && !GLOBAL_ROLES.includes(p.role)) {
         setForm((f) => ({ ...f, church_id: p.church_id || '' }));
       }
@@ -106,15 +114,9 @@ export default function EventsPage() {
     init();
   }, []);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
   function openAdd() {
     setEditingEvent(null);
-    setForm({
-      ...EMPTY_FORM,
-      // NEW — pre-fill branch for non-global users
-      church_id: isGlobal ? '' : (profile?.church_id || ''),
-    });
+    setForm({ ...EMPTY_FORM, church_id: isGlobal ? '' : (profile?.church_id || '') });
     setShowModal(true);
   }
 
@@ -127,7 +129,7 @@ export default function EventsPage() {
       budget:      event.budget      || '',
       status:      event.status      || 'planning',
       description: event.description || '',
-      church_id:   event.church_id   || '', // NEW
+      church_id:   event.church_id   || '',
     });
     setShowModal(true);
   }
@@ -138,22 +140,12 @@ export default function EventsPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-
-    // NEW — guard: global-role users must pick a branch
     if (isGlobal && !form.church_id) {
       alert('Please select which branch this event belongs to.');
       return;
     }
-
     setSaving(true);
-
-    const payload = {
-      ...form,
-      budget: parseFloat(form.budget) || 0,
-      // NEW — non-global users can never override their own branch
-      church_id: isGlobal ? form.church_id : profile?.church_id,
-    };
-
+    const payload = { ...form, budget: parseFloat(form.budget) || 0, church_id: isGlobal ? form.church_id : profile?.church_id };
     if (editingEvent) {
       const { error } = await supabase.from('events').update(payload).eq('id', editingEvent.id);
       if (error) alert('Error updating event: ' + error.message);
@@ -161,7 +153,6 @@ export default function EventsPage() {
       const { error } = await supabase.from('events').insert([payload]);
       if (error) alert('Error saving event: ' + error.message);
     }
-
     setSaving(false);
     setShowModal(false);
     setEditingEvent(null);
@@ -173,20 +164,13 @@ export default function EventsPage() {
     setEvents((prev) => prev.filter((e) => e.id !== id));
   }
 
-  // NEW — quick lookup for branch names on cards
   const churchName = (id) => churches.find((c) => c.id === id)?.name;
 
-  // ── Filtered list ─────────────────────────────────────────────────────────
-
   const filtered = events.filter((ev) => {
-    const matchSearch =
-      ev.title?.toLowerCase().includes(search.toLowerCase()) ||
-      ev.ministry?.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = ev.title?.toLowerCase().includes(search.toLowerCase()) || ev.ministry?.toLowerCase().includes(search.toLowerCase());
     const matchFilter = activeFilter === "all" || ev.status === activeFilter;
     return matchSearch && matchFilter;
   });
-
-  // ── Summary counts ────────────────────────────────────────────────────────
 
   const counts = {
     total:    events.length,
@@ -195,142 +179,110 @@ export default function EventsPage() {
     done:     events.filter((e) => e.status === "done").length,
   };
 
-  // ── UI ────────────────────────────────────────────────────────────────────
-
   return (
-    <div className="p-8 min-h-screen bg-[#0f111a]">
+    <div className={`p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
 
-      {/* Header */}
       <div className="flex justify-between items-start mb-8">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
-          <h1 className="text-2xl font-black text-white">Events & Services</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Schedule and track church activities and ministry projects</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <h1 className={`text-2xl font-black ${t.textPrimary}`}>Events & Services</h1>
+          <p className={`${t.textSub} text-sm mt-0.5`}>Schedule and track church activities and ministry projects</p>
         </div>
         <button
           onClick={openAdd}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20"
         >
-          <Plus size={16} />
-          Add Event
+          <Plus size={16} /> Add Event
         </button>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Total Events", value: counts.total,    color: "text-white" },
+          { label: "Total Events", value: counts.total,    color: "text-blue-400" },
           { label: "Approved",     value: counts.approved, color: "text-emerald-400" },
           { label: "Pending",      value: counts.pending,  color: "text-orange-400" },
-          { label: "Completed",    value: counts.done,     color: "text-slate-400" },
+          { label: "Completed",    value: counts.done,     color: t.textMuted },
         ].map((c) => (
-          <div key={c.label} className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-2xl px-5 py-4 backdrop-blur-sm">
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">{c.label}</p>
+          <div key={c.label} className={`${t.cardBg} border ${t.cardBorder} rounded-2xl px-5 py-4 backdrop-blur-sm`}>
+            <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1`}>{c.label}</p>
             <p className={`text-2xl font-black ${c.color}`}>{c.value}</p>
           </div>
         ))}
       </div>
 
-      {/* Search + Filter */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+          <Search className={`absolute left-3 top-2.5 w-4 h-4 ${t.textSub}`} />
           <input
-            type="text"
-            placeholder="Search events or ministries..."
-            value={search}
+            type="text" placeholder="Search events or ministries..." value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1a1d2e] border border-slate-800 rounded-xl py-2 pl-9 pr-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+            className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 pl-9 pr-4 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
           />
         </div>
         <div className="flex gap-2 flex-wrap">
           {FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setActiveFilter(f)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${
-                activeFilter === f
-                  ? "bg-blue-600 text-white"
-                  : "bg-[#1a1d2e] border border-slate-800 text-slate-500 hover:text-slate-200"
-              }`}
-            >
+            <button key={f} onClick={() => setActiveFilter(f)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${activeFilter === f ? "bg-blue-600 text-white" : t.filterInactive}`}>
               {f}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Events Grid */}
       {loading ? (
-        <p className="text-slate-500 text-center py-20 text-sm">Loading events...</p>
+        <p className={`${t.textMuted} text-center py-20 text-sm`}>Loading events...</p>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20">
-          <CalendarDays className="w-8 h-8 text-slate-700 mx-auto mb-2" />
-          <p className="text-slate-500 text-sm">
-            {search || activeFilter !== "all" ? "No events match your search." : "No events yet. Add one!"}
-          </p>
+          <CalendarDays className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
+          <p className={`${t.textMuted} text-sm`}>{search || activeFilter !== "all" ? "No events match your search." : "No events yet. Add one!"}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filtered.map((event) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              branchName={isGlobal ? churchName(event.church_id) : null} // NEW
-              onEdit={openEdit}
-              onDelete={handleDeleteLocal}
-            />
+            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={openEdit} onDelete={handleDeleteLocal} t={t} dark={dark} />
           ))}
         </div>
       )}
 
-      {/* Add / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#1a1d2e] border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-black text-white">
-                {editingEvent ? "Edit Event" : "Add New Event"}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-500 hover:text-white transition-colors">
-                <X size={18} />
-              </button>
+              <h2 className={`text-lg font-black ${t.textPrimary}`}>{editingEvent ? "Edit Event" : "Add New Event"}</h2>
+              <button onClick={() => setShowModal(false)} className={`${t.textSub} hover:text-blue-400 transition-colors`}><X size={18} /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <Field label="Event Title" required>
-                <input type="text" name="title" value={form.title} onChange={handleChange}
-                  required placeholder="e.g. Youth Prayer Night" className="input-style" />
+              <Field label="Event Title" required t={t}>
+                <input type="text" name="title" value={form.title} onChange={handleChange} required placeholder="e.g. Youth Prayer Night" className={inputStyle(t)} />
               </Field>
 
-              {/* NEW — only global roles (admin/pastor) choose a branch */}
               {isGlobal && (
-                <Field label="Branch" required>
-                  <select name="church_id" value={form.church_id} onChange={handleChange} className="input-style">
+                <Field label="Branch" required t={t}>
+                  <select name="church_id" value={form.church_id} onChange={handleChange} className={inputStyle(t)}>
                     <option value="">Select a branch</option>
                     {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </Field>
               )}
 
-              <Field label="Ministry">
-                <select name="ministry" value={form.ministry} onChange={handleChange} className="input-style">
+              <Field label="Ministry" t={t}>
+                <select name="ministry" value={form.ministry} onChange={handleChange} className={inputStyle(t)}>
                   <option value="">Select a ministry</option>
                   {MINISTRIES.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
               </Field>
 
-              <Field label="Date">
-                <input type="date" name="date" value={form.date} onChange={handleChange} className="input-style" />
+              <Field label="Date" t={t}>
+                <input type="date" name="date" value={form.date} onChange={handleChange} className={inputStyle(t)} />
               </Field>
 
-              <Field label="Budget (₱)">
-                <input type="number" name="budget" value={form.budget} onChange={handleChange}
-                  placeholder="e.g. 3000" min="0" className="input-style" onWheel={(e) => e.target.blur()} />
+              <Field label="Budget (₱)" t={t}>
+                <input type="number" name="budget" value={form.budget} onChange={handleChange} placeholder="e.g. 3000" min="0" className={inputStyle(t)} onWheel={(e) => e.target.blur()} />
               </Field>
 
-              <Field label="Status">
-                <select name="status" value={form.status} onChange={handleChange} className="input-style">
+              <Field label="Status" t={t}>
+                <select name="status" value={form.status} onChange={handleChange} className={inputStyle(t)}>
                   <option value="planning">Planning</option>
                   <option value="pending">Pending</option>
                   <option value="approved">Approved</option>
@@ -338,19 +290,13 @@ export default function EventsPage() {
                 </select>
               </Field>
 
-              <Field label="Description">
-                <textarea name="description" value={form.description} onChange={handleChange}
-                  placeholder="Optional notes about this event..." rows={3}
-                  className="input-style resize-none" />
+              <Field label="Description" t={t}>
+                <textarea name="description" value={form.description} onChange={handleChange} placeholder="Optional notes about this event..." rows={3} className={`${inputStyle(t)} resize-none`} />
               </Field>
 
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-white rounded-xl py-2.5 text-sm font-semibold transition-all">
-                  Cancel
-                </button>
-                <button type="submit" disabled={saving}
-                  className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-bold transition-all">
+                <button type="button" onClick={() => setShowModal(false)} className={`flex-1 ${t.cancelBtn} rounded-xl py-2.5 text-sm font-semibold transition-all`}>Cancel</button>
+                <button type="submit" disabled={saving} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-bold transition-all">
                   {saving ? 'Saving...' : editingEvent ? 'Save Changes' : 'Add Event'}
                 </button>
               </div>
@@ -358,147 +304,77 @@ export default function EventsPage() {
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        .input-style {
-          width: 100%;
-          background: rgb(30 34 51 / 0.6);
-          border: 1px solid rgb(100 116 139 / 0.3);
-          color: white;
-          border-radius: 0.75rem;
-          padding: 0.625rem 1rem;
-          font-size: 0.875rem;
-          outline: none;
-          transition: border-color 0.15s;
-        }
-        .input-style:focus { border-color: rgb(59 130 246); }
-        .input-style::placeholder { color: rgb(100 116 139); }
-        option { background: #1a1d2e; color: white; }
-      `}</style>
     </div>
   );
 }
 
-// ── Event Card ────────────────────────────────────────────────────────────────
+function inputStyle(t) {
+  return `w-full ${t.inputBg} border ${t.inputBorder} ${t.inputText} rounded-xl px-4 py-2.5 text-sm outline-none transition-colors focus:border-blue-500 placeholder:text-slate-500`;
+}
 
-function EventCard({ event, branchName, onEdit, onDelete }) { // NEW: branchName prop
+function EventCard({ event, branchName, onEdit, onDelete, t, dark }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
   const phase = event.status || "planning";
 
   async function handleDelete() {
-    const confirmed = window.confirm(`Delete "${event.title}"?`);
-    if (!confirmed) return;
+    if (!window.confirm(`Delete "${event.title}"?`)) return;
     setDeleting(true);
     const { error } = await supabase.from('events').delete().eq('id', event.id);
-    if (error) {
-      alert('Error deleting event: ' + error.message);
-      setDeleting(false);
-    } else {
-      onDelete(event.id);
-    }
+    if (error) { alert('Error deleting event: ' + error.message); setDeleting(false); }
+    else onDelete(event.id);
   }
 
   const steps = [
-    { key: "planning", label: "Planning",  Icon: CircleDot },
-    { key: "approved", label: "Approved",  Icon: CircleDot },
-    { key: "done",     label: "Done",      Icon: CheckCircle2 },
+    { key: "planning", label: "Planning", Icon: CircleDot },
+    { key: "approved", label: "Approved", Icon: CircleDot },
+    { key: "done",     label: "Done",     Icon: CheckCircle2 },
   ];
-
   const stepIndex = ["planning", "pending", "approved", "done"].indexOf(phase);
 
   return (
-    <div className="bg-[#1a1d2e]/50 border border-slate-800/60 p-6 rounded-3xl backdrop-blur-sm hover:border-slate-700 transition-all group relative">
-
-      {/* Top Row */}
+    <div className={`${t.cardBg} border ${t.cardBorder} p-6 rounded-3xl backdrop-blur-sm hover:border-blue-500/40 transition-all group relative`}>
       <div className="flex justify-between items-start mb-4">
-        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[phase] || STATUS_COLORS.planning}`}>
-          {phase}
-        </span>
+        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[phase] || STATUS_COLORS.planning}`}>{phase}</span>
         <div className="relative">
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="text-slate-600 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800"
-          >
-            <MoreHorizontal size={16} />
-          </button>
+          <button onClick={() => setMenuOpen(!menuOpen)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${t.menuHover}`}><MoreHorizontal size={16} /></button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-8 z-20 bg-[#1a1d2e] border border-slate-700 rounded-xl shadow-xl w-36 overflow-hidden">
-                <button
-                  onClick={() => { setMenuOpen(false); onEdit(event); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
-                >
-                  <Pencil size={13} /> Edit
-                </button>
-                <button
-                  onClick={() => { setMenuOpen(false); handleDelete(); }}
-                  disabled={deleting}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                >
-                  <Trash2 size={13} /> {deleting ? 'Deleting...' : 'Delete'}
-                </button>
+              <div className={`absolute right-0 top-8 z-20 ${t.menuBg} border rounded-xl shadow-xl w-36 overflow-hidden`}>
+                <button onClick={() => { setMenuOpen(false); onEdit(event); }} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}><Pencil size={13} /> Edit</button>
+                <button onClick={() => { setMenuOpen(false); handleDelete(); }} disabled={deleting} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"><Trash2 size={13} /> {deleting ? 'Deleting...' : 'Delete'}</button>
               </div>
             </>
           )}
         </div>
       </div>
 
-      {/* Title & Ministry */}
-      <h3 className="text-base font-black text-white mb-1 group-hover:text-blue-400 transition-colors leading-snug">
-        {event.title}
-      </h3>
-      <p className="text-blue-400 text-[10px] font-bold uppercase tracking-wider mb-1">
-        {event.ministry || 'No ministry assigned'}
-      </p>
-      {/* NEW — branch badge, only rendered for global-role viewers */}
-      {branchName && (
-        <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-4">
-          {branchName}
-        </p>
-      )}
-      {!branchName && <div className="mb-4" />}
+      <h3 className={`text-base font-black ${t.textPrimary} mb-1 group-hover:text-blue-400 transition-colors leading-snug`}>{event.title}</h3>
+      <p className="text-blue-400 text-[10px] font-bold uppercase tracking-wider mb-1">{event.ministry || 'No ministry assigned'}</p>
+      {branchName ? <p className={`${t.textMuted} text-[10px] font-bold uppercase tracking-wider mb-4`}>{branchName}</p> : <div className="mb-4" />}
 
-      {/* Details */}
       <div className="space-y-2 mb-6">
-        <div className="flex items-center gap-2 text-slate-400">
-          <Calendar size={13} className="text-slate-600 shrink-0" />
-          <span className="text-xs">
-            {event.date
-              ? new Date(event.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
-              : 'No date set'}
-          </span>
+        <div className={`flex items-center gap-2 ${t.textSub}`}>
+          <Calendar size={13} className={`${t.textMuted} shrink-0`} />
+          <span className="text-xs">{event.date ? new Date(event.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No date set'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Budget</span>
-          <span className="text-xs font-mono text-slate-200">
-            ₱{Number(event.budget || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-          </span>
+          <span className={`text-[10px] font-bold ${t.textMuted} uppercase tracking-widest`}>Budget</span>
+          <span className={`text-xs font-mono ${t.textPrimary}`}>₱{Number(event.budget || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
         </div>
-        {event.description && (
-          <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{event.description}</p>
-        )}
+        {event.description && <p className={`text-xs ${t.textMuted} leading-relaxed line-clamp-2`}>{event.description}</p>}
       </div>
 
-      {/* Progress Timeline */}
-      <div className="pt-4 border-t border-slate-800/50">
+      <div className={`pt-4 border-t ${t.divider}`}>
         <div className="flex items-center justify-between">
           {steps.map((step, i) => {
             const reached = stepIndex >= ["planning", "pending", "approved", "done"].indexOf(step.key === "approved" ? "approved" : step.key);
             return (
               <div key={step.key} className="flex items-center gap-1">
-                <step.Icon
-                  size={12}
-                  className={reached ? (step.key === "done" ? "text-emerald-400" : "text-blue-400") : "text-slate-700"}
-                />
-                <span className={`text-[9px] font-bold uppercase tracking-wider ${reached ? "text-slate-400" : "text-slate-700"}`}>
-                  {step.label}
-                </span>
-                {i < steps.length - 1 && (
-                  <div className={`w-6 h-px mx-1 ${stepIndex > i ? "bg-blue-500/40" : "bg-slate-800"}`} />
-                )}
+                <step.Icon size={12} className={reached ? (step.key === "done" ? "text-emerald-400" : "text-blue-400") : (dark ? "text-slate-700" : "text-slate-300")} />
+                <span className={`text-[9px] font-bold uppercase tracking-wider ${reached ? t.textSub : t.emptyIcon}`}>{step.label}</span>
+                {i < steps.length - 1 && <div className={`w-6 h-px mx-1 ${stepIndex > i ? "bg-blue-500/40" : (dark ? "bg-slate-800" : "bg-slate-200")}`} />}
               </div>
             );
           })}
@@ -508,12 +384,10 @@ function EventCard({ event, branchName, onEdit, onDelete }) { // NEW: branchName
   );
 }
 
-function Field({ label, required, children }) {
+function Field({ label, required, t, children }) {
   return (
     <div>
-      <label className="block text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1.5">
-        {label} {required && <span className="text-red-400">*</span>}
-      </label>
+      <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>{label} {required && <span className="text-red-400">*</span>}</label>
       {children}
     </div>
   );
