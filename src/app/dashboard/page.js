@@ -5,12 +5,12 @@ import { supabase } from "../lib/supabase";
 import {
   Users, Bell, Search, TrendingUp, UserCheck,
   CalendarDays, HandCoins, ChevronRight,
-  ArrowUpRight, BookOpen, TrendingDown, X,
-  CheckCheck, Zap, CheckCircle, XCircle, Clock,
-  ChevronDown, MessageSquare, Sun, Moon
+  ArrowUpRight, X,
+  CheckCheck, Zap, Sun, Moon, Quote
 } from "lucide-react";
 
 import { useTheme } from "@/app/context/ThemeContext";
+import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 
 // ─── Theme token maps ──────────────────────────────────────────────────────────
 
@@ -73,22 +73,6 @@ function A(dark, color) {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const MINISTRIES = [
-  { name: "Program & Music Ministry",  head: "Mr. Israel Dadap",    members: 12, initials: "ID" },
-  { name: "Mission & Evangelism",      head: "Mr. Neator Jose",     members: 9,  initials: "NJ" },
-  { name: "Training & Life Ministry",  head: "Ms. Lolita Jose",     members: 8,  initials: "LJ" },
-  { name: "Building & Equipment",      head: "Mr. Ariel Dela Peña", members: 6,  initials: "AD" },
-  { name: "Finance Ministry",          head: "Mr. David Lopez",     members: 5,  initials: "DL" },
-];
-
-const FUNDS = ["Monthly Budget", "General Fund", "Project Fund", "Lot Fund"];
-const FUND_DOTS = {
-  "Monthly Budget": "bg-yellow-500",
-  "General Fund":   "bg-blue-500",
-  "Project Fund":   "bg-purple-500",
-  "Lot Fund":       "bg-pink-500",
-};
-
 const STATUS_BADGE = {
   approved: "bg-emerald-500/15 text-emerald-400",
   pending:  "bg-yellow-500/15 text-yellow-400",
@@ -115,7 +99,6 @@ export default function DashboardPage() {
   const t = T(dark);
 
   const [loading, setLoading]           = useState(true);
-  const [activeTab, setActiveTab]       = useState("overview");
   const [search, setSearch]             = useState("");
   const [showNotifs, setShowNotifs]     = useState(false);
   const notifRef                        = useRef(null);
@@ -124,22 +107,11 @@ export default function DashboardPage() {
   const [memberCount, setMemberCount]         = useState(0);
   const [activeMembers, setActiveMembers]     = useState(0);
   const [totalFunds, setTotalFunds]           = useState(0);
-  const [totalIncome, setTotalIncome]         = useState(0);
-  const [totalExpense, setTotalExpense]        = useState(0);
-  const [fundTotals, setFundTotals]           = useState({});
   const [upcomingEvents, setUpcomingEvents]   = useState([]);
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [recentMembers, setRecentMembers]     = useState([]);
   const [notifications, setNotifications]     = useState([]);
-
-  // ── Training states ───────────────────────────────────────────────────────
-  const [trainingModules, setTrainingModules]   = useState([]);
-  const [submissions, setSubmissions]           = useState([]);
-  const [memberProfiles, setMemberProfiles]     = useState({});
-  const [expandedMember, setExpandedMember]     = useState(null);
-  const [expandedModReview, setExpandedModReview] = useState(null);
-  const [reviewNotes, setReviewNotes]           = useState({});
-  const [reviewing, setReviewing]               = useState({});
+  const [verseOfDay, setVerseOfDay]           = useState(undefined); // undefined = loading, null = none yet
 
   // ── Fetch live data ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -160,15 +132,8 @@ export default function DashboardPage() {
         if (trans) {
           const income  = trans.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
           const expense = trans.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
-          setTotalIncome(income);
-          setTotalExpense(expense);
           setTotalFunds(income - expense);
           setRecentTransactions(trans.slice(0, 5));
-          const fTotals = FUNDS.reduce((acc, fund) => {
-            acc[fund] = trans.filter(t => t.fund === fund && t.type === 'income').reduce((s, t) => s + (Number(t.amount) || 0), 0);
-            return acc;
-          }, {});
-          setFundTotals(fTotals);
         }
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -195,22 +160,47 @@ export default function DashboardPage() {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // ── Training submissions ──────────────────────────────────────────────────
+  // ── Verse of the day — deterministic pick that rotates at local midnight ──
   useEffect(() => {
-    async function fetchTraining() {
-      const { data: mods } = await supabase.from("discipleship_modules").select("*").order("order_index", { ascending: true });
-      const { data: subs } = await supabase.from("discipleship_progress").select("*, discipleship_questions(question, order_index, module_id)").order("created_at", { ascending: false });
-      if (subs && subs.length > 0) {
-        const ids = [...new Set(subs.map(s => s.member_id))];
-        const { data: profiles } = await supabase.from("profiles").select("id, email, full_name, role").in("id", ids);
-        const profileMap = {};
-        (profiles || []).forEach(p => { profileMap[p.id] = p; });
-        setMemberProfiles(profileMap);
+    let cancelled = false;
+    let midnightTimer;
+
+    async function fetchVerse() {
+      const { count } = await supabase
+        .from('bible_verses').select('*', { count: 'exact', head: true });
+
+      if (!count) {
+        if (!cancelled) setVerseOfDay(null);
+        return;
       }
-      setTrainingModules(mods || []);
-      setSubmissions(subs || []);
+
+      const idx = verseOfDayIndex(count);
+
+      const { data } = await supabase
+        .from('bible_verses')
+        .select('reference, verse_text')
+        .order('id', { ascending: true })
+        .range(idx, idx);
+
+      if (!cancelled) setVerseOfDay(data?.[0] || null);
     }
-    fetchTraining();
+
+    fetchVerse();
+
+    function scheduleMidnightRefresh() {
+      const now = new Date();
+      const fireAt = new Date(nextLocalMidnight(now).getTime() + 5000); // +5s buffer past midnight
+      midnightTimer = setTimeout(() => {
+        fetchVerse();
+        scheduleMidnightRefresh();
+      }, fireAt - now);
+    }
+    scheduleMidnightRefresh();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(midnightTimer);
+    };
   }, []);
 
   // ── Close notif on outside click ──────────────────────────────────────────
@@ -232,14 +222,6 @@ export default function DashboardPage() {
   async function markOneRead(id) {
     await supabase.from('notifications').update({ is_read: true }).eq('id', id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-  }
-
-  async function handleReview(progressId, status) {
-    setReviewing(p => ({ ...p, [progressId]: true }));
-    const note = reviewNotes[progressId]?.trim() || null;
-    await supabase.from("discipleship_progress").update({ status, notes: note, reviewed_at: new Date().toISOString(), reviewed_by: "Pastor" }).eq("id", progressId);
-    setSubmissions(prev => prev.map(s => s.id === progressId ? { ...s, status, notes: note } : s));
-    setReviewing(p => ({ ...p, [progressId]: false }));
   }
 
   // ── Computed ──────────────────────────────────────────────────────────────
@@ -415,400 +397,116 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className={`flex gap-1 ${t.tabBar} border rounded-xl p-1 w-fit mb-8`}>
-        {["overview", "finance", "ministries", "training"].map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-5 py-1.5 rounded-lg text-sm font-bold capitalize transition-all ${
-              activeTab === tab ? "bg-blue-600 text-white shadow" : t.tabInactive
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
       {/* ── OVERVIEW ── */}
-      {activeTab === "overview" && (
-        <div className="space-y-8">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-            {STATS.map((s) => (
-              <div key={s.label} className={`${card} p-6 hover:border-slate-600 transition-colors`}>
-                <div className="flex items-center justify-between mb-3">
-                  <p className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>{s.label}</p>
-                  <s.icon className={`w-4 h-4 ${t.textMuted}`} />
-                </div>
-                <p className={`text-3xl font-black mb-1 ${s.color}`}>{s.value}</p>
-                <p className={`text-xs flex items-center gap-1 font-medium ${s.trend === "up" ? A(dark, "emerald") : t.textMuted}`}>
-                  {s.trend === "up" && <ArrowUpRight className="w-3 h-3" />}
-                  {s.sub}
-                </p>
-              </div>
-            ))}
+      <div className="space-y-8">
+        <div className={`${card} p-6 flex items-start gap-4`}>
+          <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+            <Quote className="w-4 h-4 text-blue-400" />
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Next Schedule */}
-            <div className={`${card} p-6`}>
-              <div className={`flex items-center justify-between mb-5 border-b ${t.divider} pb-3`}>
-                <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>
-                  Next Schedule {q && <span className="ml-2 text-blue-400">· filtered</span>}
-                </h3>
-                <a href="/dashboard/events" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
-                  View all <ChevronRight className="w-3 h-3" />
-                </a>
-              </div>
-              {loading ? (
-                <p className={`${t.textMuted} text-sm text-center py-8`}>Syncing...</p>
-              ) : filteredEvents.length === 0 ? (
-                <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
-                  <CalendarDays className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
-                  <p className={`text-xs ${t.textMuted}`}>{q ? `No events matching "${search}"` : "No upcoming events found."}</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredEvents.map((ev) => (
-                    <div key={ev.id} className={`flex items-start justify-between gap-3 p-3 rounded-2xl ${t.innerCard} ${t.hoverRow} transition-colors`}>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{ev.title}</p>
-                        <p className={`text-xs ${t.textMuted} mt-0.5`}>
-                          {ev.date ? new Date(ev.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}
-                          {ev.ministry ? ` · ${ev.ministry}` : ''}
-                        </p>
-                      </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${STATUS_BADGE[ev.status] || STATUS_BADGE.planning}`}>
-                        {ev.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Activity Log */}
-            <div className={`${card} p-6`}>
-              <div className={`mb-5 border-b ${t.divider} pb-3`}>
-                <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>
-                  Activity Log {q && <span className="ml-2 text-blue-400">· filtered</span>}
-                </h3>
-              </div>
-              {loading ? (
-                <p className={`${t.textMuted} text-sm text-center py-8`}>Syncing...</p>
-              ) : activityFeed.length === 0 ? (
-                <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
-                  <TrendingUp className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
-                  <p className={`text-xs ${t.textMuted}`}>{q ? `No activity matching "${search}"` : "No recent activities logged."}</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {activityFeed.map((a, i) => {
-                    const ic = ACTIVITY_ICON[a.type];
-                    return (
-                      <div key={i} className="flex items-start gap-3">
-                        <span className={`mt-0.5 shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${ic.bg}`}>
-                          {ic.label}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-xs ${t.textPrimary} leading-relaxed`}>{a.text}</p>
-                          <p className={`text-[10px] ${t.textMuted} mt-0.5`}>{a.time}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+          <div className="min-w-0">
+            <p className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-2`}>Verse of the Day</p>
+            {verseOfDay === undefined ? (
+              <p className={`text-sm ${t.textMuted}`}>Loading today&apos;s verse...</p>
+            ) : verseOfDay ? (
+              <>
+                <p className={`text-sm ${t.textPrimary} leading-relaxed italic`}>&ldquo;{verseOfDay.verse_text}&rdquo;</p>
+                <p className={`text-xs ${t.textMuted} mt-2 font-semibold`}>— {verseOfDay.reference}</p>
+              </>
+            ) : (
+              <p className={`text-sm ${t.textMuted}`}>No verses uploaded yet. Upload the verses PDF to start showing a daily verse.</p>
+            )}
           </div>
         </div>
-      )}
 
-      {/* ── FINANCE ── */}
-      {activeTab === "finance" && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { label: "Total Balance",  value: totalFunds,   icon: HandCoins,    color: A(dark, "blue") },
-              { label: "Total Income",   value: totalIncome,  icon: TrendingUp,   color: A(dark, "emerald") },
-              { label: "Total Expenses", value: totalExpense, icon: TrendingDown, color: A(dark, "rose") },
-            ].map((s) => (
-              <div key={s.label} className={`${card} p-5`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <s.icon className={`w-4 h-4 ${s.color}`} />
-                  <p className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>{s.label}</p>
-                </div>
-                <p className={`text-2xl font-black font-mono ${s.color}`}>
-                  {loading ? "..." : `₱${(s.value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
-                </p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+          {STATS.map((s) => (
+            <div key={s.label} className={`${card} p-6 hover:border-slate-600 transition-colors`}>
+              <div className="flex items-center justify-between mb-3">
+                <p className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>{s.label}</p>
+                <s.icon className={`w-4 h-4 ${t.textMuted}`} />
               </div>
-            ))}
-          </div>
-
-          <div className={`${card} p-6`}>
-            <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-5 border-b ${t.divider} pb-3`}>Fund Breakdown</h3>
-            <div className="space-y-4 mb-6">
-              {FUNDS.map((fund) => (
-                <div key={fund} className="flex justify-between items-center text-sm">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${FUND_DOTS[fund]}`} />
-                    <span className={t.textPrimary}>{fund}</span>
-                  </div>
-                  <span className={`font-black font-mono ${t.textPrimary}`}>
-                    {loading ? "..." : `₱${(fundTotals[fund] || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
-                  </span>
-                </div>
-              ))}
+              <p className={`text-3xl font-black mb-1 ${s.color}`}>{s.value}</p>
+              <p className={`text-xs flex items-center gap-1 font-medium ${s.trend === "up" ? A(dark, "emerald") : t.textMuted}`}>
+                {s.trend === "up" && <ArrowUpRight className="w-3 h-3" />}
+                {s.sub}
+              </p>
             </div>
-            <div className={`pt-4 border-t ${t.divider}`}>
-              <p className={`text-xs ${t.textSub} mb-3`}>Remainder allocation after Monthly Budget:</p>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: "General Fund", pct: "50%", color: A(dark, "blue") },
-                  { label: "Project Fund", pct: "25%", color: A(dark, "purple") },
-                  { label: "Lot Fund",     pct: "25%", color: A(dark, "pink") },
-                ].map((item) => (
-                  <div key={item.label} className={`${t.deepCard} rounded-2xl p-3 text-center`}>
-                    <p className={`text-xl font-black ${item.color}`}>{item.pct}</p>
-                    <p className={`text-[10px] ${t.textSub} mt-1 uppercase tracking-wider`}>{item.label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          ))}
+        </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Next Schedule */}
           <div className={`${card} p-6`}>
             <div className={`flex items-center justify-between mb-5 border-b ${t.divider} pb-3`}>
               <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>
-                Recent Transactions {q && <span className="ml-2 text-blue-400">· filtered</span>}
+                Next Schedule {q && <span className="ml-2 text-blue-400">· filtered</span>}
               </h3>
-              <a href="/dashboard/finance" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+              <a href="/dashboard/events" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
                 View all <ChevronRight className="w-3 h-3" />
               </a>
             </div>
             {loading ? (
-              <p className={`${t.textMuted} text-sm text-center py-4`}>Syncing...</p>
-            ) : filteredTransactions.length === 0 ? (
-              <p className={`${t.textMuted} text-sm text-center py-4`}>{q ? `No transactions matching "${search}"` : "No transactions yet."}</p>
+              <p className={`${t.textMuted} text-sm text-center py-8`}>Syncing...</p>
+            ) : filteredEvents.length === 0 ? (
+              <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
+                <CalendarDays className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
+                <p className={`text-xs ${t.textMuted}`}>{q ? `No events matching "${search}"` : "No upcoming events found."}</p>
+              </div>
             ) : (
               <div className="space-y-3">
-                {filteredTransactions.map((tx, i) => (
-                  <div key={i} className={`flex items-center justify-between py-2 border-b ${t.txBorder} last:border-0`}>
-                    <div>
-                      <p className={`text-sm font-semibold ${t.textPrimary}`}>{tx.category}</p>
-                      <p className={`text-[10px] ${t.textMuted}`}>{tx.fund || '—'} · {tx.member || '—'}</p>
+                {filteredEvents.map((ev) => (
+                  <div key={ev.id} className={`flex items-start justify-between gap-3 p-3 rounded-2xl ${t.innerCard} ${t.hoverRow} transition-colors`}>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{ev.title}</p>
+                      <p className={`text-xs ${t.textMuted} mt-0.5`}>
+                        {ev.date ? new Date(ev.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}
+                        {ev.ministry ? ` · ${ev.ministry}` : ''}
+                      </p>
                     </div>
-                    <p className={`text-sm font-black font-mono ${tx.type === 'income' ? A(dark, "emerald") : A(dark, "rose")}`}>
-                      {tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                    </p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${STATUS_BADGE[ev.status] || STATUS_BADGE.planning}`}>
+                      {ev.status}
+                    </span>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        </div>
-      )}
 
-      {/* ── MINISTRIES ── */}
-      {activeTab === "ministries" && (
-        <div className="space-y-4">
-          {MINISTRIES.map((m) => (
-            <div key={m.name} className={`${card} p-5 flex items-center justify-between hover:border-slate-600 transition-colors cursor-pointer group`}>
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
-                  <span className="text-[11px] font-black text-blue-400">{m.initials}</span>
-                </div>
-                <div>
-                  <p className={`text-sm font-bold ${t.textPrimary}`}>{m.name}</p>
-                  <p className={`text-xs ${t.textSub} mt-0.5`}>Head: {m.head}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className={`text-sm font-black ${t.textPrimary}`}>{m.members}</p>
-                  <p className={`text-[10px] ${t.textMuted} uppercase tracking-wider`}>members</p>
-                </div>
-                <ChevronRight className={`w-4 h-4 ${t.textMuted} group-hover:text-slate-400 transition-colors`} />
-              </div>
+          {/* Activity Log */}
+          <div className={`${card} p-6`}>
+            <div className={`mb-5 border-b ${t.divider} pb-3`}>
+              <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>
+                Activity Log {q && <span className="ml-2 text-blue-400">· filtered</span>}
+              </h3>
             </div>
-          ))}
-          <div className={`${t.cardBg} border border-dashed ${t.dashed} rounded-3xl p-6 text-center`}>
-            <BookOpen className={`w-5 h-5 ${t.emptyIcon} mx-auto mb-2`} />
-            <p className={`text-xs ${t.textMuted}`}>Training records and discipleship tracking coming soon.</p>
-          </div>
-        </div>
-      )}
-
-      {/* ── TRAINING ── */}
-      {activeTab === "training" && (() => {
-        const byMember = submissions.reduce((acc, s) => {
-          if (!acc[s.member_id]) acc[s.member_id] = [];
-          acc[s.member_id].push(s);
-          return acc;
-        }, {});
-
-        return (
-          <div className="space-y-5">
-            <div className="grid grid-cols-3 gap-4">
-              {[
-                { label: "Total Submissions", value: submissions.length,                                       color: t.textPrimary     },
-                { label: "Pending Review",    value: submissions.filter(s => s.status === "pending").length,  color: A(dark, "yellow")  },
-                { label: "Approved",          value: submissions.filter(s => s.status === "approved").length, color: A(dark, "emerald") },
-              ].map(s => (
-                <div key={s.label} className={`${card} p-5`}>
-                  <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-2`}>{s.label}</p>
-                  <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
-                </div>
-              ))}
-            </div>
-
-            {submissions.length === 0 && (
-              <div className={`py-16 text-center border border-dashed ${t.dashed} rounded-3xl`}>
-                <BookOpen className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-3`} />
-                <p className={`${t.textMuted} text-sm`}>No submissions yet.</p>
-                <p className={`${t.textMuted} text-xs mt-1 opacity-60`}>Members will appear here once they submit their answers.</p>
+            {loading ? (
+              <p className={`${t.textMuted} text-sm text-center py-8`}>Syncing...</p>
+            ) : activityFeed.length === 0 ? (
+              <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
+                <TrendingUp className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
+                <p className={`text-xs ${t.textMuted}`}>{q ? `No activity matching "${search}"` : "No recent activities logged."}</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {activityFeed.map((a, i) => {
+                  const ic = ACTIVITY_ICON[a.type];
+                  return (
+                    <div key={i} className="flex items-start gap-3">
+                      <span className={`mt-0.5 shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${ic.bg}`}>
+                        {ic.label}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs ${t.textPrimary} leading-relaxed`}>{a.text}</p>
+                        <p className={`text-[10px] ${t.textMuted} mt-0.5`}>{a.time}</p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
-
-            {Object.entries(byMember).map(([memberId, subs]) => {
-              const profile     = memberProfiles[memberId];
-              const displayName = profile?.full_name || profile?.email?.split("@")[0] || `Member ...${memberId.slice(-6)}`;
-              const pending     = subs.filter(s => s.status === "pending").length;
-              const approved    = subs.filter(s => s.status === "approved").length;
-              const isOpen      = expandedMember === memberId;
-
-              const byModule = subs.reduce((acc, s) => {
-                const modId = s.discipleship_questions?.module_id || s.module_id;
-                if (!acc[modId]) acc[modId] = [];
-                acc[modId].push(s);
-                return acc;
-              }, {});
-
-              return (
-                <div key={memberId} className={`${card} overflow-hidden`}>
-                  <button
-                    onClick={() => setExpandedMember(isOpen ? null : memberId)}
-                    className={`w-full flex items-center justify-between gap-4 p-5 ${t.hoverRow} transition-colors`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
-                        <span className="text-[11px] font-black text-blue-400">
-                          {displayName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="text-left">
-                        <p className={`text-sm font-bold ${t.textPrimary}`}>{displayName}</p>
-                        <p className={`text-xs ${t.textSub} mt-0.5`}>{subs.length} answer{subs.length !== 1 ? "s" : ""} submitted</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {pending > 0 && <span className="text-[10px] px-2.5 py-1 rounded-full font-bold bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">{pending} pending</span>}
-                      {approved > 0 && <span className="text-[10px] px-2.5 py-1 rounded-full font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">{approved} approved</span>}
-                      {isOpen ? <ChevronDown className={`w-4 h-4 ${t.textSub}`} /> : <ChevronRight className={`w-4 h-4 ${t.textMuted}`} />}
-                    </div>
-                  </button>
-
-                  {isOpen && (
-                    <div className={`border-t ${t.divider} px-5 py-4 space-y-3`}>
-                      {Object.entries(byModule).map(([modId, modSubs]) => {
-                        const mod        = trainingModules.find(m => m.id === Number(modId));
-                        const modOpen    = expandedModReview === `${memberId}-${modId}`;
-                        const modPending = modSubs.filter(s => s.status === "pending").length;
-
-                        return (
-                          <div key={modId} className={`${t.innerCard} border ${t.innerBorder} rounded-2xl overflow-hidden`}>
-                            <button
-                              onClick={() => setExpandedModReview(modOpen ? null : `${memberId}-${modId}`)}
-                              className={`w-full flex items-center justify-between gap-3 px-4 py-3 ${t.hoverRow} transition-colors`}
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <BookOpen className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                                <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{mod?.title || `Module ${modId}`}</p>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                {modPending > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-yellow-500/15 text-yellow-400">{modPending} pending</span>}
-                                {modOpen ? <ChevronDown className={`w-3.5 h-3.5 ${t.textSub}`} /> : <ChevronRight className={`w-3.5 h-3.5 ${t.textMuted}`} />}
-                              </div>
-                            </button>
-
-                            {modOpen && (
-                              <div className={`border-t ${t.innerBorder} px-4 py-4 space-y-5`}>
-                                {modSubs
-                                  .sort((a, b) => (a.discipleship_questions?.order_index || 0) - (b.discipleship_questions?.order_index || 0))
-                                  .map((sub, qi) => {
-                                    const isReviewing = reviewing[sub.id];
-                                    return (
-                                      <div key={sub.id} className="space-y-2">
-                                        <p className={`text-xs font-bold ${t.textSub}`}>
-                                          <span className="text-blue-400 mr-1">Q{qi + 1}.</span>
-                                          {sub.discipleship_questions?.question || "—"}
-                                        </p>
-                                        <div className={`${dark ? "bg-[#0f111a]" : "bg-slate-200"} border ${t.innerBorder} rounded-xl px-4 py-3`}>
-                                          <p className={`text-sm ${t.textPrimary} leading-relaxed`}>{sub.answer}</p>
-                                          <p className={`text-[10px] ${t.textMuted} mt-2`}>
-                                            Submitted {sub.created_at ? new Date(sub.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                                          </p>
-                                        </div>
-
-                                        {sub.status === "approved" ? (
-                                          <div className={`flex items-center gap-2 text-xs ${A(dark, "emerald")} font-bold`}>
-                                            <CheckCircle className="w-3.5 h-3.5" /> Approved
-                                            {sub.notes && <span className={`${t.textSub} font-normal ml-1`}>· Note: {sub.notes}</span>}
-                                          </div>
-                                        ) : sub.status === "rejected" ? (
-                                          <div className="space-y-1.5">
-                                            <div className={`flex items-center gap-2 text-xs ${A(dark, "rose")} font-bold`}>
-                                              <XCircle className="w-3.5 h-3.5" /> Rejected
-                                              {sub.notes && <span className={`${t.textSub} font-normal ml-1`}>· Note: {sub.notes}</span>}
-                                            </div>
-                                            <div className="flex gap-2 pt-1">
-                                              <button onClick={() => handleReview(sub.id, "approved")} disabled={isReviewing} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
-                                                <CheckCircle className="w-3 h-3" /> Approve
-                                              </button>
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <div className="space-y-2 pt-1">
-                                            <div className={`flex items-center gap-1.5 text-xs ${A(dark, "yellow")} font-bold mb-2`}>
-                                              <Clock className="w-3.5 h-3.5" /> Awaiting Review
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                              <MessageSquare className={`w-3.5 h-3.5 ${t.textMuted} shrink-0`} />
-                                              <input
-                                                type="text"
-                                                placeholder="Add note (optional, shown to member if rejected)"
-                                                value={reviewNotes[sub.id] || ""}
-                                                onChange={(e) => setReviewNotes(p => ({ ...p, [sub.id]: e.target.value }))}
-                                                className={`flex-1 ${dark ? "bg-[#0f111a]" : "bg-slate-50"} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
-                                              />
-                                            </div>
-                                            <div className="flex gap-2">
-                                              <button onClick={() => handleReview(sub.id, "approved")} disabled={isReviewing} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-4 py-2 rounded-xl transition-colors disabled:opacity-50">
-                                                <CheckCircle className="w-3.5 h-3.5" /> {isReviewing ? "Saving..." : "Approve"}
-                                              </button>
-                                              <button onClick={() => handleReview(sub.id, "rejected")} disabled={isReviewing} className="flex items-center gap-1.5 text-xs font-bold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 px-4 py-2 rounded-xl transition-colors disabled:opacity-50">
-                                                <XCircle className="w-3.5 h-3.5" /> {isReviewing ? "Saving..." : "Reject"}
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </div>
-        );
-      })()}
-
+        </div>
+      </div>
     </div>
   );
 }

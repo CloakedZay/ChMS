@@ -11,6 +11,7 @@ import {
 const EMPTY_FORM = {
   category: 'Tithe',
   otherCategory: '',
+  ministryName: '',
   fund: 'General Fund',
   member: '',
   amount: '',
@@ -21,10 +22,15 @@ const EMPTY_FORM = {
   church_id: '',
 };
 
-const CATEGORIES = ['Tithe', 'Offering', 'Love Gift', 'Donation', 'Expense', 'Other'];
+const INCOME_CATEGORIES  = ['Tithe', 'Offering', 'Donation', 'Other'];
+const EXPENSE_CATEGORIES = ['Love Gift', 'Ministry', 'Other'];
+const MINISTRY_PREFIX = 'Ministry - ';
+function categoriesForType(type) {
+  return type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+}
 const FUNDS      = ['Monthly Budget', 'General Fund', 'Project Fund', 'Lot Fund'];
 const STATUSES   = ['Verified', 'Pending', 'Unverified'];
-const NO_MEMBER_CATEGORIES = ['Tithe', 'Offering'];
+const NO_MEMBER_CATEGORIES = ['Tithe', 'Offering', 'Love Gift'];
 const PAGE_SIZE  = 10;
 
 // Older entries may still carry the pre-merge category names.
@@ -142,11 +148,22 @@ export default function FinancePage() {
 
   function openEdit(tx) {
     const normalized = normalizeCategory(tx.category) || 'Tithe';
-    const isKnownCategory = CATEGORIES.includes(normalized);
+    const knownCategories = categoriesForType(tx.type || 'income');
+    let category, otherCategory = '', ministryName = '';
+    if (normalized.startsWith(MINISTRY_PREFIX)) {
+      category = 'Ministry';
+      ministryName = normalized.slice(MINISTRY_PREFIX.length);
+    } else if (knownCategories.includes(normalized)) {
+      category = normalized;
+    } else {
+      category = 'Other';
+      otherCategory = tx.category || '';
+    }
     setEditingTx(tx);
     setForm({
-      category: isKnownCategory ? normalized : 'Other',
-      otherCategory: isKnownCategory ? '' : (tx.category || ''),
+      category,
+      otherCategory,
+      ministryName,
       fund:     tx.fund     || 'General Fund',
       member:   tx.member   || '',
       amount:   tx.amount   || '',
@@ -161,11 +178,21 @@ export default function FinancePage() {
 
   function handleChange(e) {
     const { name, value } = e.target;
-    if (name === 'category' && value !== 'Other') {
-      setForm({ ...form, category: value, otherCategory: '' });
+    if (name === 'category') {
+      setForm({
+        ...form,
+        category: value,
+        otherCategory: value === 'Other' ? form.otherCategory : '',
+        ministryName: value === 'Ministry' ? form.ministryName : '',
+      });
     } else {
       setForm({ ...form, [name]: value });
     }
+  }
+
+  function handleTypeChange(tp) {
+    const nextCategory = categoriesForType(tp)[0];
+    setForm({ ...form, type: tp, category: nextCategory, otherCategory: '', ministryName: '' });
   }
 
   async function handleSubmit(e) {
@@ -178,10 +205,17 @@ export default function FinancePage() {
       alert('Please specify the category.');
       return;
     }
+    if (form.category === 'Ministry' && !form.ministryName.trim()) {
+      alert('Please specify which ministry.');
+      return;
+    }
     setSaving(true);
     const showMember = !NO_MEMBER_CATEGORIES.includes(form.category);
-    const finalCategory = form.category === 'Other' ? form.otherCategory.trim() : form.category;
-    const { otherCategory, ...rest } = form;
+    const finalCategory =
+      form.category === 'Other'    ? form.otherCategory.trim() :
+      form.category === 'Ministry' ? `${MINISTRY_PREFIX}${form.ministryName.trim()}` :
+      form.category;
+    const { otherCategory, ministryName, ...rest } = form;
     const payload = { ...rest, category: finalCategory, amount: parseFloat(form.amount) || 0, member: showMember ? (form.member || 'Anonymous') : '', church_id: isGlobal ? form.church_id : profile?.church_id };
     if (editingTx) {
       const { error } = await supabase.from('transactions').update(payload).eq('id', editingTx.id);
@@ -404,7 +438,7 @@ export default function FinancePage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="flex gap-2">
                 {['income', 'expense'].map((tp) => (
-                  <button key={tp} type="button" onClick={() => setForm({ ...form, type: tp })}
+                  <button key={tp} type="button" onClick={() => handleTypeChange(tp)}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold capitalize border transition-all ${form.type === tp ? (tp === 'income' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-rose-600 border-rose-500 text-white') : `${t.inputBg} ${t.inputBorder} ${t.textSub}`}`}>
                     {tp === 'income' ? '+ Income' : '− Expense'}
                   </button>
@@ -422,13 +456,19 @@ export default function FinancePage() {
 
               <Field label="Category" t={t}>
                 <select name="category" value={form.category} onChange={handleChange} className={inputStyle(t)}>
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  {categoriesForType(form.type).map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Field>
 
               {form.category === 'Other' && (
                 <Field label="Specify Category" required t={t}>
                   <input type="text" name="otherCategory" value={form.otherCategory} onChange={handleChange} required placeholder="e.g. Building Fund, Love Offering..." className={inputStyle(t)} />
+                </Field>
+              )}
+
+              {form.category === 'Ministry' && (
+                <Field label="Which Ministry?" required t={t}>
+                  <input type="text" name="ministryName" value={form.ministryName} onChange={handleChange} required placeholder="e.g. Music Ministry, Youth Ministry..." className={inputStyle(t)} />
                 </Field>
               )}
 
