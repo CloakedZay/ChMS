@@ -14,6 +14,7 @@ import { useTheme } from "@/app/context/ThemeContext";
 
 // ─── Theme token maps ──────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
@@ -71,6 +72,47 @@ function A(dark, color) {
   return dark ? ACCENT[color].dark : ACCENT[color].light;
 }
 
+=======
+function T(dark) {
+  return {
+    // Page bg
+    pageBg:       dark ? "bg-[#0f111a]"        : "bg-slate-100",
+    // Card bg
+    cardBg:       dark ? "bg-[#1a1d2e]/50"     : "bg-white/80",
+    cardBorder:   dark ? "border-slate-800/60"  : "border-slate-200",
+    // Inner card (nested)
+    innerCard:    dark ? "bg-slate-900/50"      : "bg-slate-50",
+    innerBorder:  dark ? "border-slate-800/40"  : "border-slate-200",
+    // Text
+    textPrimary:  dark ? "text-white"           : "text-slate-900",
+    textSub:      dark ? "text-slate-500"       : "text-slate-500",
+    textMuted:    dark ? "text-slate-600"       : "text-slate-400",
+    // Input
+    inputBg:      dark ? "bg-[#1a1d2e]"        : "bg-white",
+    inputBorder:  dark ? "border-slate-800"     : "border-slate-300",
+    inputText:    dark ? "text-slate-200"       : "text-slate-800",
+    // Header divider
+    divider:      dark ? "border-slate-800"     : "border-slate-200",
+    // Hover row
+    hoverRow:     dark ? "hover:bg-slate-800/50" : "hover:bg-slate-100",
+    // Notif panel
+    notifBg:      dark ? "bg-[#1a1d2e]"        : "bg-white",
+    // Tab bar
+    tabBar:       dark ? "bg-[#1a1d2e]/60 border-slate-800" : "bg-white/80 border-slate-200",
+    tabInactive:  dark ? "text-slate-500 hover:text-slate-200" : "text-slate-400 hover:text-slate-700",
+    // Icon button
+    iconBtn:      dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-white border-slate-200 text-slate-500 hover:text-slate-900",
+    // Dashed empty state
+    dashed:       dark ? "border-slate-800"     : "border-slate-300",
+    emptyIcon:    dark ? "text-slate-800"       : "text-slate-300",
+    // Finance deep card
+    deepCard:     dark ? "bg-slate-900/60"      : "bg-slate-100",
+    // Transaction border
+    txBorder:     dark ? "border-slate-800/30"  : "border-slate-200",
+  };
+}
+
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const MINISTRIES = [
@@ -274,20 +316,34 @@ export default function DashboardPage() {
   ].filter(a => !q || a.text.toLowerCase().includes(q) || a.type.toLowerCase().includes(q)).slice(0, 6);
 
   const STATS = [
+<<<<<<< HEAD
     { label: "Active Members",    value: loading ? "..." : memberCount.toString(),             sub: `${activeMembers} active`,     icon: Users,      color: A(dark, "blue"),   trend: "up"                        },
     { label: "Attendance Rate",   value: loading ? "..." : `${attendanceRate}%`,               sub: "Based on active members",     icon: UserCheck,  color: A(dark, "indigo"), trend: "up"                        },
     { label: "Total Church Funds",value: loading ? "..." : `₱${totalFunds.toLocaleString()}`,  sub: "Live balance",                icon: HandCoins,  color: A(dark, "purple"), trend: totalFunds >= 0 ? "up" : "down" },
     { label: "Upcoming Events",   value: loading ? "..." : upcomingEvents.length.toString(),   sub: "From today onward",           icon: CalendarDays,color: A(dark, "pink"),  trend: "neutral"                   },
+=======
+    { label: "Active Members",    value: loading ? "..." : memberCount.toString(),             sub: `${activeMembers} active`,     icon: Users,      color: "text-blue-400",   trend: "up"                        },
+    { label: "Attendance Rate",   value: loading ? "..." : `${attendanceRate}%`,               sub: "Based on active members",     icon: UserCheck,  color: "text-indigo-400", trend: "up"                        },
+    { label: "Total Church Funds",value: loading ? "..." : `₱${totalFunds.toLocaleString()}`,  sub: "Live balance",                icon: HandCoins,  color: "text-purple-400", trend: totalFunds >= 0 ? "up" : "down" },
+    { label: "Upcoming Events",   value: loading ? "..." : upcomingEvents.length.toString(),   sub: "From today onward",           icon: CalendarDays,color: "text-pink-400",  trend: "neutral"                   },
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
   ];
 
   // ─── Shared card classname builder ────────────────────────────────────────
   const card = `${t.cardBg} border ${t.cardBorder} rounded-3xl backdrop-blur-sm`;
 
   return (
+<<<<<<< HEAD
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8 lg:mb-10">
+=======
+    <div className={`p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
+
+      {/* Header */}
+      <div className="flex justify-between items-start mb-10">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
         <div>
           <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
           <h2 className={`text-2xl font-black ${t.textPrimary}`}>Dashboard Overview</h2>
@@ -298,14 +354,22 @@ export default function DashboardPage() {
 
         <div className="flex items-center gap-3">
           {/* Search */}
+<<<<<<< HEAD
           <div className="relative flex-1 sm:flex-none">
+=======
+          <div className="relative">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
             <Search className={`absolute left-3 top-2.5 w-4 h-4 ${t.textSub}`} />
             <input
               type="text"
               placeholder="Search events, funds, members..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+<<<<<<< HEAD
               className={`${t.inputBg} border ${t.inputBorder} rounded-full py-2 pl-9 pr-9 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 w-full sm:w-64 transition-colors`}
+=======
+              className={`${t.inputBg} border ${t.inputBorder} rounded-full py-2 pl-9 pr-9 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 w-64 transition-colors`}
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
             />
             {search && (
               <button onClick={() => setSearch("")} className={`absolute right-3 top-2.5 ${t.textSub} hover:text-slate-300 transition-colors`}>
@@ -331,7 +395,11 @@ export default function DashboardPage() {
             >
               <Bell size={18} />
               {unreadCount > 0 && (
+<<<<<<< HEAD
                 <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-blue-600 rounded-full ring-2 ${dark ? "ring-[#0f111a]" : "ring-slate-200"} text-[10px] font-black text-white flex items-center justify-center`}>
+=======
+                <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-blue-600 rounded-full ring-2 ${dark ? "ring-[#0f111a]" : "ring-slate-100"} text-[10px] font-black text-white flex items-center justify-center`}>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
@@ -339,7 +407,11 @@ export default function DashboardPage() {
 
             {/* Notification panel */}
             {showNotifs && (
+<<<<<<< HEAD
               <div className={`absolute right-0 top-12 w-80 max-w-[85vw] ${t.notifBg} border ${t.cardBorder} rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden`}>
+=======
+              <div className={`absolute right-0 top-12 w-80 ${t.notifBg} border ${t.cardBorder} rounded-2xl shadow-2xl shadow-black/60 z-50 overflow-hidden`}>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                 <div className={`flex items-center justify-between px-4 py-3 border-b ${t.divider}`}>
                   <div className="flex items-center gap-2">
                     <Zap className="w-3.5 h-3.5 text-blue-400" />
@@ -441,7 +513,11 @@ export default function DashboardPage() {
                   <s.icon className={`w-4 h-4 ${t.textMuted}`} />
                 </div>
                 <p className={`text-3xl font-black mb-1 ${s.color}`}>{s.value}</p>
+<<<<<<< HEAD
                 <p className={`text-xs flex items-center gap-1 font-medium ${s.trend === "up" ? A(dark, "emerald") : t.textMuted}`}>
+=======
+                <p className={`text-xs flex items-center gap-1 font-medium ${s.trend === "up" ? "text-emerald-400" : t.textMuted}`}>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                   {s.trend === "up" && <ArrowUpRight className="w-3 h-3" />}
                   {s.sub}
                 </p>
@@ -529,9 +605,15 @@ export default function DashboardPage() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
+<<<<<<< HEAD
               { label: "Total Balance",  value: totalFunds,   icon: HandCoins,    color: A(dark, "blue") },
               { label: "Total Income",   value: totalIncome,  icon: TrendingUp,   color: A(dark, "emerald") },
               { label: "Total Expenses", value: totalExpense, icon: TrendingDown, color: A(dark, "rose") },
+=======
+              { label: "Total Balance",  value: totalFunds,   icon: HandCoins,    color: "text-blue-400" },
+              { label: "Total Income",   value: totalIncome,  icon: TrendingUp,   color: "text-emerald-400" },
+              { label: "Total Expenses", value: totalExpense, icon: TrendingDown, color: "text-rose-400" },
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
             ].map((s) => (
               <div key={s.label} className={`${card} p-5`}>
                 <div className="flex items-center gap-2 mb-3">
@@ -564,9 +646,15 @@ export default function DashboardPage() {
               <p className={`text-xs ${t.textSub} mb-3`}>Remainder allocation after Monthly Budget:</p>
               <div className="grid grid-cols-3 gap-3">
                 {[
+<<<<<<< HEAD
                   { label: "General Fund", pct: "50%", color: A(dark, "blue") },
                   { label: "Project Fund", pct: "25%", color: A(dark, "purple") },
                   { label: "Lot Fund",     pct: "25%", color: A(dark, "pink") },
+=======
+                  { label: "General Fund", pct: "50%", color: "text-blue-400" },
+                  { label: "Project Fund", pct: "25%", color: "text-purple-400" },
+                  { label: "Lot Fund",     pct: "25%", color: "text-pink-400" },
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                 ].map((item) => (
                   <div key={item.label} className={`${t.deepCard} rounded-2xl p-3 text-center`}>
                     <p className={`text-xl font-black ${item.color}`}>{item.pct}</p>
@@ -598,7 +686,11 @@ export default function DashboardPage() {
                       <p className={`text-sm font-semibold ${t.textPrimary}`}>{tx.category}</p>
                       <p className={`text-[10px] ${t.textMuted}`}>{tx.fund || '—'} · {tx.member || '—'}</p>
                     </div>
+<<<<<<< HEAD
                     <p className={`text-sm font-black font-mono ${tx.type === 'income' ? A(dark, "emerald") : A(dark, "rose")}`}>
+=======
+                    <p className={`text-sm font-black font-mono ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                       {tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                     </p>
                   </div>
@@ -652,8 +744,13 @@ export default function DashboardPage() {
             <div className="grid grid-cols-3 gap-4">
               {[
                 { label: "Total Submissions", value: submissions.length,                                       color: t.textPrimary     },
+<<<<<<< HEAD
                 { label: "Pending Review",    value: submissions.filter(s => s.status === "pending").length,  color: A(dark, "yellow")  },
                 { label: "Approved",          value: submissions.filter(s => s.status === "approved").length, color: A(dark, "emerald") },
+=======
+                { label: "Pending Review",    value: submissions.filter(s => s.status === "pending").length,  color: "text-yellow-400"  },
+                { label: "Approved",          value: submissions.filter(s => s.status === "approved").length, color: "text-emerald-400" },
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
               ].map(s => (
                 <div key={s.label} className={`${card} p-5`}>
                   <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-2`}>{s.label}</p>
@@ -743,7 +840,11 @@ export default function DashboardPage() {
                                           <span className="text-blue-400 mr-1">Q{qi + 1}.</span>
                                           {sub.discipleship_questions?.question || "—"}
                                         </p>
+<<<<<<< HEAD
                                         <div className={`${dark ? "bg-[#0f111a]" : "bg-slate-200"} border ${t.innerBorder} rounded-xl px-4 py-3`}>
+=======
+                                        <div className={`${dark ? "bg-[#0f111a]" : "bg-slate-100"} border ${t.innerBorder} rounded-xl px-4 py-3`}>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                           <p className={`text-sm ${t.textPrimary} leading-relaxed`}>{sub.answer}</p>
                                           <p className={`text-[10px] ${t.textMuted} mt-2`}>
                                             Submitted {sub.created_at ? new Date(sub.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
@@ -751,13 +852,21 @@ export default function DashboardPage() {
                                         </div>
 
                                         {sub.status === "approved" ? (
+<<<<<<< HEAD
                                           <div className={`flex items-center gap-2 text-xs ${A(dark, "emerald")} font-bold`}>
+=======
+                                          <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                             <CheckCircle className="w-3.5 h-3.5" /> Approved
                                             {sub.notes && <span className={`${t.textSub} font-normal ml-1`}>· Note: {sub.notes}</span>}
                                           </div>
                                         ) : sub.status === "rejected" ? (
                                           <div className="space-y-1.5">
+<<<<<<< HEAD
                                             <div className={`flex items-center gap-2 text-xs ${A(dark, "rose")} font-bold`}>
+=======
+                                            <div className="flex items-center gap-2 text-xs text-rose-400 font-bold">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                               <XCircle className="w-3.5 h-3.5" /> Rejected
                                               {sub.notes && <span className={`${t.textSub} font-normal ml-1`}>· Note: {sub.notes}</span>}
                                             </div>
@@ -769,7 +878,11 @@ export default function DashboardPage() {
                                           </div>
                                         ) : (
                                           <div className="space-y-2 pt-1">
+<<<<<<< HEAD
                                             <div className={`flex items-center gap-1.5 text-xs ${A(dark, "yellow")} font-bold mb-2`}>
+=======
+                                            <div className="flex items-center gap-1.5 text-xs text-yellow-400 font-bold mb-2">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                               <Clock className="w-3.5 h-3.5" /> Awaiting Review
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -779,7 +892,11 @@ export default function DashboardPage() {
                                                 placeholder="Add note (optional, shown to member if rejected)"
                                                 value={reviewNotes[sub.id] || ""}
                                                 onChange={(e) => setReviewNotes(p => ({ ...p, [sub.id]: e.target.value }))}
+<<<<<<< HEAD
                                                 className={`flex-1 ${dark ? "bg-[#0f111a]" : "bg-slate-50"} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
+=======
+                                                className={`flex-1 ${dark ? "bg-[#0f111a]" : "bg-white"} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                               />
                                             </div>
                                             <div className="flex gap-2">

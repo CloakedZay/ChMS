@@ -2,10 +2,16 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
+<<<<<<< HEAD
 import { useTheme } from "@/app/context/ThemeContext";
 import {
   ChevronRight, ChevronDown, BookOpen, Upload,
   FileText, Trash2, Download, Loader2, Plus, X, Sun, Moon
+=======
+import {
+  ChevronRight, ChevronDown, BookOpen, Upload,
+  FileText, Trash2, Download, Loader2, Plus, X
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 } from "lucide-react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -25,6 +31,7 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+<<<<<<< HEAD
 // ─── Theme token map — same pattern as DashboardPage.js ────────────────────
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
 // as bright) so it doesn't glare next to the dark theme.
@@ -63,6 +70,11 @@ export default function MinistriesTab() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
 
+=======
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function MinistriesTab() {
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
   const [expandedMinistry, setExpandedMinistry] = useState(null);
   const [expandedModule, setExpandedModule]     = useState(null);
 
@@ -201,6 +213,7 @@ export default function MinistriesTab() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+<<<<<<< HEAD
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200 space-y-6`}>
 
       {/* Header */}
@@ -218,42 +231,68 @@ export default function MinistriesTab() {
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
+=======
+    <div className="space-y-6">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 
       {/* Ministry list */}
       <div className="space-y-3">
         {MINISTRIES.map((m) => {
           const isOpen = expandedMinistry === m.name;
           return (
+<<<<<<< HEAD
             <div key={m.name} className={`${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm`}>
+=======
+            <div key={m.name} className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl overflow-hidden backdrop-blur-sm">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 
               {/* Ministry header row */}
               <button
                 onClick={() => setExpandedMinistry(isOpen ? null : m.name)}
+<<<<<<< HEAD
                 className={`w-full flex items-center justify-between gap-4 p-5 ${t.hoverRow} transition-colors`}
+=======
+                className="w-full flex items-center justify-between gap-4 p-5 hover:bg-slate-800/20 transition-colors"
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
               >
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
                     <span className="text-[11px] font-black text-blue-400">{m.initials}</span>
                   </div>
                   <div className="text-left">
+<<<<<<< HEAD
                     <p className={`text-sm font-bold ${t.textPrimary}`}>{m.name}</p>
                     <p className={`text-xs ${t.textSub} mt-0.5`}>Head: {m.head}</p>
+=======
+                    <p className="text-sm font-bold text-white">{m.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Head: {m.head}</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
+<<<<<<< HEAD
                     <p className={`text-sm font-black ${t.textPrimary}`}>{m.members}</p>
                     <p className={`text-[10px] ${t.textMuted} uppercase tracking-wider`}>members</p>
                   </div>
                   {isOpen
                     ? <ChevronDown className={`w-4 h-4 ${t.textSub}`} />
                     : <ChevronRight className={`w-4 h-4 ${t.emptyIcon}`} />
+=======
+                    <p className="text-sm font-black text-white">{m.members}</p>
+                    <p className="text-[10px] text-slate-600 uppercase tracking-wider">members</p>
+                  </div>
+                  {isOpen
+                    ? <ChevronDown className="w-4 h-4 text-slate-500" />
+                    : <ChevronRight className="w-4 h-4 text-slate-700" />
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                   }
                 </div>
               </button>
 
               {/* Expanded panel */}
               {isOpen && (
+<<<<<<< HEAD
                 <div className={`border-t ${t.divider} px-5 py-5 space-y-5`}>
 
                   {/* Info cards */}
@@ -265,13 +304,30 @@ export default function MinistriesTab() {
                     <div className={`${t.innerCard} rounded-2xl p-3`}>
                       <p className={`text-[10px] ${t.textMuted} uppercase tracking-wider mb-1`}>Members</p>
                       <p className={`text-sm font-bold ${t.textPrimary}`}>{m.members} assigned</p>
+=======
+                <div className="border-t border-slate-800/60 px-5 py-5 space-y-5">
+
+                  {/* Info cards */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-900/50 rounded-2xl p-3">
+                      <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-1">Ministry Head</p>
+                      <p className="text-sm font-bold text-white">{m.head}</p>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-2xl p-3">
+                      <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-1">Members</p>
+                      <p className="text-sm font-bold text-white">{m.members} assigned</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                     </div>
                   </div>
 
                   {/* Modules & Handouts */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
+<<<<<<< HEAD
                       <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>
+=======
+                      <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                         Training Modules & Handouts
                       </p>
                       <button
@@ -283,6 +339,7 @@ export default function MinistriesTab() {
                     </div>
 
                     {modulesLoading ? (
+<<<<<<< HEAD
                       <div className={`flex items-center gap-2 py-4 ${t.textMuted} text-xs`}>
                         <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading modules...
                       </div>
@@ -290,6 +347,15 @@ export default function MinistriesTab() {
                       <div className={`py-8 text-center border border-dashed ${t.dashed} rounded-2xl`}>
                         <BookOpen className={`w-6 h-6 ${t.emptyIcon} mx-auto mb-2`} />
                         <p className={`text-xs ${t.textMuted}`}>No modules yet.</p>
+=======
+                      <div className="flex items-center gap-2 py-4 text-slate-600 text-xs">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading modules...
+                      </div>
+                    ) : modules.length === 0 ? (
+                      <div className="py-8 text-center border border-dashed border-slate-800 rounded-2xl">
+                        <BookOpen className="w-6 h-6 text-slate-800 mx-auto mb-2" />
+                        <p className="text-xs text-slate-600">No modules yet.</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -299,37 +365,61 @@ export default function MinistriesTab() {
                           const isLoading = handoutsLoading[mod.id];
 
                           return (
+<<<<<<< HEAD
                             <div key={mod.id} className={`${t.deepCard} border ${t.innerDivider} rounded-2xl overflow-hidden`}>
+=======
+                            <div key={mod.id} className="bg-slate-900/40 border border-slate-800/40 rounded-2xl overflow-hidden">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 
                               {/* Module row */}
                               <button
                                 onClick={() => toggleModule(mod.id)}
+<<<<<<< HEAD
                                 className={`w-full flex items-center justify-between gap-3 px-4 py-3 ${t.hoverRow2} transition-colors`}
+=======
+                                className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-800/30 transition-colors"
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                               >
                                 <div className="flex items-center gap-3 min-w-0">
                                   <BookOpen className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                                   <div className="min-w-0 text-left">
+<<<<<<< HEAD
                                     <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{mod.title}</p>
                                     {mod.description && (
                                       <p className={`text-xs ${t.textSub} truncate`}>{mod.description}</p>
+=======
+                                    <p className="text-sm font-bold text-white truncate">{mod.title}</p>
+                                    {mod.description && (
+                                      <p className="text-xs text-slate-500 truncate">{mod.description}</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                     )}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
+<<<<<<< HEAD
                                   <span className={`text-[10px] ${t.textMuted}`}>
+=======
+                                  <span className="text-[10px] text-slate-600">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                     {modFiles.length > 0
                                       ? `${modFiles.length} file${modFiles.length > 1 ? "s" : ""}`
                                       : "no files"}
                                   </span>
                                   {modOpen
+<<<<<<< HEAD
                                     ? <ChevronDown className={`w-3.5 h-3.5 ${t.textSub}`} />
                                     : <ChevronRight className={`w-3.5 h-3.5 ${t.textMuted}`} />
+=======
+                                    ? <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                                    : <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                   }
                                 </div>
                               </button>
 
                               {/* Files + upload */}
                               {modOpen && (
+<<<<<<< HEAD
                                 <div className={`border-t ${t.innerDivider} px-4 py-4 space-y-4`}>
 
                                   {/* File list */}
@@ -347,6 +437,25 @@ export default function MinistriesTab() {
                                           <div className="flex-1 min-w-0">
                                             <p className={`text-xs font-bold ${t.textPrimary} truncate`}>{hf.file_name}</p>
                                             <p className={`text-[10px] ${t.textSub} mt-0.5`}>
+=======
+                                <div className="border-t border-slate-800/40 px-4 py-4 space-y-4">
+
+                                  {/* File list */}
+                                  {isLoading ? (
+                                    <div className="flex items-center gap-2 text-slate-600 text-xs py-1">
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading...
+                                    </div>
+                                  ) : modFiles.length === 0 ? (
+                                    <p className="text-xs text-slate-600">No handouts uploaded yet.</p>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      {modFiles.map((hf) => (
+                                        <div key={hf.id} className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-xl border border-slate-700/30">
+                                          <FileText className="w-4 h-4 text-blue-400 shrink-0" />
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-bold text-white truncate">{hf.file_name}</p>
+                                            <p className="text-[10px] text-slate-500 mt-0.5">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                               {formatBytes(hf.file_size)}
                                               {hf.description ? ` · ${hf.description}` : ""}
                                             </p>
@@ -355,14 +464,22 @@ export default function MinistriesTab() {
                                             <button
                                               onClick={() => handleDownload(hf)}
                                               title="Download"
+<<<<<<< HEAD
                                               className={`p-1.5 ${t.textSub} hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors`}
+=======
+                                              className="p-1.5 text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                             >
                                               <Download className="w-3.5 h-3.5" />
                                             </button>
                                             <button
                                               onClick={() => handleDelete(hf, mod.id)}
                                               title="Delete"
+<<<<<<< HEAD
                                               className={`p-1.5 ${t.textSub} hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors`}
+=======
+                                              className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                             >
                                               <Trash2 className="w-3.5 h-3.5" />
                                             </button>
@@ -373,19 +490,33 @@ export default function MinistriesTab() {
                                   )}
 
                                   {/* Upload */}
+<<<<<<< HEAD
                                   <div className={`space-y-2 pt-1 border-t ${t.innerDivider}`}>
                                     <p className={`text-[10px] ${t.textSub} uppercase tracking-wider font-bold pt-1`}>Upload Handout</p>
+=======
+                                  <div className="space-y-2 pt-1 border-t border-slate-800/40">
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold pt-1">Upload Handout</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                     <input
                                       type="text"
                                       placeholder="Short description (optional)"
                                       value={uploadDesc[mod.id] || ""}
                                       onChange={(e) => setUploadDesc(p => ({ ...p, [mod.id]: e.target.value }))}
+<<<<<<< HEAD
                                       className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
                                     />
                                     <label className={`flex items-center justify-center gap-2 w-full border border-dashed rounded-xl py-3 cursor-pointer transition-colors text-xs font-bold ${
                                       uploading[mod.id]
                                         ? `${t.uploadBorderDisabled} cursor-not-allowed`
                                         : t.uploadBorder
+=======
+                                      className="w-full bg-[#0f111a] border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                                    />
+                                    <label className={`flex items-center justify-center gap-2 w-full border border-dashed rounded-xl py-3 cursor-pointer transition-colors text-xs font-bold ${
+                                      uploading[mod.id]
+                                        ? "border-slate-700 text-slate-600 cursor-not-allowed"
+                                        : "border-slate-700 hover:border-blue-500/50 text-slate-500 hover:text-blue-400"
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                     }`}>
                                       {uploading[mod.id]
                                         ? <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
@@ -401,7 +532,11 @@ export default function MinistriesTab() {
                                       />
                                     </label>
                                     {uploadError[mod.id] && (
+<<<<<<< HEAD
                                       <p className={`text-xs ${dark ? "text-rose-400" : "text-rose-600"}`}>{uploadError[mod.id]}</p>
+=======
+                                      <p className="text-xs text-rose-400">{uploadError[mod.id]}</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                                     )}
                                   </div>
                                 </div>
@@ -420,20 +555,35 @@ export default function MinistriesTab() {
       </div>
 
       {/* Coming soon */}
+<<<<<<< HEAD
       <div className={`${t.cardBg} border border-dashed ${t.dashed} rounded-3xl p-6 text-center`}>
         <BookOpen className={`w-5 h-5 ${t.emptyIcon} mx-auto mb-2`} />
         <p className={`text-xs ${t.textMuted}`}>Member-to-ministry mapping and discipleship tracking coming soon.</p>
+=======
+      <div className="bg-[#1a1d2e]/30 border border-dashed border-slate-800 rounded-3xl p-6 text-center">
+        <BookOpen className="w-5 h-5 text-slate-700 mx-auto mb-2" />
+        <p className="text-xs text-slate-700">Member-to-ministry mapping and discipleship tracking coming soon.</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
       </div>
 
       {/* Add Module Modal */}
       {showAddModule && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+<<<<<<< HEAD
           <div className={`${t.modalBg} border ${t.modalBorder} rounded-3xl p-6 w-full max-w-md shadow-2xl`}>
             <div className="flex items-center justify-between mb-5">
               <h3 className={`text-base font-black ${t.textPrimary}`}>Add Training Module</h3>
               <button
                 onClick={() => { setShowAddModule(false); setNewModuleTitle(""); setNewModuleDesc(""); }}
                 className={`${t.textSub} hover:text-blue-400 transition-colors`}
+=======
+          <div className="bg-[#1a1d2e] border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-black text-white">Add Training Module</h3>
+              <button
+                onClick={() => { setShowAddModule(false); setNewModuleTitle(""); setNewModuleDesc(""); }}
+                className="text-slate-500 hover:text-white transition-colors"
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
               >
                 <X className="w-5 h-5" />
               </button>
@@ -441,7 +591,11 @@ export default function MinistriesTab() {
 
             <div className="space-y-3">
               <div>
+<<<<<<< HEAD
                 <label className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
+=======
+                <label className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1.5 block">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                   Module Title <span className="text-rose-400">*</span>
                 </label>
                 <input
@@ -449,11 +603,19 @@ export default function MinistriesTab() {
                   placeholder="e.g. Module 6: Spiritual Warfare"
                   value={newModuleTitle}
                   onChange={(e) => setNewModuleTitle(e.target.value)}
+<<<<<<< HEAD
                   className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-4 py-2.5 text-sm ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
                 />
               </div>
               <div>
                 <label className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
+=======
+                  className="w-full bg-[#0f111a] border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1.5 block">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                   Description
                 </label>
                 <textarea
@@ -461,7 +623,11 @@ export default function MinistriesTab() {
                   placeholder="Short overview shown to members..."
                   value={newModuleDesc}
                   onChange={(e) => setNewModuleDesc(e.target.value)}
+<<<<<<< HEAD
                   className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-4 py-2.5 text-sm ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors resize-none`}
+=======
+                  className="w-full bg-[#0f111a] border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 transition-colors resize-none"
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                 />
               </div>
             </div>
@@ -469,7 +635,11 @@ export default function MinistriesTab() {
             <div className="flex gap-3 mt-5">
               <button
                 onClick={() => { setShowAddModule(false); setNewModuleTitle(""); setNewModuleDesc(""); }}
+<<<<<<< HEAD
                 className={`flex-1 py-2.5 rounded-xl border text-sm transition-colors ${t.cancelBtn}`}
+=======
+                className="flex-1 py-2.5 rounded-xl border border-slate-700 text-sm text-slate-400 hover:text-white hover:border-slate-500 transition-colors"
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
               >
                 Cancel
               </button>

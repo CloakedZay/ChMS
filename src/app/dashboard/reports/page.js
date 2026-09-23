@@ -1,5 +1,6 @@
 'use client';
 
+<<<<<<< HEAD
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
@@ -7,6 +8,14 @@ import {
   BarChart3, TrendingUp, PieChart,
   Download, Filter, ArrowUpRight, ArrowDownRight,
   Users, Wallet, Calendar, TrendingDown, Sun, Moon
+=======
+import { useState, useEffect } from "react";
+import { supabase } from "@/app/lib/supabase";
+import {
+  BarChart3, TrendingUp, PieChart,
+  Download, Filter, ArrowUpRight, ArrowDownRight,
+  Users, Wallet, Calendar, TrendingDown
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 } from "lucide-react";
 
 const FUND_COLORS = {
@@ -14,6 +23,7 @@ const FUND_COLORS = {
   expense: "bg-rose-500",
 };
 
+<<<<<<< HEAD
 // ─── Theme token map — same pattern as DashboardPage.js ────────────────────
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
 // as bright) so it doesn't glare next to the dark theme.
@@ -59,6 +69,10 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const lastBlobUrl = useRef(null);
+=======
+export default function ReportsPage() {
+  const [loading, setLoading] = useState(true);
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 
   // Members
   const [totalMembers, setTotalMembers] = useState(0);
@@ -163,6 +177,7 @@ export default function ReportsPage() {
     fetchAll();
   }, []);
 
+<<<<<<< HEAD
   // ── PDF export ─────────────────────────────────────────────────────────
   // NOTE: this is a temporary layout — a proper branded / print-ready
   // report can replace it later.
@@ -367,6 +382,8 @@ export default function ReportsPage() {
     }
   }
 
+=======
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
   const balance = totalIncome - totalExpense;
   const attendanceRate = totalMembers > 0
     ? Math.round((activeMembers / totalMembers) * 100)
@@ -376,11 +393,16 @@ export default function ReportsPage() {
   const maxMonthly = Math.max(...monthlyTotals.map(m => Math.max(m.income, m.expense)), 1);
 
   return (
+<<<<<<< HEAD
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
+=======
+    <div className="p-8 min-h-screen bg-[#0f111a] text-slate-100">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
+<<<<<<< HEAD
           <p className={`text-[10px] uppercase tracking-widest ${t.textFaint} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
           <h1 className={`text-3xl font-black ${t.textPrimary} tracking-tight`}>Reports & Analytics</h1>
           <p className={`${t.textMuted} text-sm mt-0.5`}>
@@ -404,6 +426,20 @@ export default function ReportsPage() {
             className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-900/20 flex-1 sm:flex-none"
           >
             <Download className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export PDF'}
+=======
+          <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+          <h1 className="text-3xl font-black text-white tracking-tight">Reports & Analytics</h1>
+          <p className="text-slate-400 text-sm mt-0.5">
+            {loading ? 'Syncing live data...' : 'Live data from all church modules.'}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button className="flex items-center gap-2 bg-[#1a1d2e] hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all border border-slate-700">
+            <Filter className="w-4 h-4" /> Filter Range
+          </button>
+          <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-900/20">
+            <Download className="w-4 h-4" /> Export PDF
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
           </button>
         </div>
       </div>
@@ -417,7 +453,11 @@ export default function ReportsPage() {
             sub: "Income minus expenses",
             up: balance >= 0,
             icon: Wallet,
+<<<<<<< HEAD
             color: A(dark, "blue"),
+=======
+            color: "text-blue-400",
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
           },
           {
             label: "Active Members",
@@ -425,7 +465,11 @@ export default function ReportsPage() {
             sub: `${attendanceRate}% of ${totalMembers} total`,
             up: true,
             icon: Users,
+<<<<<<< HEAD
             color: A(dark, "indigo"),
+=======
+            color: "text-indigo-400",
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
           },
           {
             label: "Total Events",
@@ -433,7 +477,11 @@ export default function ReportsPage() {
             sub: `${upcomingEvents} upcoming`,
             up: true,
             icon: Calendar,
+<<<<<<< HEAD
             color: A(dark, "pink"),
+=======
+            color: "text-pink-400",
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
           },
           {
             label: "Total Expenses",
@@ -441,6 +489,7 @@ export default function ReportsPage() {
             sub: "All recorded expenses",
             up: false,
             icon: TrendingDown,
+<<<<<<< HEAD
             color: A(dark, "rose"),
           },
         ].map((s, i) => (
@@ -449,6 +498,16 @@ export default function ReportsPage() {
             <p className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-2`}>{s.label}</p>
             <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
             <p className={`text-xs mt-1 flex items-center gap-1 font-medium ${s.up ? A(dark, "emerald") : A(dark, "rose")}`}>
+=======
+            color: "text-rose-400",
+          },
+        ].map((s, i) => (
+          <div key={i} className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6 relative overflow-hidden group">
+            <s.icon className="absolute -right-2 -bottom-2 w-16 h-16 text-white/3 group-hover:text-blue-500/10 transition-colors" />
+            <p className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-2">{s.label}</p>
+            <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
+            <p className={`text-xs mt-1 flex items-center gap-1 font-medium ${s.up ? 'text-emerald-400' : 'text-rose-400'}`}>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
               {s.up ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
               {s.sub}
             </p>
@@ -459,6 +518,7 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 
         {/* Income vs Expense Bar Chart */}
+<<<<<<< HEAD
         <div className={`lg:col-span-2 ${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
           <div className={`flex justify-between items-center mb-6 border-b ${t.divider} pb-4`}>
             <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2`}>
@@ -469,6 +529,18 @@ export default function ReportsPage() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500" /> Income
               </span>
               <span className={`flex items-center gap-1 ${A(dark, "rose")}`}>
+=======
+        <div className="lg:col-span-2 bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6">
+          <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+            <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-blue-400" /> Monthly Finance
+            </h3>
+            <div className="flex gap-3 text-[10px] font-bold uppercase">
+              <span className="flex items-center gap-1 text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" /> Income
+              </span>
+              <span className="flex items-center gap-1 text-rose-400">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                 <span className="w-2 h-2 rounded-full bg-rose-500" /> Expense
               </span>
             </div>
@@ -476,11 +548,19 @@ export default function ReportsPage() {
 
           {loading ? (
             <div className="h-48 flex items-center justify-center">
+<<<<<<< HEAD
               <p className={`${t.textFaint} text-sm`}>Syncing...</p>
             </div>
           ) : monthlyTotals.length === 0 ? (
             <div className={`h-48 flex items-center justify-center border border-dashed ${t.dashed} rounded-2xl`}>
               <p className={`${t.textFaint} text-sm`}>No transaction data yet.</p>
+=======
+              <p className="text-slate-600 text-sm">Syncing...</p>
+            </div>
+          ) : monthlyTotals.length === 0 ? (
+            <div className="h-48 flex items-center justify-center border border-dashed border-slate-800 rounded-2xl">
+              <p className="text-slate-600 text-sm">No transaction data yet.</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
             </div>
           ) : (
             <div className="h-52 flex items-end justify-between gap-2 px-2">
@@ -506,7 +586,11 @@ export default function ReportsPage() {
                       </div>
                     </div>
                   </div>
+<<<<<<< HEAD
                   <span className={`text-[9px] ${t.textFaint} font-bold`}>{m.month}</span>
+=======
+                  <span className="text-[9px] text-slate-600 font-bold">{m.month}</span>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                 </div>
               ))}
             </div>
@@ -514,6 +598,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Members by Ministry */}
+<<<<<<< HEAD
         <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
           <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2 mb-5 border-b ${t.divider} pb-4`}>
             <Users className={`w-4 h-4 ${A(dark, "indigo")}`} /> Members by Ministry
@@ -522,6 +607,16 @@ export default function ReportsPage() {
             <p className={`${t.textFaint} text-sm text-center py-8`}>Syncing...</p>
           ) : membersByMinistry.length === 0 ? (
             <p className={`${t.textFaint} text-sm text-center py-8`}>No member data yet.</p>
+=======
+        <div className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6">
+          <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2 mb-5 border-b border-slate-800 pb-4">
+            <Users className="w-4 h-4 text-indigo-400" /> Members by Ministry
+          </h3>
+          {loading ? (
+            <p className="text-slate-600 text-sm text-center py-8">Syncing...</p>
+          ) : membersByMinistry.length === 0 ? (
+            <p className="text-slate-600 text-sm text-center py-8">No member data yet.</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
           ) : (
             <div className="space-y-4">
               {membersByMinistry.map((m) => {
@@ -529,10 +624,17 @@ export default function ReportsPage() {
                 return (
                   <div key={m.name}>
                     <div className="flex justify-between text-xs mb-1.5">
+<<<<<<< HEAD
                       <span className={`${t.textMuted} font-medium truncate max-w-[140px]`}>{m.name}</span>
                       <span className={`${t.textPrimary} font-black`}>{m.count} <span className={`${t.textFaint} font-normal`}>({pct}%)</span></span>
                     </div>
                     <div className={`w-full h-1.5 ${t.trackBg} rounded-full overflow-hidden`}>
+=======
+                      <span className="text-slate-400 font-medium truncate max-w-[140px]">{m.name}</span>
+                      <span className="text-white font-black">{m.count} <span className="text-slate-600 font-normal">({pct}%)</span></span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                       <div
                         className="h-full bg-indigo-500 rounded-full transition-all duration-700"
                         style={{ width: `${pct}%` }}
@@ -544,6 +646,7 @@ export default function ReportsPage() {
             </div>
           )}
 
+<<<<<<< HEAD
           <div className={`mt-6 pt-4 border-t ${t.divider} grid grid-cols-2 gap-3`}>
             <div className={`${t.deepCard} rounded-2xl p-3 text-center`}>
               <p className={`text-xl font-black ${t.textPrimary}`}>{loading ? '...' : totalMembers}</p>
@@ -552,6 +655,16 @@ export default function ReportsPage() {
             <div className={`${t.deepCard} rounded-2xl p-3 text-center`}>
               <p className={`text-xl font-black ${A(dark, "emerald")}`}>{loading ? '...' : activeMembers}</p>
               <p className={`text-[10px] ${t.textSub} mt-0.5 uppercase tracking-wider`}>Active</p>
+=======
+          <div className="mt-6 pt-4 border-t border-slate-800 grid grid-cols-2 gap-3">
+            <div className="bg-slate-900/60 rounded-2xl p-3 text-center">
+              <p className="text-xl font-black text-white">{loading ? '...' : totalMembers}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wider">Total</p>
+            </div>
+            <div className="bg-slate-900/60 rounded-2xl p-3 text-center">
+              <p className="text-xl font-black text-emerald-400">{loading ? '...' : activeMembers}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wider">Active</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
             </div>
           </div>
         </div>
@@ -561,6 +674,7 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Income vs Expense Summary */}
+<<<<<<< HEAD
         <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
           <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2 mb-5 border-b ${t.divider} pb-4`}>
             <PieChart className={`w-4 h-4 ${A(dark, "purple")}`} /> Finance Summary
@@ -574,11 +688,30 @@ export default function ReportsPage() {
               <div key={item.label}>
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className={t.textMuted}>{item.label}</span>
+=======
+        <div className="bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6">
+          <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2 mb-5 border-b border-slate-800 pb-4">
+            <PieChart className="w-4 h-4 text-purple-400" /> Finance Summary
+          </h3>
+          <div className="space-y-5">
+            {[
+              { label: "Total Income", value: totalIncome, color: "bg-emerald-500", textColor: "text-emerald-400" },
+              { label: "Total Expenses", value: totalExpense, color: "bg-rose-500", textColor: "text-rose-400" },
+              { label: "Net Balance", value: balance, color: "bg-blue-500", textColor: "text-blue-400" },
+            ].map((item) => (
+              <div key={item.label}>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-slate-400">{item.label}</span>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                   <span className={`font-black ${item.textColor}`}>
                     {loading ? '...' : `₱${item.value.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
                   </span>
                 </div>
+<<<<<<< HEAD
                 <div className={`w-full h-1.5 ${t.trackBg} rounded-full overflow-hidden`}>
+=======
+                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                   <div
                     className={`h-full ${item.color} rounded-full`}
                     style={{ width: totalIncome > 0 ? `${Math.min((Math.abs(item.value) / totalIncome) * 100, 100)}%` : '0%' }}
@@ -589,14 +722,20 @@ export default function ReportsPage() {
           </div>
 
           <div className="mt-6 p-4 bg-blue-600/5 border border-blue-500/20 rounded-2xl">
+<<<<<<< HEAD
             <p className={`text-[10px] ${A(dark, "blue")} font-bold uppercase mb-1`}>Stewardship Note</p>
             <p className={`text-xs ${t.textSub} leading-relaxed`}>
+=======
+            <p className="text-[10px] text-blue-400 font-bold uppercase mb-1">Stewardship Note</p>
+            <p className="text-xs text-slate-500 leading-relaxed">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
               Financial transparency is maintained across all fund categories as per GGCF-GMI policy.
             </p>
           </div>
         </div>
 
         {/* Recent Transactions */}
+<<<<<<< HEAD
         <div className={`lg:col-span-2 ${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
           <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2 mb-5 border-b ${t.divider} pb-4`}>
             <TrendingUp className={`w-4 h-4 ${A(dark, "emerald")}`} /> Recent Transactions
@@ -606,23 +745,47 @@ export default function ReportsPage() {
           ) : recentTransactions.length === 0 ? (
             <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
               <p className={`${t.textFaint} text-sm`}>No transactions recorded yet.</p>
+=======
+        <div className="lg:col-span-2 bg-[#1a1d2e]/50 border border-slate-800/60 rounded-3xl p-6">
+          <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2 mb-5 border-b border-slate-800 pb-4">
+            <TrendingUp className="w-4 h-4 text-emerald-400" /> Recent Transactions
+          </h3>
+          {loading ? (
+            <p className="text-slate-600 text-sm text-center py-8">Syncing...</p>
+          ) : recentTransactions.length === 0 ? (
+            <div className="py-10 text-center border border-dashed border-slate-800 rounded-2xl">
+              <p className="text-slate-600 text-sm">No transactions recorded yet.</p>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
             </div>
           ) : (
             <div className="space-y-3">
               {recentTransactions.map((tx, i) => (
+<<<<<<< HEAD
                 <div key={i} className={`flex items-center justify-between py-2.5 px-4 rounded-2xl ${t.rowBg} ${t.rowHover} transition-colors`}>
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${tx.type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                     <div>
                       <p className={`text-sm font-semibold ${t.textPrimary} capitalize`}>{tx.type}</p>
                       <p className={`text-[10px] ${t.textFaint}`}>
+=======
+                <div key={i} className="flex items-center justify-between py-2.5 px-4 rounded-2xl bg-slate-900/40 hover:bg-slate-900/70 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${tx.type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                    <div>
+                      <p className="text-sm font-semibold text-white capitalize">{tx.type}</p>
+                      <p className="text-[10px] text-slate-600">
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                         {tx.date_recorded
                           ? new Date(tx.date_recorded).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
                           : '—'}
                       </p>
                     </div>
                   </div>
+<<<<<<< HEAD
                   <p className={`text-sm font-black font-mono ${tx.type === 'income' ? A(dark, "emerald") : A(dark, "rose")}`}>
+=======
+                  <p className={`text-sm font-black font-mono ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}`}>
+>>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                     {tx.type === 'expense' ? '−' : '+'}₱{Number(tx.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
