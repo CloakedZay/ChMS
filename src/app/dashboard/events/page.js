@@ -5,11 +5,7 @@ import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import {
   Calendar, Plus, Search, MoreHorizontal,
-<<<<<<< HEAD
   CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon
-=======
-  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 } from "lucide-react";
 
 const EMPTY_FORM = {
@@ -41,7 +37,6 @@ const FILTERS = ["all", "planning", "pending", "approved", "done"];
 const GLOBAL_ROLES = ["admin", "pastor"];
 
 // ─── Theme token map — same pattern as DashboardPage.js ────────────────────
-<<<<<<< HEAD
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
@@ -80,32 +75,6 @@ function A(dark, color) {
 
 export default function EventsPage() {
   const { dark, toggle: toggleTheme } = useTheme();
-=======
-function T(dark) {
-  return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-100",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-white/80",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-200",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-500",
-    textMuted:   dark ? "text-slate-600"       : "text-slate-400",
-    inputBg:     dark ? "bg-[#1a1d2e]"        : "bg-white",
-    inputBorder: dark ? "border-slate-800"     : "border-slate-300",
-    inputText:   dark ? "text-slate-200"       : "text-slate-800",
-    divider:     dark ? "border-slate-800/50"  : "border-slate-200",
-    filterInactive: dark ? "bg-[#1a1d2e] border-slate-800 text-slate-500 hover:text-slate-200" : "bg-white border-slate-300 text-slate-500 hover:text-slate-900",
-    modalBg:     dark ? "bg-[#1a1d2e]"        : "bg-white",
-    modalBorder: dark ? "border-slate-700"     : "border-slate-200",
-    cancelBtn:   dark ? "bg-slate-800 hover:bg-slate-700 text-white" : "bg-slate-200 hover:bg-slate-300 text-slate-900",
-    emptyIcon:   dark ? "text-slate-700"       : "text-slate-300",
-    menuBg:      dark ? "bg-[#1a1d2e] border-slate-700" : "bg-white border-slate-200",
-    menuHover:   dark ? "hover:bg-slate-800"    : "hover:bg-slate-100",
-  };
-}
-
-export default function EventsPage() {
-  const { dark } = useTheme();
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
   const t = T(dark);
 
   const [events, setEvents]         = useState([]);
@@ -225,21 +194,14 @@ export default function EventsPage() {
   };
 
   return (
-<<<<<<< HEAD
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
 
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
-=======
-    <div className={`p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
-
-      <div className="flex justify-between items-start mb-8">
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
         <div>
           <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Events & Services</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Schedule and track church activities and ministry projects</p>
         </div>
-<<<<<<< HEAD
         <div className="flex items-center gap-3">
           <button
             onClick={toggleTheme}
@@ -255,27 +217,13 @@ export default function EventsPage() {
             <Plus size={16} /> Add Event
           </button>
         </div>
-=======
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20"
-        >
-          <Plus size={16} /> Add Event
-        </button>
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
-<<<<<<< HEAD
           { label: "Total Events", value: counts.total,    color: A(dark, "blue") },
           { label: "Approved",     value: counts.approved, color: A(dark, "emerald") },
           { label: "Pending",      value: counts.pending,  color: A(dark, "orange") },
-=======
-          { label: "Total Events", value: counts.total,    color: "text-blue-400" },
-          { label: "Approved",     value: counts.approved, color: "text-emerald-400" },
-          { label: "Pending",      value: counts.pending,  color: "text-orange-400" },
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
           { label: "Completed",    value: counts.done,     color: t.textMuted },
         ].map((c) => (
           <div key={c.label} className={`${t.cardBg} border ${t.cardBorder} rounded-2xl px-5 py-4 backdrop-blur-sm`}>
@@ -447,15 +395,9 @@ function EventCard({ event, branchName, onEdit, onDelete, t, dark }) {
             const reached = stepIndex >= ["planning", "pending", "approved", "done"].indexOf(step.key === "approved" ? "approved" : step.key);
             return (
               <div key={step.key} className="flex items-center gap-1">
-<<<<<<< HEAD
                 <step.Icon size={12} className={reached ? (step.key === "done" ? A(dark, "emerald") : A(dark, "blue")) : (dark ? "text-slate-700" : "text-slate-400")} />
                 <span className={`text-[9px] font-bold uppercase tracking-wider ${reached ? t.textSub : t.emptyIcon}`}>{step.label}</span>
                 {i < steps.length - 1 && <div className={`w-6 h-px mx-1 ${stepIndex > i ? "bg-blue-500/40" : (dark ? "bg-slate-800" : "bg-slate-300")}`} />}
-=======
-                <step.Icon size={12} className={reached ? (step.key === "done" ? "text-emerald-400" : "text-blue-400") : (dark ? "text-slate-700" : "text-slate-300")} />
-                <span className={`text-[9px] font-bold uppercase tracking-wider ${reached ? t.textSub : t.emptyIcon}`}>{step.label}</span>
-                {i < steps.length - 1 && <div className={`w-6 h-px mx-1 ${stepIndex > i ? "bg-blue-500/40" : (dark ? "bg-slate-800" : "bg-slate-200")}`} />}
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
               </div>
             );
           })}

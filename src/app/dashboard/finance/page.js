@@ -5,19 +5,12 @@ import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import {
   Wallet, TrendingUp, TrendingDown, Plus,
-<<<<<<< HEAD
   Search, X, Trash2, Pencil, History, Sun, Moon
-=======
-  Search, X, Trash2, Pencil, History
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 } from "lucide-react";
 
 const EMPTY_FORM = {
   category: 'Tithe',
-<<<<<<< HEAD
   otherCategory: '',
-=======
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
   fund: 'General Fund',
   member: '',
   amount: '',
@@ -28,7 +21,6 @@ const EMPTY_FORM = {
   church_id: '',
 };
 
-<<<<<<< HEAD
 const CATEGORIES = ['Tithe', 'Offering', 'Love Gift', 'Donation', 'Expense', 'Other'];
 const FUNDS      = ['Monthly Budget', 'General Fund', 'Project Fund', 'Lot Fund'];
 const STATUSES   = ['Verified', 'Pending', 'Unverified'];
@@ -41,13 +33,6 @@ function normalizeCategory(cat) {
   return cat;
 }
 
-=======
-const CATEGORIES = ['Tithe', 'Offering', 'Love Gift', 'Project Donation', 'Lot Fund Donation', 'Expense', 'Other'];
-const FUNDS      = ['Monthly Budget', 'General Fund', 'Project Fund', 'Lot Fund'];
-const STATUSES   = ['Verified', 'Pending', 'Unverified'];
-
-const TYPE_COLORS = { income: "text-emerald-400", expense: "text-rose-400" };
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 const STATUS_BADGE = {
   Verified:   "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   Pending:    "bg-orange-500/10 text-orange-400 border-orange-500/20",
@@ -56,7 +41,6 @@ const STATUS_BADGE = {
 
 const GLOBAL_ROLES = ["admin", "pastor"];
 
-<<<<<<< HEAD
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
@@ -99,34 +83,6 @@ function A(dark, color) {
 
 export default function FinancePage() {
   const { dark, toggle: toggleTheme } = useTheme();
-=======
-function T(dark) {
-  return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-100",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-white/80",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-200",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-500",
-    textMuted:   dark ? "text-slate-600"       : "text-slate-400",
-    inputBg:     dark ? "bg-[#1a1d2e]"        : "bg-white",
-    inputBorder: dark ? "border-slate-800"     : "border-slate-300",
-    inputText:   dark ? "text-slate-200"       : "text-slate-800",
-    divider:     dark ? "border-slate-800/40"  : "border-slate-200",
-    filterInactive: dark ? "bg-[#1a1d2e] border-slate-800 text-slate-500 hover:text-slate-200" : "bg-white border-slate-300 text-slate-500 hover:text-slate-900",
-    modalBg:     dark ? "bg-[#1a1d2e]"        : "bg-white",
-    modalBorder: dark ? "border-slate-700"     : "border-slate-200",
-    cancelBtn:   dark ? "bg-slate-800 hover:bg-slate-700 text-white" : "bg-slate-200 hover:bg-slate-300 text-slate-900",
-    emptyIcon:   dark ? "text-slate-700"       : "text-slate-300",
-    tableHeadBg: dark ? "bg-slate-900/50"      : "bg-slate-100",
-    rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-50",
-    innerCard:   dark ? "bg-slate-900/50"      : "bg-slate-50",
-    deepCard:    dark ? "bg-slate-900/40"      : "bg-slate-100",
-  };
-}
-
-export default function FinancePage() {
-  const { dark } = useTheme();
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
   const t = T(dark);
 
   const [transactions, setTransactions] = useState([]);
@@ -140,10 +96,7 @@ export default function FinancePage() {
   const [search, setSearch]             = useState("");
   const [filterType, setFilterType]     = useState("all");
   const [form, setForm]                 = useState(EMPTY_FORM);
-<<<<<<< HEAD
   const [page, setPage]                 = useState(1);
-=======
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
 
@@ -188,18 +141,12 @@ export default function FinancePage() {
   }
 
   function openEdit(tx) {
-<<<<<<< HEAD
     const normalized = normalizeCategory(tx.category) || 'Tithe';
     const isKnownCategory = CATEGORIES.includes(normalized);
     setEditingTx(tx);
     setForm({
       category: isKnownCategory ? normalized : 'Other',
       otherCategory: isKnownCategory ? '' : (tx.category || ''),
-=======
-    setEditingTx(tx);
-    setForm({
-      category: tx.category || 'Tithe',
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
       fund:     tx.fund     || 'General Fund',
       member:   tx.member   || '',
       amount:   tx.amount   || '',
@@ -213,16 +160,12 @@ export default function FinancePage() {
   }
 
   function handleChange(e) {
-<<<<<<< HEAD
     const { name, value } = e.target;
     if (name === 'category' && value !== 'Other') {
       setForm({ ...form, category: value, otherCategory: '' });
     } else {
       setForm({ ...form, [name]: value });
     }
-=======
-    setForm({ ...form, [e.target.name]: e.target.value });
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
   }
 
   async function handleSubmit(e) {
@@ -231,7 +174,6 @@ export default function FinancePage() {
       alert('Please select which branch this entry belongs to.');
       return;
     }
-<<<<<<< HEAD
     if (form.category === 'Other' && !form.otherCategory.trim()) {
       alert('Please specify the category.');
       return;
@@ -241,10 +183,6 @@ export default function FinancePage() {
     const finalCategory = form.category === 'Other' ? form.otherCategory.trim() : form.category;
     const { otherCategory, ...rest } = form;
     const payload = { ...rest, category: finalCategory, amount: parseFloat(form.amount) || 0, member: showMember ? (form.member || 'Anonymous') : '', church_id: isGlobal ? form.church_id : profile?.church_id };
-=======
-    setSaving(true);
-    const payload = { ...form, amount: parseFloat(form.amount) || 0, member: form.member || 'Anonymous', church_id: isGlobal ? form.church_id : profile?.church_id };
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
     if (editingTx) {
       const { error } = await supabase.from('transactions').update(payload).eq('id', editingTx.id);
       if (error) alert('Error updating: ' + error.message);
@@ -285,7 +223,6 @@ export default function FinancePage() {
     return matchSearch && matchType;
   });
 
-<<<<<<< HEAD
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -311,18 +248,11 @@ export default function FinancePage() {
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
 
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
-=======
-  return (
-    <div className={`p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
-
-      <div className="flex justify-between items-start mb-8">
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
         <div>
           <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Financial Ledger</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Track tithes, offerings, and church fund allocations</p>
         </div>
-<<<<<<< HEAD
         <div className="flex items-center gap-3">
           <button
             onClick={toggleTheme}
@@ -342,18 +272,6 @@ export default function FinancePage() {
           <span className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Viewing</span>
           <select value={selectedBranch} onChange={(e) => handleBranchChange(e.target.value)}
             className={`w-full sm:w-auto ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 px-4 text-sm ${t.inputText} focus:outline-none focus:border-blue-500 transition-colors`}>
-=======
-        <button onClick={openAdd} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20">
-          <Plus size={16} /> New Entry
-        </button>
-      </div>
-
-      {isGlobal && (
-        <div className="flex items-center gap-2 mb-6">
-          <span className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Viewing</span>
-          <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)}
-            className={`${t.inputBg} border ${t.inputBorder} rounded-xl py-2 px-4 text-sm ${t.inputText} focus:outline-none focus:border-blue-500 transition-colors`}>
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
             <option value="all">All Branches (combined)</option>
             {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -361,15 +279,9 @@ export default function FinancePage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-<<<<<<< HEAD
         <StatCard label="Total Balance"  amount={totalBalance} icon={Wallet}       color={A(dark, "blue")} t={t} />
         <StatCard label="Total Income"   amount={totalIncome}  icon={TrendingUp}   color={A(dark, "emerald")} t={t} />
         <StatCard label="Total Expenses" amount={totalExpense} icon={TrendingDown} color={A(dark, "rose")} t={t} />
-=======
-        <StatCard label="Total Balance"  amount={totalBalance} icon={Wallet}       color="text-blue-400" t={t} />
-        <StatCard label="Total Income"   amount={totalIncome}  icon={TrendingUp}   color="text-emerald-400" t={t} />
-        <StatCard label="Total Expenses" amount={totalExpense} icon={TrendingDown} color="text-rose-400" t={t} />
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
       </div>
 
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 mb-6 backdrop-blur-sm`}>
@@ -393,15 +305,9 @@ export default function FinancePage() {
 
         <div className={`mt-4 grid grid-cols-3 gap-3`}>
           {[
-<<<<<<< HEAD
             { label: "General Fund", pct: "50%", color: A(dark, "blue") },
             { label: "Project Fund", pct: "25%", color: A(dark, "purple") },
             { label: "Lot Fund",     pct: "25%", color: A(dark, "pink") },
-=======
-            { label: "General Fund", pct: "50%", color: "text-blue-400" },
-            { label: "Project Fund", pct: "25%", color: "text-purple-400" },
-            { label: "Lot Fund",     pct: "25%", color: "text-pink-400" },
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
           ].map((item) => (
             <div key={item.label} className={`${t.deepCard} rounded-xl p-3 text-center`}>
               <p className={`text-base font-black ${item.color}`}>{item.pct}</p>
@@ -414,20 +320,12 @@ export default function FinancePage() {
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1">
           <Search className={`absolute left-3 top-2.5 w-4 h-4 ${t.textSub}`} />
-<<<<<<< HEAD
           <input type="text" placeholder="Search by category, member, or fund..." value={search} onChange={handleSearchChange}
-=======
-          <input type="text" placeholder="Search by category, member, or fund..." value={search} onChange={(e) => setSearch(e.target.value)}
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
             className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 pl-9 pr-4 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`} />
         </div>
         <div className="flex gap-2">
           {["all", "income", "expense"].map((tp) => (
-<<<<<<< HEAD
             <button key={tp} onClick={() => handleFilterTypeChange(tp)} className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${filterType === tp ? "bg-blue-600 text-white" : t.filterInactive}`}>{tp}</button>
-=======
-            <button key={tp} onClick={() => setFilterType(tp)} className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${filterType === tp ? "bg-blue-600 text-white" : t.filterInactive}`}>{tp}</button>
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
           ))}
         </div>
       </div>
@@ -456,30 +354,18 @@ export default function FinancePage() {
                   <p className={`${t.textMuted} text-sm`}>{search || filterType !== "all" ? "No entries match your search." : "No transactions yet. Add one!"}</p>
                 </td></tr>
               ) : (
-<<<<<<< HEAD
                 paginated.map((tx) => (
-=======
-                filtered.map((tx) => (
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                   <tr key={tx.id} className={`${t.rowHover} transition-colors`}>
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{tx.date ? new Date(tx.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
                     <td className={`px-6 py-4 font-semibold ${t.textPrimary} text-sm`}>{tx.category}</td>
                     <td className="px-6 py-4 text-blue-400 text-xs font-medium">{tx.fund || '—'}</td>
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{tx.member || '—'}</td>
                     {isGlobal && <td className={`px-6 py-4 ${t.textMuted} text-xs`}>{churchName(tx.church_id) || '—'}</td>}
-<<<<<<< HEAD
                     <td className={`px-6 py-4 font-black text-sm font-mono ${tx.type === 'income' ? A(dark, "emerald") : tx.type === 'expense' ? A(dark, "rose") : t.textPrimary}`}>{tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
                     <td className="px-6 py-4 text-center"><span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${STATUS_BADGE[tx.status] || STATUS_BADGE.Verified}`}>{tx.status}</span></td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEdit(tx)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-300"}`}><Pencil size={13} /></button>
-=======
-                    <td className={`px-6 py-4 font-black text-sm font-mono ${TYPE_COLORS[tx.type] || t.textPrimary}`}>{tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-6 py-4 text-center"><span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${STATUS_BADGE[tx.status] || STATUS_BADGE.Verified}`}>{tx.status}</span></td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => openEdit(tx)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}><Pencil size={13} /></button>
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
                         <button onClick={() => handleDelete(tx)} className={`${t.textMuted} hover:text-red-400 transition-colors p-1 rounded-lg hover:bg-red-500/10`}><Trash2 size={13} /></button>
                       </div>
                     </td>
@@ -490,7 +376,6 @@ export default function FinancePage() {
           </table>
         </div>
         {!loading && filtered.length > 0 && (
-<<<<<<< HEAD
           <div className={`px-6 py-3 border-t ${t.divider} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`}>
             <span className={`text-[10px] ${t.textMuted} uppercase tracking-widest`}>
               Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} entries
@@ -505,9 +390,6 @@ export default function FinancePage() {
               </div>
             )}
           </div>
-=======
-          <div className={`px-6 py-3 border-t ${t.divider} text-[10px] ${t.textMuted} uppercase tracking-widest`}>Showing {filtered.length} of {branchScoped.length} entries</div>
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
         )}
       </div>
 
@@ -544,32 +426,23 @@ export default function FinancePage() {
                 </select>
               </Field>
 
-<<<<<<< HEAD
               {form.category === 'Other' && (
                 <Field label="Specify Category" required t={t}>
                   <input type="text" name="otherCategory" value={form.otherCategory} onChange={handleChange} required placeholder="e.g. Building Fund, Love Offering..." className={inputStyle(t)} />
                 </Field>
               )}
 
-=======
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
               <Field label="Fund" t={t}>
                 <select name="fund" value={form.fund} onChange={handleChange} className={inputStyle(t)}>
                   {FUNDS.map((f) => <option key={f} value={f}>{f}</option>)}
                 </select>
               </Field>
 
-<<<<<<< HEAD
               {showMemberField && (
                 <Field label="Member / Payee" t={t}>
                   <input type="text" name="member" value={form.member} onChange={handleChange} placeholder="e.g. Juan dela Cruz" className={inputStyle(t)} />
                 </Field>
               )}
-=======
-              <Field label="Member / Payee" t={t}>
-                <input type="text" name="member" value={form.member} onChange={handleChange} placeholder="e.g. Juan dela Cruz" className={inputStyle(t)} />
-              </Field>
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
 
               <Field label="Amount (₱)" required t={t}>
                 <input type="number" name="amount" value={form.amount} onChange={handleChange} required placeholder="e.g. 500" min="0" step="0.01" className={inputStyle(t)} onWheel={(e) => e.target.blur()} />

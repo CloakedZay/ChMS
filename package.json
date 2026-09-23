@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-<<<<<<< HEAD
     "@anthropic-ai/sdk": "^0.127.0",
     "@supabase/supabase-js": "^2.101.1",
     "jspdf": "^4.2.1",
@@ -18,20 +17,12 @@
     "mammoth": "^1.12.3",
     "next": "16.2.2",
     "pdf-parse": "^2.4.5",
-=======
-    "@supabase/supabase-js": "^2.101.1",
-    "lucide-react": "^1.7.0",
-    "next": "16.2.2",
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
-<<<<<<< HEAD
     "@types/react": "19.3.0",
-=======
->>>>>>> 6a44675267fb6ac25f3bc70915eee873865e12ec
     "autoprefixer": "^10.4.27",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
