@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
+import { homePathFor } from '@/app/lib/permissions';
 import { Eye, EyeOff, Sun, Moon } from 'lucide-react';
 
 function useTheme() {
@@ -45,12 +46,7 @@ export default function LoginPage() {
       .eq('id', userId)
       .single();
 
-    const role = profile?.role;
-    if (role === 'admin' || role === 'pastor' || role === 'leader' || role === 'staff') {
-      router.replace('/dashboard');
-    } else {
-      router.replace('/member-dashboard');
-    }
+    router.replace(homePathFor(profile?.role));
   }
 
   async function handleLogin() {

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import {
   LayoutDashboard, Users, Calendar, Wallet,
   ClipboardList, BarChart3, LogOut, ShieldCheck, Bot,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext"; // NEW
+import { canOpenPage, homePathFor, ROLE_LABELS } from "@/app/lib/permissions";
 
 const NAV_LINKS = [
   { href: "/dashboard",            icon: LayoutDashboard, label: "Dashboard" },
@@ -26,8 +28,18 @@ const NAV_LINKS = [
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, role, signOut } = useAuth();
+  const { user, role, loading, signOut } = useAuth();
   const { dark } = useTheme(); // NEW
+
+  // Signed out → login; a page this level can't open → their own home page.
+  // No profile row yet = treat as a member, the least access.
+  const level = role || 'member';
+  const allowed = !!user && canOpenPage(level, pathname);
+  useEffect(() => {
+    if (loading) return;
+    if (!user) router.replace('/login');
+    else if (!allowed) router.replace(homePathFor(level));
+  }, [loading, user, level, allowed, router]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -39,10 +51,8 @@ export default function DashboardLayout({ children }) {
     ? user.email.slice(0, 2).toUpperCase()
     : 'AD';
 
-  // Format role label
-  const roleLabel = role
-    ? role.charAt(0).toUpperCase() + role.slice(1)
-    : 'Admin';
+  const roleLabel = ROLE_LABELS[level];
+  const navLinks = NAV_LINKS.filter(({ href }) => canOpenPage(level, href));
 
   // NEW — sidebar theme tokens, same pattern as DashboardPage's T()
   // Light mode dimmed a notch off pure white (~90% as bright) to match the page.
@@ -60,6 +70,15 @@ export default function DashboardLayout({ children }) {
     userName:   dark ? "text-white"          : "text-slate-900",
     userEmail:  dark ? "text-slate-600"      : "text-slate-500",
   };
+
+  // Don't render the page (or let it fetch data) until access is confirmed.
+  if (loading || !allowed) {
+    return (
+      <div className={`min-h-screen ${s.pageBg} flex items-center justify-center`}>
+        <p className={`text-sm ${s.userEmail}`}>Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex min-h-screen ${s.pageBg} ${s.textMain} transition-colors duration-200`}>
@@ -81,7 +100,7 @@ export default function DashboardLayout({ children }) {
         {/* Nav */}
         <nav className="flex-1 px-2 lg:px-3 py-5 space-y-1">
           <p className={`hidden lg:block text-[9px] uppercase tracking-widest ${s.navLabel} font-bold px-3 mb-3`}>Main Menu</p>
-          {NAV_LINKS.map(({ href, icon: Icon, label }) => {
+          {navLinks.map(({ href, icon: Icon, label }) => {
             const active = pathname === href;
             return (
               <Link

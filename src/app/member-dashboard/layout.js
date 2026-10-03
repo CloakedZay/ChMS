@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
+import { canOpenPage, homePathFor, ROLE_LABELS } from '@/app/lib/permissions';
 import {
   LayoutDashboard, Users, CalendarDays, ClipboardList,
   HandCoins, BookOpen, UserCircle, LogOut, Church, Bot
@@ -21,20 +22,26 @@ const NAV_LINKS = [
 ];
 
 export default function MemberDashboardLayout({ children }) {
-  const { user, loading, signOut } = useAuth();
+  const { user, role, loading, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
+  // Signed out → login; a page this level can't open → their own home page.
+  // No profile row yet = treat as a member, the least access.
+  const level = role || 'member';
+  const allowed = !!user && canOpenPage(level, pathname);
   useEffect(() => {
-    if (!loading && !user) router.push('/login?type=member');
-  }, [user, loading]);
+    if (loading) return;
+    if (!user) router.replace('/login?type=member');
+    else if (!allowed) router.replace(homePathFor(level));
+  }, [loading, user, level, allowed, router]);
 
   const handleSignOut = async () => {
     await signOut();
     router.push('/');
   };
 
-  if (loading || !user) {
+  if (loading || !allowed) {
     return (
       <div className="min-h-screen bg-[#0f111a] flex items-center justify-center">
         <p className="text-white/50 text-sm">Loading...</p>
@@ -43,6 +50,7 @@ export default function MemberDashboardLayout({ children }) {
   }
 
   const initials = user?.email ? user.email.slice(0, 2).toUpperCase() : 'ME';
+  const navLinks = NAV_LINKS.filter(({ href }) => canOpenPage(level, href));
 
   return (
     <div className="flex min-h-screen bg-[#0f111a] text-white">
@@ -62,7 +70,7 @@ export default function MemberDashboardLayout({ children }) {
 
         <nav className="flex-1 px-2 lg:px-3 py-5 space-y-1 overflow-y-auto">
           <p className="hidden lg:block text-[9px] uppercase tracking-widest text-slate-700 font-bold px-3 mb-3">Main Menu</p>
-          {NAV_LINKS.map(({ href, icon: Icon, label }) => {
+          {navLinks.map(({ href, icon: Icon, label }) => {
             const active = pathname === href;
             return (
               <Link
@@ -89,7 +97,7 @@ export default function MemberDashboardLayout({ children }) {
               <span className="text-xs font-black text-indigo-300">{initials}</span>
             </div>
             <div className="hidden lg:block flex-1 min-w-0">
-              <p className="text-xs font-bold text-white truncate">Member</p>
+              <p className="text-xs font-bold text-white truncate">{ROLE_LABELS[level]}</p>
               <p className="text-[10px] text-slate-600 truncate">{user?.email || 'Loading...'}</p>
             </div>
           </div>
