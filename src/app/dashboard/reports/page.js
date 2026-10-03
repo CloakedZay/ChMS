@@ -105,10 +105,12 @@ export default function ReportsPage() {
           .slice(0, 5);
 
         // ── Transactions ──────────────────────────────────────
-        const { data: trans } = await supabase
+        const { data: allTrans } = await supabase
           .from('transactions')
-          .select('amount, type, date_recorded')
+          .select('amount, type, date_recorded, status')
           .order('date_recorded', { ascending: false });
+        // Voided entries stay in the ledger but never count in a report.
+        const trans = allTrans?.filter((t) => t.status !== 'Void');
 
         const income = (trans || [])
           .filter(t => t.type === 'income')

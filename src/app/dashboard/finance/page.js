@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
+import { can } from "@/app/lib/permissions";
 import {
   Wallet, TrendingUp, TrendingDown, Plus,
-  Search, X, Trash2, Pencil, History, Sun, Moon
+  Search, X, Ban, Pencil, History, Sun, Moon
 } from "lucide-react";
 
 const EMPTY_FORM = {
@@ -30,6 +31,9 @@ function categoriesForType(type) {
 }
 const FUNDS      = ['Monthly Budget', 'General Fund', 'Project Fund', 'Lot Fund'];
 const STATUSES   = ['Verified', 'Pending', 'Unverified'];
+// Set only by the Void button, never picked in the form. Void entries stay
+// in the ledger but don't count in any total, and can't be changed.
+const VOID = 'Void';
 const NO_MEMBER_CATEGORIES = ['Tithe', 'Offering', 'Love Gift'];
 const PAGE_SIZE  = 10;
 
@@ -43,6 +47,7 @@ const STATUS_BADGE = {
   Verified:   "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   Pending:    "bg-orange-500/10 text-orange-400 border-orange-500/20",
   Unverified: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+  Void:       "bg-slate-500/5 text-slate-500 border-slate-500/30 line-through",
 };
 
 const GLOBAL_ROLES = ["admin", "pastor"];
@@ -105,6 +110,8 @@ export default function FinancePage() {
   const [page, setPage]                 = useState(1);
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
+  // Only the Finance level records money; Pastor and Leaders view.
+  const canEdit = can(profile?.role, 'finance', 'edit');
 
   async function fetchProfile() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -231,23 +238,26 @@ export default function FinancePage() {
     await fetchTransactions();
   }
 
-  async function handleDelete(tx) {
-    if (!window.confirm(`Delete this entry?`)) return;
-    const { error } = await supabase.from('transactions').delete().eq('id', tx.id);
-    if (error) alert('Error deleting: ' + error.message);
-    else setTransactions((prev) => prev.filter((t) => t.id !== tx.id));
+  // Entries are never deleted, only voided, so the record stays traceable.
+  async function handleVoid(tx) {
+    if (!window.confirm('Void this entry? It stays in the ledger but no longer counts in any total, and it can\'t be edited afterwards.')) return;
+    const { data, error } = await supabase.from('transactions').update({ status: VOID }).eq('id', tx.id).select('id');
+    if (error) alert('Error voiding: ' + error.message);
+    else if (!data?.length) alert('You don\'t have permission to void this entry.');
+    else setTransactions((prev) => prev.map((t) => t.id === tx.id ? { ...t, status: VOID } : t));
   }
 
   const churchName = (id) => churches.find((c) => c.id === id)?.name;
 
   const branchScoped = isGlobal && selectedBranch !== 'all' ? transactions.filter((t) => t.church_id === selectedBranch) : transactions;
+  const counted = branchScoped.filter((t) => t.status !== VOID);
 
-  const totalIncome  = branchScoped.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
-  const totalExpense = branchScoped.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
+  const totalIncome  = counted.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
+  const totalExpense = counted.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
   const totalBalance = totalIncome - totalExpense;
 
   const fundTotals = FUNDS.reduce((acc, fund) => {
-    acc[fund] = branchScoped.filter(t => t.fund === fund && t.type === 'income').reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    acc[fund] = counted.filter(t => t.fund === fund && t.type === 'income').reduce((s, t) => s + (Number(t.amount) || 0), 0);
     return acc;
   }, {});
 
@@ -295,9 +305,11 @@ export default function FinancePage() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button onClick={openAdd} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20 shrink-0">
-            <Plus size={16} /> New Entry
-          </button>
+          {canEdit && (
+            <button onClick={openAdd} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20 shrink-0">
+              <Plus size={16} /> New Entry
+            </button>
+          )}
         </div>
       </div>
 
@@ -395,13 +407,15 @@ export default function FinancePage() {
                     <td className="px-6 py-4 text-blue-400 text-xs font-medium">{tx.fund || '—'}</td>
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{tx.member || '—'}</td>
                     {isGlobal && <td className={`px-6 py-4 ${t.textMuted} text-xs`}>{churchName(tx.church_id) || '—'}</td>}
-                    <td className={`px-6 py-4 font-black text-sm font-mono ${tx.type === 'income' ? A(dark, "emerald") : tx.type === 'expense' ? A(dark, "rose") : t.textPrimary}`}>{tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                    <td className={`px-6 py-4 font-black text-sm font-mono ${tx.status === VOID ? `${t.textMuted} line-through` : tx.type === 'income' ? A(dark, "emerald") : tx.type === 'expense' ? A(dark, "rose") : t.textPrimary}`}>{tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
                     <td className="px-6 py-4 text-center"><span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${STATUS_BADGE[tx.status] || STATUS_BADGE.Verified}`}>{tx.status}</span></td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => openEdit(tx)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-300"}`}><Pencil size={13} /></button>
-                        <button onClick={() => handleDelete(tx)} className={`${t.textMuted} hover:text-red-400 transition-colors p-1 rounded-lg hover:bg-red-500/10`}><Trash2 size={13} /></button>
-                      </div>
+                      {canEdit && tx.status !== VOID && (
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => openEdit(tx)} title="Edit" className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-300"}`}><Pencil size={13} /></button>
+                          <button onClick={() => handleVoid(tx)} title="Void" className={`${t.textMuted} hover:text-red-400 transition-colors p-1 rounded-lg hover:bg-red-500/10`}><Ban size={13} /></button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

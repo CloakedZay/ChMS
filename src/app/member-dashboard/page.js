@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
+import { can } from '@/app/lib/permissions';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { verseOfDayIndex, nextLocalMidnight } from '@/app/lib/verseOfDay';
@@ -15,7 +16,10 @@ const EVENT_BADGE = {
 };
 
 export default function MemberDashboard() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  // Members have no finance access (see lib/permissions.js), so the
+  // church totals card stays hidden unless that changes.
+  const showFinance = can(role || 'member', 'finance');
 
   const [dataLoading, setDataLoading]       = useState(true);
   const [memberCount, setMemberCount]       = useState(null);
@@ -47,9 +51,13 @@ export default function MemberDashboard() {
           .gte('date', new Date().toISOString().split('T')[0])
           .order('date', { ascending: true }).limit(5);
 
-        const { data: trans, error: transErr } = await supabase
-          .from('transactions').select('amount, type');
-        if (transErr) console.error('Transactions fetch error:', transErr.message);
+        let trans = null;
+        if (showFinance) {
+          const { data, error: transErr } = await supabase
+            .from('transactions').select('amount, type, status');
+          if (transErr) console.error('Transactions fetch error:', transErr.message);
+          trans = data?.filter((t) => t.status !== 'Void');
+        }
 
         const { data: annList } = await supabase
           .from('events').select('id, title, date, ministry, status')
@@ -74,7 +82,7 @@ export default function MemberDashboard() {
       }
     }
     fetchOverview();
-  }, [user]);
+  }, [user, showFinance]);
 
   // ── Verse of the day — deterministic pick that rotates at local midnight ──
   useEffect(() => {
@@ -239,8 +247,8 @@ export default function MemberDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            {/* Events */}
-            <div className="bg-[#1a1d2e] rounded-3xl p-6 border border-white/10">
+            {/* Events — full width when the Finance card is hidden */}
+            <div className={`bg-[#1a1d2e] rounded-3xl p-6 border border-white/10 ${showFinance ? '' : 'lg:col-span-2'}`}>
               <h2 className="font-black text-base mb-4 flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-blue-400" /> Upcoming Events
               </h2>
@@ -265,7 +273,7 @@ export default function MemberDashboard() {
             </div>
 
             {/* Finance */}
-            <Link
+            {showFinance && <Link
               href="/member-dashboard/finances"
               className="bg-[#1a1d2e] rounded-3xl p-6 border border-white/10 hover:border-blue-500/40 transition-colors block"
             >
@@ -284,7 +292,7 @@ export default function MemberDashboard() {
                   </div>
                 ))}
               </div>
-            </Link>
+            </Link>}
 
             {/* Announcements */}
             <div className="bg-[#1a1d2e] rounded-3xl p-6 border border-white/10 lg:col-span-2">

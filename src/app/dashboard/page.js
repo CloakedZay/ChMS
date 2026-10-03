@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 
 // ─── Theme token maps ──────────────────────────────────────────────────────────
@@ -96,6 +98,7 @@ const NOTIF_STYLE = {
 
 export default function DashboardPage() {
   const { dark, toggle: toggleTheme } = useTheme();
+  const { role } = useAuth();
   const t = T(dark);
 
   const [loading, setLoading]           = useState(true);
@@ -121,7 +124,8 @@ export default function DashboardPage() {
         const { count: mCount } = await supabase.from('members').select('*', { count: 'exact', head: true });
         const { count: aCount } = await supabase.from('members').select('*', { count: 'exact', head: true }).eq('status', 'active');
         const { data: latestMembers } = await supabase.from('members').select('full_name, status, ministry').order('id', { ascending: false }).limit(3);
-        const { data: trans } = await supabase.from('transactions').select('amount, type, fund, category, member, date').order('date', { ascending: false });
+        const { data: allTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status').order('date', { ascending: false });
+        const trans = allTrans?.filter((t) => t.status !== 'Void');
         const { data: evts } = await supabase.from('events').select('*').gte('date', new Date().toISOString().split('T')[0]).order('date', { ascending: true }).limit(4);
 
         setMemberCount(mCount || 0);
@@ -258,7 +262,10 @@ export default function DashboardPage() {
   const STATS = [
     { label: "Active Members",    value: loading ? "..." : memberCount.toString(),             sub: `${activeMembers} active`,     icon: Users,      color: A(dark, "blue"),   trend: "up"                        },
     { label: "Attendance Rate",   value: loading ? "..." : `${attendanceRate}%`,               sub: "Based on active members",     icon: UserCheck,  color: A(dark, "indigo"), trend: "up"                        },
+    // Hidden for levels without finance access (Admin, Secretary) — they'd only see ₱0.
+    ...(can(role, 'finance') ? [
     { label: "Total Church Funds",value: loading ? "..." : `₱${totalFunds.toLocaleString()}`,  sub: "Live balance",                icon: HandCoins,  color: A(dark, "purple"), trend: totalFunds >= 0 ? "up" : "down" },
+    ] : []),
     { label: "Upcoming Events",   value: loading ? "..." : upcomingEvents.length.toString(),   sub: "From today onward",           icon: CalendarDays,color: A(dark, "pink"),  trend: "neutral"                   },
   ];
 
