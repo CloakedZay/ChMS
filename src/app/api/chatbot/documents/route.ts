@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/app/lib/supabase";
+import { getCaller, resolveChurchId, CONTENT_ROLES } from "@/app/lib/apiAuth";
 
 export const runtime = "nodejs";
 
@@ -38,12 +38,15 @@ async function extractText(file: File): Promise<string> {
 
 // List documents for a church
 export async function GET(req: NextRequest) {
-  const church_id = req.nextUrl.searchParams.get("church_id");
+  const caller = await getCaller(req, CONTENT_ROLES);
+  if (caller instanceof NextResponse) return caller;
+
+  const church_id = resolveChurchId(caller, req.nextUrl.searchParams.get("church_id"));
   if (!church_id) {
     return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await caller.db
     .from("chatbot_documents")
     .select("id, title, doc_type, is_active, created_at")
     .eq("church_id", church_id)
@@ -59,11 +62,14 @@ export async function GET(req: NextRequest) {
 // Upload a file, extract its text, save it as a chatbot_documents row
 export async function POST(req: NextRequest) {
   try {
+    const caller = await getCaller(req, CONTENT_ROLES);
+    if (caller instanceof NextResponse) return caller;
+
     const formData = await req.formData();
     const file = formData.get("file");
     const title = formData.get("title")?.toString().trim();
     const docType = formData.get("doc_type")?.toString().trim() || "Other";
-    const churchId = formData.get("church_id")?.toString();
+    const churchId = resolveChurchId(caller, formData.get("church_id")?.toString());
 
     if (!(file instanceof File) || !title || !churchId) {
       return NextResponse.json(
@@ -91,12 +97,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { error } = await supabase.from("chatbot_documents").insert({
+    const { error } = await caller.db.from("chatbot_documents").insert({
       title,
       content,
       doc_type: docType,
       church_id: churchId,
       is_active: true,
+      created_by: caller.userId,
     });
 
     if (error) {
@@ -112,18 +119,26 @@ export async function POST(req: NextRequest) {
 
 // Toggle a document's active state
 export async function PATCH(req: NextRequest) {
+  const caller = await getCaller(req, CONTENT_ROLES);
+  if (caller instanceof NextResponse) return caller;
+
   const { id, is_active } = await req.json();
   if (!id || typeof is_active !== "boolean") {
     return NextResponse.json({ error: "Missing id or is_active" }, { status: 400 });
   }
 
-  const { error } = await supabase
+  // RLS silently skips rows from other churches, so check something changed.
+  const { data, error } = await caller.db
     .from("chatbot_documents")
     .update({ is_active })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data?.length) {
+    return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
 
   return NextResponse.json({ success: true });
@@ -131,15 +146,25 @@ export async function PATCH(req: NextRequest) {
 
 // Delete a document
 export async function DELETE(req: NextRequest) {
+  const caller = await getCaller(req, CONTENT_ROLES);
+  if (caller instanceof NextResponse) return caller;
+
   const id = req.nextUrl.searchParams.get("id");
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
   }
 
-  const { error } = await supabase.from("chatbot_documents").delete().eq("id", id);
+  const { data, error } = await caller.db
+    .from("chatbot_documents")
+    .delete()
+    .eq("id", id)
+    .select("id");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data?.length) {
+    return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
 
   return NextResponse.json({ success: true });

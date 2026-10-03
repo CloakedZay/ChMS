@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
+import { authFetch } from '@/app/lib/authFetch';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 
 export default function MemberChatbotPage() {
@@ -44,7 +45,7 @@ export default function MemberChatbotPage() {
     setSending(true);
 
     try {
-      const res = await fetch('/api/chatbot', {
+      const res = await authFetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question, church_id: churchId }),

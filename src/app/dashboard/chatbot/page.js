@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { authFetch } from "@/app/lib/authFetch";
 import { useTheme } from "@/app/context/ThemeContext";
 import {
   Send, Bot, User, Sparkles, Loader2, Sun, Moon,
@@ -153,7 +154,7 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
     setSending(true);
 
     try {
-      const res = await fetch("/api/chatbot", {
+      const res = await authFetch("/api/chatbot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, church_id: churchId }),
@@ -260,7 +261,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
     if (!churchId) { setDocuments([]); setLoadingDocs(false); return; }
     setLoadingDocs(true);
     try {
-      const res = await fetch(`/api/chatbot/documents?church_id=${encodeURIComponent(churchId)}`);
+      const res = await authFetch(`/api/chatbot/documents?church_id=${encodeURIComponent(churchId)}`);
       const data = await res.json();
       setDocuments(data.documents || []);
     } catch {
@@ -297,7 +298,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
       formData.append("doc_type", docType);
       formData.append("church_id", churchId);
 
-      const res = await fetch("/api/chatbot/documents", { method: "POST", body: formData });
+      const res = await authFetch("/api/chatbot/documents", { method: "POST", body: formData });
       const data = await res.json();
 
       if (!res.ok) {
@@ -320,7 +321,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
   async function toggleActive(doc) {
     setBusyId(doc.id);
     try {
-      await fetch("/api/chatbot/documents", {
+      await authFetch("/api/chatbot/documents", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: doc.id, is_active: !doc.is_active }),
@@ -335,7 +336,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
     if (!confirm(`Delete "${doc.title}"? This can't be undone.`)) return;
     setBusyId(doc.id);
     try {
-      await fetch(`/api/chatbot/documents?id=${encodeURIComponent(doc.id)}`, { method: "DELETE" });
+      await authFetch(`/api/chatbot/documents?id=${encodeURIComponent(doc.id)}`, { method: "DELETE" });
       setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     } finally {
       setBusyId(null);

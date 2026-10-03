@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/app/lib/supabase";
+import { getCaller, CONTENT_ROLES } from "@/app/lib/apiAuth";
 
 export const runtime = "nodejs";
 
@@ -68,8 +68,11 @@ function parseVerses(text: string): { reference: string; verse_text: string }[] 
 }
 
 // List all verses
-export async function GET() {
-  const { data, error } = await supabase
+export async function GET(req: NextRequest) {
+  const caller = await getCaller(req);
+  if (caller instanceof NextResponse) return caller;
+
+  const { data, error } = await caller.db
     .from("bible_verses")
     .select("id, reference, verse_text, created_at")
     .order("id", { ascending: true });
@@ -84,6 +87,9 @@ export async function GET() {
 // Upload a PDF (parsed + bulk inserted) OR add one verse manually via JSON body
 export async function POST(req: NextRequest) {
   try {
+    const caller = await getCaller(req, CONTENT_ROLES);
+    if (caller instanceof NextResponse) return caller;
+
     const contentType = req.headers.get("content-type") || "";
 
     if (contentType.includes("application/json")) {
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
       if (!reference?.trim() || !verse_text?.trim()) {
         return NextResponse.json({ error: "Missing reference or verse text" }, { status: 400 });
       }
-      const { error } = await supabase.from("bible_verses").insert({
+      const { error } = await caller.db.from("bible_verses").insert({
         reference: reference.trim(),
         verse_text: verse_text.trim(),
       });
@@ -125,7 +131,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { error } = await supabase.from("bible_verses").insert(verses);
+    const { error } = await caller.db.from("bible_verses").insert(verses);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -139,11 +145,14 @@ export async function POST(req: NextRequest) {
 
 // Delete one verse (?id=) or every verse (?all=true)
 export async function DELETE(req: NextRequest) {
+  const caller = await getCaller(req, CONTENT_ROLES);
+  if (caller instanceof NextResponse) return caller;
+
   const id = req.nextUrl.searchParams.get("id");
   const all = req.nextUrl.searchParams.get("all");
 
   if (all === "true") {
-    const { error } = await supabase.from("bible_verses").delete().gt("id", 0);
+    const { error } = await caller.db.from("bible_verses").delete().gt("id", 0);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true });
   }
@@ -152,7 +161,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
   }
 
-  const { error } = await supabase.from("bible_verses").delete().eq("id", id);
+  const { error } = await caller.db.from("bible_verses").delete().eq("id", id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

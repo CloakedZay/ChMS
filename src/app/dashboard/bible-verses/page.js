@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/app/context/ThemeContext";
+import { authFetch } from "@/app/lib/authFetch";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import { BookOpen, Upload, Trash2, Loader2, Plus, X, Sun, Moon, Sparkles, Clock } from "lucide-react";
 
@@ -47,7 +48,7 @@ export default function BibleVersesPage() {
   async function fetchVerses() {
     setLoading(true);
     try {
-      const res = await fetch('/api/bible-verses');
+      const res = await authFetch('/api/bible-verses');
       const json = await res.json();
       setVerses(json.verses || []);
     } catch {
@@ -66,7 +67,7 @@ export default function BibleVersesPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('/api/bible-verses', { method: 'POST', body: formData });
+      const res = await authFetch('/api/bible-verses', { method: 'POST', body: formData });
       const json = await res.json();
       if (!res.ok) {
         setMessage({ type: 'error', text: json.error || 'Upload failed.' });
@@ -87,7 +88,7 @@ export default function BibleVersesPage() {
     if (!manualRef.trim() || !manualText.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch('/api/bible-verses', {
+      const res = await authFetch('/api/bible-verses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reference: manualRef, verse_text: manualText }),
@@ -113,7 +114,7 @@ export default function BibleVersesPage() {
     if (!confirmed) return;
     setDeletingId(id);
     try {
-      await fetch(`/api/bible-verses?id=${id}`, { method: 'DELETE' });
+      await authFetch(`/api/bible-verses?id=${id}`, { method: 'DELETE' });
       await fetchVerses();
     } finally {
       setDeletingId(null);
@@ -125,7 +126,7 @@ export default function BibleVersesPage() {
     if (!confirmed) return;
     setClearing(true);
     try {
-      await fetch('/api/bible-verses?all=true', { method: 'DELETE' });
+      await authFetch('/api/bible-verses?all=true', { method: 'DELETE' });
       await fetchVerses();
     } finally {
       setClearing(false);
