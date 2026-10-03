@@ -121,9 +121,9 @@ export default function DashboardPage() {
     async function fetchLiveStats() {
       setLoading(true);
       try {
-        const { count: mCount } = await supabase.from('members').select('*', { count: 'exact', head: true });
-        const { count: aCount } = await supabase.from('members').select('*', { count: 'exact', head: true }).eq('status', 'active');
-        const { data: latestMembers } = await supabase.from('members').select('full_name, status, ministry').order('id', { ascending: false }).limit(3);
+        const { count: mCount } = await supabase.from('member_directory').select('*', { count: 'exact', head: true });
+        const { count: aCount } = await supabase.from('member_directory').select('*', { count: 'exact', head: true }).eq('status', 'active');
+        const { data: latestMembers } = await supabase.from('member_directory').select('full_name, status, ministry').order('id', { ascending: false }).limit(3);
         const { data: allTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status').order('date', { ascending: false });
         const trans = allTrans?.filter((t) => t.status !== 'Void');
         const { data: evts } = await supabase.from('events').select('*').gte('date', new Date().toISOString().split('T')[0]).order('date', { ascending: true }).limit(4);

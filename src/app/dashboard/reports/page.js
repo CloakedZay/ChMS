@@ -81,16 +81,16 @@ export default function ReportsPage() {
       try {
         // ── Members ──────────────────────────────────────────
         const { count: mTotal } = await supabase
-          .from('members')
+          .from('member_directory')
           .select('*', { count: 'exact', head: true });
 
         const { count: mActive } = await supabase
-          .from('members')
+          .from('member_directory')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'active');
 
         const { data: members } = await supabase
-          .from('members')
+          .from('member_directory')
           .select('ministry');
 
         // Group by ministry

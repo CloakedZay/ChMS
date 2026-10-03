@@ -44,7 +44,7 @@ export default function MemberDashboard() {
       setDataLoading(true);
       try {
         const { count: mCount } = await supabase
-          .from('members').select('*', { count: 'exact', head: true });
+          .from('member_directory').select('*', { count: 'exact', head: true });
 
         const { data: evts } = await supabase
           .from('events').select('id, title, date, ministry, status')
@@ -138,7 +138,7 @@ export default function MemberDashboard() {
     const handle = setTimeout(async () => {
       const term = memberSearch.trim().replace(/[,()%]/g, '');
       const { data } = await supabase
-        .from('members')
+        .from('member_directory')
         .select('full_name, status, ministry, role')
         .or(`full_name.ilike.%${term}%,ministry.ilike.%${term}%,role.ilike.%${term}%`)
         .order('full_name', { ascending: true })

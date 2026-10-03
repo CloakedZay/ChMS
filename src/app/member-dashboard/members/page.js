@@ -13,7 +13,7 @@ export default function MemberDirectoryPage() {
     async function fetchMembers() {
       setLoading(true);
       const { data } = await supabase
-        .from('members')
+        .from('member_directory')
         .select('full_name, role, ministry, status')
         .order('full_name', { ascending: true });
       setMembers(data || []);

@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
-import { UserPlus, MoreVertical, X, Trash2, Pencil, Search, Users, Sun, Moon } from "lucide-react";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
+import { UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon } from "lucide-react";
 
 const EMPTY_FORM = {
   full_name: '',
@@ -25,7 +27,12 @@ const STATUS_COLORS = {
   active:   "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   busy:     "bg-orange-500/10 text-orange-400 border-orange-500/20",
   inactive: "bg-slate-500/10 text-slate-400 border-slate-500/20",
+  archived: "bg-slate-500/5 text-slate-500 border-slate-500/30",
 };
+
+// Members are archived, never deleted. Archived members drop out of the
+// directory and every count, and show only under the "archived" filter.
+const ARCHIVED = 'archived';
 
 function getInitials(name = "") {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
@@ -73,6 +80,10 @@ function A(dark, color) {
 export default function MembersPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
+  const { role } = useAuth();
+  // Secretary adds and edits; Pastor and Secretary archive; others view.
+  const canEdit    = can(role, 'members', 'edit');
+  const canArchive = can(role, 'memberArchive', 'edit');
 
   const [members, setMembers]             = useState([]);
   const [loading, setLoading]             = useState(true);
@@ -152,18 +163,25 @@ export default function MembersPage() {
     await fetchMembers();
   }
 
-  async function handleDelete(member) {
-    const confirmed = window.confirm(`Delete "${member.full_name}"?`);
+  async function handleArchive(member, archive) {
+    const confirmed = window.confirm(archive
+      ? `Archive "${member.full_name}"? They'll be hidden from the directory and counts, and can be restored later.`
+      : `Restore "${member.full_name}" as an active member?`);
     if (!confirmed) return;
     setOpenMenuId(null);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('members')
-      .delete()
-      .eq('id', member.id);
+      .update({ status: archive ? ARCHIVED : 'active' })
+      .eq('id', member.id)
+      .select('id');
 
     if (error) {
-      alert('Error deleting member: ' + error.message);
+      alert('Error updating member: ' + error.message);
+      return;
+    }
+    if (!data?.length) {
+      alert("You don't have permission to change this member.");
       return;
     }
 
@@ -177,14 +195,14 @@ export default function MembersPage() {
       m.full_name?.toLowerCase().includes(search.toLowerCase()) ||
       m.ministry?.toLowerCase().includes(search.toLowerCase()) ||
       m.role?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filterStatus === "all" || m.status === filterStatus;
+    const matchStatus = filterStatus === "all" ? m.status !== ARCHIVED : m.status === filterStatus;
     return matchSearch && matchStatus;
   });
 
   // ── Summary counts ────────────────────────────────────────────────────────
 
   const counts = {
-    total:    members.length,
+    total:    members.filter((m) => m.status !== ARCHIVED).length,
     active:   members.filter((m) => m.status === "active").length,
     inactive: members.filter((m) => m.status === "inactive").length,
     busy:     members.filter((m) => m.status === "busy").length,
@@ -214,13 +232,15 @@ export default function MembersPage() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button
-            onClick={openAdd}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shrink-0"
-          >
-            <UserPlus size={16} />
-            Add Member
-          </button>
+          {canEdit && (
+            <button
+              onClick={openAdd}
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shrink-0"
+            >
+              <UserPlus size={16} />
+              Add Member
+            </button>
+          )}
         </div>
       </div>
 
@@ -252,7 +272,7 @@ export default function MembersPage() {
           />
         </div>
         <div className="flex gap-2 flex-wrap">
-          {["all", "active", "busy", "inactive"].map((s) => (
+          {["all", "active", "busy", "inactive", ARCHIVED].map((s) => (
             <button
               key={s}
               onClick={() => setFilterStatus(s)}
@@ -320,12 +340,14 @@ export default function MembersPage() {
                     </td>
                     {/* Actions */}
                     <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={(e) => handleMenuOpen(e, member.id)}
-                        className={`transition-colors p-1 rounded-lg ${t.actionBtn}`}
-                      >
-                        <MoreVertical size={15} />
-                      </button>
+                      {(canEdit || canArchive) && (
+                        <button
+                          onClick={(e) => handleMenuOpen(e, member.id)}
+                          className={`transition-colors p-1 rounded-lg ${t.actionBtn}`}
+                        >
+                          <MoreVertical size={15} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -337,7 +359,7 @@ export default function MembersPage() {
         {/* Footer count */}
         {!loading && filtered.length > 0 && (
           <div className={`px-6 py-3 border-t ${t.divider} text-[10px] ${t.textMuted} uppercase tracking-widest`}>
-            Showing {filtered.length} of {members.length} members
+            Showing {filtered.length} of {counts.total} members
           </div>
         )}
       </div>
@@ -352,18 +374,29 @@ export default function MembersPage() {
             className={`fixed z-50 ${t.menuBg} border rounded-xl shadow-xl w-36 overflow-hidden`}
             style={{ top: menuPos.top, right: menuPos.right }}
           >
-            <button
-              onClick={() => openEdit(activeMenuMember)}
-              className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}
-            >
-              <Pencil size={13} /> Edit
-            </button>
-            <button
-              onClick={() => handleDelete(activeMenuMember)}
-              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
-            >
-              <Trash2 size={13} /> Delete
-            </button>
+            {canEdit && activeMenuMember.status !== ARCHIVED && (
+              <button
+                onClick={() => openEdit(activeMenuMember)}
+                className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}
+              >
+                <Pencil size={13} /> Edit
+              </button>
+            )}
+            {canArchive && (activeMenuMember.status === ARCHIVED ? (
+              <button
+                onClick={() => handleArchive(activeMenuMember, false)}
+                className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}
+              >
+                <ArchiveRestore size={13} /> Restore
+              </button>
+            ) : (
+              <button
+                onClick={() => handleArchive(activeMenuMember, true)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                <Archive size={13} /> Archive
+              </button>
+            ))}
           </div>
         </>
       )}
