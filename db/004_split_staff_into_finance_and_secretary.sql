@@ -17,6 +17,13 @@
 begin;
 
 -- ---------------------------------------------------------------------
+-- Allowed levels. profiles_role_check only allowed the old names, which
+-- made the first version of this script fail and roll back. Drop it,
+-- move the accounts, then re-add it with the six levels.
+-- ---------------------------------------------------------------------
+alter table public.profiles drop constraint if exists profiles_role_check;
+
+-- ---------------------------------------------------------------------
 -- Accounts
 -- ---------------------------------------------------------------------
 update public.profiles set role = 'finance'
@@ -26,6 +33,13 @@ update public.profiles set role = 'secretary'
 where id in (select id from auth.users
              where email in ('branch2@faithsync.com', 'branch3@faithsync.com'));
 
+-- Test Finance account, created as a member by the sign-up default.
+update public.profiles
+set role = 'finance',
+    full_name = 'Test Finance',
+    church_id = (select id from public.churches where name = 'GGCF-GMI Pandi')
+where id = (select id from auth.users where email = 'finance.test@faithsync.com');
+
 -- Stop here (and undo everything) if any staff account is left over.
 do $$
 begin
@@ -33,6 +47,9 @@ begin
     raise exception 'A profile still has role staff; nothing was changed';
   end if;
 end $$;
+
+alter table public.profiles add constraint profiles_role_check
+  check (role in ('admin', 'pastor', 'leader', 'finance', 'secretary', 'member'));
 
 -- ---------------------------------------------------------------------
 -- transactions: staff → finance
