@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { canOpenPage, homePathFor, ROLE_LABELS } from '@/app/lib/permissions';
+import { usePageVisit } from '@/app/lib/usePageVisit';
 import {
   LayoutDashboard, Users, CalendarDays, ClipboardList,
   HandCoins, BookOpen, UserCircle, LogOut, Church, Bot
@@ -35,6 +36,9 @@ export default function MemberDashboardLayout({ children }) {
     if (!user) router.replace('/login?type=member');
     else if (!allowed) router.replace(homePathFor(level));
   }, [loading, user, level, allowed, router]);
+
+  // Screen time: only pages this person actually stays on.
+  usePageVisit(user?.id, pathname, !loading && allowed);
 
   const handleSignOut = async () => {
     await signOut();

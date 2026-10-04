@@ -11,6 +11,7 @@ import {
 import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext"; // NEW
 import { canOpenPage, homePathFor, ROLE_LABELS } from "@/app/lib/permissions";
+import { usePageVisit } from "@/app/lib/usePageVisit";
 
 const NAV_LINKS = [
   { href: "/dashboard",            icon: LayoutDashboard, label: "Dashboard" },
@@ -42,6 +43,9 @@ export default function DashboardLayout({ children }) {
     if (!user) router.replace('/login');
     else if (!allowed) router.replace(homePathFor(level));
   }, [loading, user, level, allowed, router]);
+
+  // Screen time: only pages this person actually stays on.
+  usePageVisit(user?.id, pathname, !loading && allowed);
 
   const handleSignOut = async () => {
     await signOut();

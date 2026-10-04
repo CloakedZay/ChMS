@@ -195,7 +195,8 @@ export default function LoginPage() {
 
           <p className={`mt-6 text-center text-[10px] ${dark ? 'text-white/20' : 'text-slate-400'} leading-relaxed`}>
             Your access level is set by the administrator.<br />
-            Contact your pastor if you can't log in.
+            Contact your pastor if you can't log in.<br />
+            Page visits and time spent are recorded for church records.
           </p>
         </div>
 

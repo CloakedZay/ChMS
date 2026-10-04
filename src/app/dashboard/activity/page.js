@@ -10,6 +10,7 @@ import { History, ChevronDown, ChevronRight, Loader2, Sun, Moon } from "lucide-r
 // Who changed what, and when. Entries are written only by database
 // triggers (db/010); this page just reads them. Pastor sees everything;
 // Admin sees everything except finance entries (the database enforces it).
+// The Screen time tab reads page_visits totals (db/011).
 
 const PAGE_SIZE = 100;
 
@@ -50,6 +51,29 @@ function formatValue(v, churchName) {
   return churchName(s) || ROLE_LABELS[s] || (s.length > 120 ? s.slice(0, 120) + "…" : s);
 }
 
+function formatDuration(totalSeconds) {
+  const s = Number(totalSeconds) || 0;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+// Local-day date string, e.g. "2026-10-04", for the date inputs.
+function dayString(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// Start of the "from" day to the start of the day after "to", so "to"
+// includes the whole day.
+function dayRange(from, to) {
+  const end = new Date(`${to}T00:00`);
+  end.setDate(end.getDate() + 1);
+  return { from_ts: new Date(`${from}T00:00`).toISOString(), to_ts: end.toISOString() };
+}
+
 function formatWhen(ts) {
   return new Date(ts).toLocaleString("en-PH", {
     month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
@@ -83,6 +107,7 @@ export default function ActivityPage() {
   // Admin has no finance access, so finance entries aren't offered as a filter.
   const types = Object.keys(TYPE_LABELS).filter((k) => k !== "transactions" || can(role, "finance"));
 
+  const [tab, setTab]           = useState("changes");
   const [entries, setEntries]   = useState([]);
   const [people, setPeople]     = useState({});
   const [churches, setChurches] = useState([]);
@@ -187,6 +212,27 @@ export default function ActivityPage() {
         </button>
       </div>
 
+      {/* Tabs */}
+      <div className={`flex gap-1 ${t.cardBg} border ${t.cardBorder} rounded-xl p-1 w-fit mb-6`}>
+        {[
+          { key: "changes", label: "Changes" },
+          { key: "screen",  label: "Screen time" },
+        ].map((x) => (
+          <button
+            key={x.key}
+            onClick={() => setTab(x.key)}
+            className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-all ${
+              tab === x.key ? "bg-blue-600 text-white shadow" : t.textSub
+            }`}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "screen" && <ScreenTimePanel t={t} people={people} selectStyle={selectStyle} />}
+
+      {tab === "changes" && (<>
       {/* Filters */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
         <select value={filterPerson} onChange={onFilter(setFilterPerson)} className={selectStyle}>
@@ -285,6 +331,113 @@ export default function ActivityPage() {
           </button>
         </div>
       )}
+      </>)}
     </div>
+  );
+}
+
+// ─── Screen time tab ─────────────────────────────────────────────────────────
+
+function ScreenTimePanel({ t, people, selectStyle }) {
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return dayString(d);
+  });
+  const [dateTo, setDateTo]     = useState(() => dayString(new Date()));
+  const [rows, setRows]         = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [openUser, setOpenUser] = useState(null);
+  const [pages, setPages]       = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.rpc("screen_time_by_user", dayRange(dateFrom, dateTo)).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) console.error("Error loading screen time:", error.message);
+      setRows(data || []);
+      setPages({});
+      setOpenUser(null);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [dateFrom, dateTo]);
+
+  const onDate = (setter) => (ev) => { if (ev.target.value) { setLoading(true); setter(ev.target.value); } };
+
+  async function toggleUser(userId) {
+    if (openUser === userId) { setOpenUser(null); return; }
+    setOpenUser(userId);
+    if (pages[userId]) return;
+    const { data, error } = await supabase.rpc("screen_time_by_page", { for_user: userId, ...dayRange(dateFrom, dateTo) });
+    if (error) console.error("Error loading pages:", error.message);
+    setPages((p) => ({ ...p, [userId]: data || [] }));
+  }
+
+  return (
+    <>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+        <span className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>From</span>
+        <input type="date" value={dateFrom} max={dateTo} onChange={onDate(setDateFrom)} className={selectStyle} />
+        <span className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>To</span>
+        <input type="date" value={dateTo} min={dateFrom} onChange={onDate(setDateTo)} className={selectStyle} />
+        <span className={`text-xs ${t.textMuted} sm:ml-auto`}>Only time with the page open and visible is counted.</span>
+      </div>
+
+      <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm`}>
+        {loading ? (
+          <div className={`flex items-center justify-center gap-2 py-14 ${t.textSub} text-sm`}>
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading screen time...
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="text-center py-14">
+            <History className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
+            <p className={`${t.textSub} text-sm`}>No page visits in these dates.</p>
+          </div>
+        ) : (
+          <div className={`divide-y ${t.divider}`}>
+            {rows.map((r) => {
+              const p = people[r.user_id];
+              const isOpen = openUser === r.user_id;
+              return (
+                <div key={r.user_id}>
+                  <button
+                    onClick={() => toggleUser(r.user_id)}
+                    className={`w-full text-left px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 ${t.rowHover} transition-colors`}
+                  >
+                    <span className={`flex-1 min-w-0 text-sm ${t.textPrimary}`}>
+                      <span className="font-semibold">{p ? (p.full_name || p.email) : "Unknown user"}</span>
+                      {p && <span className={`text-xs ${t.textMuted}`}> · {ROLE_LABELS[p.role] || p.role}</span>}
+                    </span>
+                    <span className={`text-xs ${t.textSub} sm:w-24`}>{r.visits} visit{Number(r.visits) === 1 ? "" : "s"}</span>
+                    <span className={`text-sm font-black ${t.textPrimary} sm:w-24`}>{formatDuration(r.seconds)}</span>
+                    <span className={`text-xs ${t.textSub} sm:w-48`}>Last seen {formatWhen(r.last_seen)}</span>
+                    <span className={`${t.textMuted} hidden sm:block`}>
+                      {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    </span>
+                  </button>
+
+                  {isOpen && (
+                    <div className="px-6 pb-4">
+                      <div className={`${t.detailBg} border ${t.cardBorder} rounded-xl divide-y ${t.divider}`}>
+                        {!pages[r.user_id] ? (
+                          <p className={`px-4 py-2.5 text-xs ${t.textSub}`}>Loading...</p>
+                        ) : pages[r.user_id].map((pg) => (
+                          <div key={pg.path} className="flex items-center gap-4 px-4 py-2.5 text-xs">
+                            <span className={`flex-1 min-w-0 truncate ${t.textPrimary}`}>{pg.path}</span>
+                            <span className={t.textSub}>{pg.visits} visit{Number(pg.visits) === 1 ? "" : "s"}</span>
+                            <span className={`font-bold ${t.textPrimary} w-20 text-right`}>{formatDuration(pg.seconds)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
