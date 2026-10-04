@@ -2,14 +2,19 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { Plus, X, Check, Ban, Loader2, HandCoins, Settings2 } from 'lucide-react';
+import { Plus, X, Check, Ban, Loader2, HandCoins, Settings2, Receipt, Upload, FileText, Trash2, Undo2 } from 'lucide-react';
 
-// Spending requests (step F2, db/017 + db/018). Lives on the Finance page.
+// Spending requests (step F2, db/017 + db/018) and their liquidation
+// (step F3, db/019: receipts + amount actually spent, checked by Finance).
+// Lives on the Finance page.
 // The database enforces every rule; this panel only shows the buttons each
 // person may use:
 //   Pastor, Leaders     submit; approve / reject when can_decide_expense()
 //   requester           cancel while pending
 //   Finance             release an approved request (records the expense)
+//   requester / Finance submit receipts for a released request
+//   Finance             accept the receipts (records returned change) or
+//                       send them back
 //   Pastor              set each branch's approval limit
 
 export const REQUEST_CATEGORIES = ['Ministry expense', 'Reimbursement', 'Love gift', 'Other'];
@@ -20,12 +25,24 @@ const STATUS_STYLE = {
   released:  'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   rejected:  'bg-rose-500/10 text-rose-400 border-rose-500/20',
   cancelled: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+  liquidating: 'bg-violet-500/10 text-violet-400 border-violet-500/20',
+  liquidated:  'bg-emerald-500/5 text-emerald-500 border-emerald-500/30',
 };
+
+// What each status means to people, on the badge.
+const STATUS_LABEL = {
+  pending: 'waiting', approved: 'approved', released: 'receipts needed',
+  liquidating: 'receipts to check', liquidated: 'done', rejected: 'rejected', cancelled: 'cancelled',
+};
+
+const MAX_RECEIPT_BYTES = 10 * 1024 * 1024;
 
 const FILTERS = [
   { key: 'pending',  label: 'Waiting for approval' },
   { key: 'approved', label: 'Approved — to release' },
-  { key: 'released', label: 'Released' },
+  { key: 'released', label: 'Receipts needed' },
+  { key: 'liquidating', label: 'Receipts to check' },
+  { key: 'liquidated', label: 'Done' },
   { key: 'closed',   label: 'Rejected / cancelled' },
   { key: 'all',      label: 'All' },
 ];
@@ -58,6 +75,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
 
   const [requests, setRequests]   = useState([]);
   const [approvals, setApprovals] = useState({});   // request id → approvals
+  const [receipts, setReceipts]   = useState({});   // request id → receipts
   const [canDecide, setCanDecide] = useState({});   // request id → boolean
   const [limits, setLimits]       = useState({});   // church id → limit
   const [loading, setLoading]     = useState(true);
@@ -74,19 +92,33 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   const [note, setNote]           = useState('');
   const [noteError, setNoteError] = useState('');
 
+  // Liquidation: the requester / Finance submits receipts; Finance checks.
+  const [liquidating, setLiquidating] = useState(null);   // request
+  const [spent, setSpent]             = useState('');
+  const [liqNote, setLiqNote]         = useState('');
+  const [uploading, setUploading]     = useState(false);
+  const [liqError, setLiqError]       = useState('');
+  const [checking, setChecking]       = useState(null);   // request
+  const [changeReceived, setChangeReceived] = useState(false);
+  const [sendBackReason, setSendBackReason] = useState('');
+  const [checkError, setCheckError]   = useState('');
+
   const [showLimits, setShowLimits] = useState(false);
   const [limitDraft, setLimitDraft] = useState({});
 
   const churchName = (id) => churches.find((c) => c.id === id)?.name;
 
   const load = useCallback(async () => {
-    const [{ data: reqs }, { data: apps }, { data: settings }] = await Promise.all([
+    const [{ data: reqs }, { data: apps }, { data: settings }, { data: recs }] = await Promise.all([
       supabase.from('expense_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('expense_approvals').select('*').order('created_at', { ascending: true }),
       supabase.from('finance_settings').select('church_id, approval_limit'),
+      supabase.from('expense_receipts').select('*').order('created_at', { ascending: true }),
     ]);
     const byReq = {};
     (apps || []).forEach((a) => { (byReq[a.request_id] ||= []).push(a); });
+    const recByReq = {};
+    (recs || []).forEach((rc) => { (recByReq[rc.request_id] ||= []).push(rc); });
     const lim = {};
     (settings || []).forEach((s) => { lim[s.church_id] = Number(s.approval_limit); });
 
@@ -97,12 +129,13 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       const answers = await Promise.all(pending.map((r) => supabase.rpc('can_decide_expense', { req_id: r.id })));
       pending.forEach((r, i) => { decide[r.id] = answers[i].data === true; });
     }
-    return { reqs: reqs || [], byReq, lim, decide };
+    return { reqs: reqs || [], byReq, lim, decide, recByReq };
   }, [userId, canSubmit]);
 
-  const apply = ({ reqs, byReq, lim, decide }) => {
+  const apply = ({ reqs, byReq, lim, decide, recByReq }) => {
     setRequests(reqs);
     setApprovals(byReq);
+    setReceipts(recByReq);
     setLimits(lim);
     setCanDecide(decide);
     setLoading(false);
@@ -175,6 +208,101 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
     if (error) { alert('Could not release: ' + error.message); return; }
     await refresh();
     onReleased?.();
+  }
+
+  // ── Liquidation ─────────────────────────────────────────────────────────
+  async function openReceipt(rc) {
+    const { data, error } = await supabase.storage.from('receipts').createSignedUrl(rc.file_path, 120);
+    if (error) { alert('Could not open the receipt: ' + error.message); return; }
+    window.open(data.signedUrl, '_blank');
+  }
+
+  function openLiquidation(r) {
+    setSpent(String(r.spent_amount ?? r.amount));
+    setLiqNote(r.liquidation_note || '');
+    setLiqError('');
+    setLiquidating(r);
+  }
+
+  async function uploadReceipts(fileList) {
+    const r = liquidating;
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setLiqError('');
+    setUploading(true);
+    for (const file of files) {
+      if (file.size > MAX_RECEIPT_BYTES) { setLiqError(`${file.name} is larger than 10 MB.`); continue; }
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-80);
+      const path = `${r.id}/${crypto.randomUUID()}-${safe}`;
+      const { error: upErr } = await supabase.storage.from('receipts').upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) { setLiqError(`Could not upload ${file.name}: ${upErr.message}`); continue; }
+      const { error: rowErr } = await supabase.from('expense_receipts').insert({
+        request_id: r.id, file_path: path, file_name: file.name, file_size: file.size, uploaded_by: userId,
+      });
+      if (rowErr) {
+        await supabase.storage.from('receipts').remove([path]);
+        setLiqError(`Could not save ${file.name}: ${rowErr.message}`);
+      }
+    }
+    setUploading(false);
+    await refresh();
+  }
+
+  async function removeReceipt(rc) {
+    if (!window.confirm(`Remove ${rc.file_name}?`)) return;
+    const { error } = await supabase.from('expense_receipts').delete().eq('id', rc.id);
+    if (error) { setLiqError('Could not remove: ' + error.message); return; }
+    await supabase.storage.from('receipts').remove([rc.file_path]);
+    await refresh();
+  }
+
+  async function submitLiquidation() {
+    const r = liquidating;
+    const amount = parseFloat(spent);
+    if (!(amount > 0)) { setLiqError('Enter the amount actually spent.'); return; }
+    if (!(receipts[r.id] || []).length) { setLiqError('Upload at least one receipt first.'); return; }
+    setBusyId(r.id);
+    const { error } = await supabase.from('expense_requests')
+      .update({ status: 'liquidating', spent_amount: amount, liquidation_note: liqNote.trim() || null })
+      .eq('id', r.id);
+    setBusyId(null);
+    if (error) { setLiqError('Could not submit: ' + error.message); return; }
+    setLiquidating(null);
+    setFilter('liquidating');
+    await refresh();
+  }
+
+  function openCheck(r) {
+    setChangeReceived(false);
+    setSendBackReason('');
+    setCheckError('');
+    setChecking(r);
+  }
+
+  async function acceptLiquidation() {
+    const r = checking;
+    setBusyId(r.id);
+    const { error } = await supabase.from('expense_requests')
+      .update({ status: 'liquidated', change_returned: changeReceived })
+      .eq('id', r.id);
+    setBusyId(null);
+    if (error) { setCheckError('Could not accept: ' + error.message); return; }
+    setChecking(null);
+    await refresh();
+    if (changeReceived) onReleased?.();
+  }
+
+  async function sendBack() {
+    const r = checking;
+    if (!sendBackReason.trim()) { setCheckError('Say what needs fixing.'); return; }
+    setBusyId(r.id);
+    const { error } = await supabase.from('expense_requests')
+      .update({ status: 'released', liquidation_feedback: sendBackReason.trim() })
+      .eq('id', r.id);
+    setBusyId(null);
+    if (error) { setCheckError('Could not send back: ' + error.message); return; }
+    setChecking(null);
+    await refresh();
   }
 
   async function saveLimit(churchId) {
@@ -277,7 +405,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
                 <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_STYLE[r.status]}`}>{r.status}</span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_STYLE[r.status]}`}>{STATUS_LABEL[r.status] || r.status}</span>
                       <span className={`text-[10px] font-bold uppercase tracking-widest ${t.textSub}`}>{r.category}</span>
                       <span className={`text-[10px] ${t.textMuted}`}>#{r.id}</span>
                     </div>
@@ -304,8 +432,35 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
                       {a.note && <span className={t.textSub}> — “{a.note}”</span>}
                     </p>
                   ))}
-                  {r.status === 'released' && (
+                  {r.released_at && (
                     <p className={dark ? 'text-emerald-400' : 'text-emerald-600'}>Released {shortDate(r.released_at)} — recorded in the ledger.</p>
+                  )}
+                  {r.status === 'released' && !r.liquidation_feedback && (
+                    <p className={dark ? 'text-orange-400' : 'text-orange-600'}>Waiting for receipts and the amount actually spent.</p>
+                  )}
+                  {r.status === 'released' && r.liquidation_feedback && (
+                    <p className={dark ? 'text-orange-400' : 'text-orange-600'}>Sent back by Finance: “{r.liquidation_feedback}”</p>
+                  )}
+                  {r.spent_amount && ['liquidating', 'liquidated'].includes(r.status) && (
+                    <p className={t.textSub}>
+                      Spent <span className={`font-bold ${t.textPrimary}`}>{peso(r.spent_amount)}</span>
+                      {Number(r.spent_amount) < Number(r.amount) && <> · change {peso(r.amount - r.spent_amount)}{r.status === 'liquidated' && (r.change_returned ? ' returned' : ' not recorded')}</>}
+                      {Number(r.spent_amount) > Number(r.amount) && <span className={dark ? 'text-rose-400' : 'text-rose-600'}> · overspent by {peso(r.spent_amount - r.amount)} — file a Reimbursement request for it</span>}
+                      {r.liquidation_note && <span> — “{r.liquidation_note}”</span>}
+                    </p>
+                  )}
+                  {r.status === 'liquidated' && (
+                    <p className={dark ? 'text-emerald-400' : 'text-emerald-600'}>Liquidation accepted {shortDate(r.liquidated_at)}.</p>
+                  )}
+                  {(receipts[r.id] || []).length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {receipts[r.id].map((rc) => (
+                        <button key={rc.id} onClick={() => openReceipt(rc)}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${t.iconBtn} max-w-[220px]`} title={rc.file_name}>
+                          <FileText size={12} className="shrink-0" /> <span className="truncate">{rc.file_name}</span>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
 
@@ -334,12 +489,154 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
                       <HandCoins size={14} /> {busy ? 'Releasing...' : 'Mark released'}
                     </button>
                   )}
+                  {r.status === 'released' && (mine || canRelease) && (
+                    <button onClick={() => openLiquidation(r)} disabled={busy}
+                      className="flex items-center gap-1.5 text-xs font-bold text-white bg-violet-600 hover:bg-violet-500 px-4 py-2 rounded-xl disabled:opacity-50">
+                      <Receipt size={14} /> Submit receipts
+                    </button>
+                  )}
+                  {canRelease && r.status === 'liquidating' && (
+                    <button onClick={() => openCheck(r)} disabled={busy}
+                      className="flex items-center gap-1.5 text-xs font-bold text-white bg-violet-600 hover:bg-violet-500 px-4 py-2 rounded-xl disabled:opacity-50">
+                      <Receipt size={14} /> Check receipts
+                    </button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* Submit receipts (requester or Finance) */}
+      {liquidating && (() => {
+        const r = liquidating;
+        const list = receipts[r.id] || [];
+        const diff = Number(spent) - Number(r.amount);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
+              <div className="flex justify-between items-start mb-1">
+                <h2 className={`text-lg font-black ${t.textPrimary}`}>Submit receipts</h2>
+                <button onClick={() => setLiquidating(null)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
+              </div>
+              <p className={`text-sm ${t.textSub} mb-4`}>
+                &ldquo;{r.title}&rdquo; · released <span className={`font-bold ${t.textPrimary}`}>{peso(r.amount)}</span>
+              </p>
+
+              <Label t={t} text="Receipts (photos or PDF, up to 10 MB each)">
+                <div className="space-y-2">
+                  {list.map((rc) => (
+                    <div key={rc.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${t.inputBorder} ${t.inputBg}`}>
+                      <FileText size={14} className="text-blue-400 shrink-0" />
+                      <button onClick={() => openReceipt(rc)} className={`flex-1 min-w-0 text-left text-xs ${t.textPrimary} truncate hover:text-blue-400`}>{rc.file_name}</button>
+                      <button onClick={() => removeReceipt(rc)} className={`${t.textSub} hover:text-rose-400 shrink-0`} title="Remove"><Trash2 size={13} /></button>
+                    </div>
+                  ))}
+                  <label className={`flex items-center justify-center gap-2 border border-dashed rounded-xl py-3 text-xs font-bold cursor-pointer ${t.inputBorder} ${t.textSub} hover:text-blue-400 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                    {uploading ? <><Loader2 size={14} className="animate-spin" /> Uploading...</> : <><Upload size={14} /> Add receipt</>}
+                    <input type="file" multiple accept="image/*,application/pdf" className="hidden" disabled={uploading}
+                      onChange={(e) => { uploadReceipts(e.target.files); e.target.value = ''; }} />
+                  </label>
+                </div>
+              </Label>
+
+              <div className="mt-4">
+                <Label t={t} text="Amount actually spent (₱)">
+                  <input type="number" min="0.01" step="0.01" value={spent} onChange={(e) => setSpent(e.target.value)}
+                    onWheel={(e) => e.target.blur()} className={input} />
+                </Label>
+              </div>
+              {Number(spent) > 0 && diff !== 0 && (
+                <p className={`mt-2 text-xs ${diff < 0 ? t.textSub : (dark ? 'text-rose-400' : 'text-rose-600')}`}>
+                  {diff < 0
+                    ? `Change to return to Finance: ${peso(-diff)}`
+                    : `Overspent by ${peso(diff)} — after this, file a Reimbursement request for the difference.`}
+                </p>
+              )}
+              <div className="mt-4">
+                <Label t={t} text="Note (optional)">
+                  <textarea rows={2} value={liqNote} onChange={(e) => setLiqNote(e.target.value)}
+                    placeholder="e.g. Bought at the usual store; one receipt is for two items" className={`${input} resize-none`} />
+                </Label>
+              </div>
+
+              {liqError && <p className="mt-3 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{liqError}</p>}
+
+              <div className="flex gap-3 mt-5">
+                <button type="button" onClick={() => setLiquidating(null)} className={`flex-1 ${t.cancelBtn} rounded-xl py-2.5 text-sm font-semibold`}>Close</button>
+                <button type="button" onClick={submitLiquidation} disabled={busyId === r.id || uploading || !list.length}
+                  className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-bold">
+                  {busyId === r.id ? 'Submitting...' : 'Submit for checking'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Check receipts (Finance) */}
+      {checking && (() => {
+        const r = checking;
+        const diff = Number(r.spent_amount) - Number(r.amount);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
+              <div className="flex justify-between items-start mb-1">
+                <h2 className={`text-lg font-black ${t.textPrimary}`}>Check receipts</h2>
+                <button onClick={() => setChecking(null)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
+              </div>
+              <p className={`text-sm ${t.textSub} mb-4`}>&ldquo;{r.title}&rdquo; · {r.requester_name || 'requester'}</p>
+
+              <div className={`${t.inputBg} border ${t.inputBorder} rounded-xl p-4 text-sm space-y-1 mb-4`}>
+                <p className={t.textSub}>Released: <span className={`font-bold ${t.textPrimary}`}>{peso(r.amount)}</span></p>
+                <p className={t.textSub}>Spent: <span className={`font-bold ${t.textPrimary}`}>{peso(r.spent_amount)}</span></p>
+                {diff < 0 && <p className={t.textSub}>Change: <span className={`font-bold ${t.textPrimary}`}>{peso(-diff)}</span></p>}
+                {diff > 0 && <p className={dark ? 'text-rose-400' : 'text-rose-600'}>Overspent by {peso(diff)} — needs a Reimbursement request.</p>}
+                {r.liquidation_note && <p className={`${t.textSub} pt-1`}>“{r.liquidation_note}”</p>}
+              </div>
+
+              <Label t={t} text="Receipts">
+                <div className="flex flex-wrap gap-2">
+                  {(receipts[r.id] || []).map((rc) => (
+                    <button key={rc.id} onClick={() => openReceipt(rc)}
+                      className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border ${t.iconBtn} max-w-[220px]`} title={rc.file_name}>
+                      <FileText size={12} className="shrink-0" /> <span className="truncate">{rc.file_name}</span>
+                    </button>
+                  ))}
+                </div>
+              </Label>
+
+              {diff < 0 && (
+                <label className={`mt-4 flex items-start gap-2 text-sm ${t.textPrimary} cursor-pointer`}>
+                  <input type="checkbox" checked={changeReceived} onChange={(e) => setChangeReceived(e.target.checked)} className="mt-1 accent-violet-500" />
+                  <span>The change of <span className="font-bold">{peso(-diff)}</span> was returned to me <span className={t.textSub}>(records it in the ledger as income)</span></span>
+                </label>
+              )}
+
+              <div className="mt-4">
+                <Label t={t} text="If something needs fixing">
+                  <textarea rows={2} value={sendBackReason} onChange={(e) => { setSendBackReason(e.target.value); setCheckError(''); }}
+                    placeholder="e.g. The second receipt is blurry" className={`${input} resize-none`} />
+                </Label>
+              </div>
+
+              {checkError && <p className="mt-3 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{checkError}</p>}
+
+              <div className="flex gap-3 mt-5">
+                <button type="button" onClick={sendBack} disabled={busyId === r.id}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl py-2.5 text-sm font-bold disabled:opacity-50">
+                  <Undo2 size={14} /> Send back
+                </button>
+                <button type="button" onClick={acceptLiquidation} disabled={busyId === r.id}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50">
+                  <Check size={14} /> {busyId === r.id ? 'Saving...' : 'Accept'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Approve / reject */}
       {deciding && (
