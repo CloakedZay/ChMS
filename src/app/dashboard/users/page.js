@@ -75,7 +75,7 @@ export default function UsersPage() {
   useEffect(() => {
     async function load() {
       const [{ data: profiles }, { data: churchList }, { data: records }] = await Promise.all([
-        supabase.from('profiles').select('id, email, full_name, role, church_id, disabled').order('full_name'),
+        supabase.from('profiles').select('id, email, full_name, role, church_id, disabled, is_elder').order('full_name'),
         supabase.from('churches').select('id, name').order('name'),
         supabase.from('members').select('full_name, profile_id').not('profile_id', 'is', null),
       ]);
@@ -102,7 +102,7 @@ export default function UsersPage() {
       .from('profiles')
       .update(changes)
       .eq('id', u.id)
-      .select('id, role, church_id, disabled');
+      .select('id, role, church_id, disabled, is_elder');
     setSavingId(null);
 
     if (error || !data?.length) {
@@ -126,6 +126,14 @@ export default function UsersPage() {
     if (church_id === u.church_id) return;
     const to = church_id ? churchName(church_id) : 'no branch';
     saveChange(u, { church_id }, `Move ${displayName(u)} to ${to}?`);
+  }
+
+  // Elder: a Leader who can approve large spending and love gifts (db/016).
+  function handleElderToggle(u) {
+    const is_elder = !u.is_elder;
+    saveChange(u, { is_elder }, is_elder
+      ? `Mark ${displayName(u)} as an Elder? Elders can approve large spending (with the Pastor) and love gifts.`
+      : `Remove ${displayName(u)}'s Elder status?`);
   }
 
   function handleAccessToggle(u) {
@@ -215,6 +223,9 @@ export default function UsersPage() {
           >
             <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1`}>{ROLE_LABELS[r]}</p>
             <p className={`text-2xl font-black ${t.textPrimary}`}>{countFor(r)}</p>
+            {r === 'leader' && (
+              <p className="text-[10px] font-bold text-violet-400">{users.filter((u) => u.is_elder).length} Elder{users.filter((u) => u.is_elder).length === 1 ? '' : 's'}</p>
+            )}
           </button>
         ))}
       </div>
@@ -314,6 +325,18 @@ export default function UsersPage() {
                           >
                             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                           </select>
+                        )}
+                        {u.role === 'leader' && (
+                          <label className={`mt-2 flex items-center gap-2 text-xs font-semibold ${u.is_elder ? 'text-violet-400' : t.textSub} cursor-pointer w-fit`}>
+                            <input
+                              type="checkbox"
+                              checked={!!u.is_elder}
+                              disabled={saving || isMe}
+                              onChange={() => handleElderToggle(u)}
+                              className="accent-violet-500"
+                            />
+                            Elder
+                          </label>
                         )}
                       </td>
                       <td className="px-6 py-4">
