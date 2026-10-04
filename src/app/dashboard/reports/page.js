@@ -3,11 +3,22 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import {
   BarChart3, TrendingUp, PieChart,
   Download, Filter, ArrowUpRight, ArrowDownRight,
-  Users, Wallet, Calendar, TrendingDown, Sun, Moon
+  Users, Wallet, Calendar, TrendingDown, Sun, Moon, UserMinus, CalendarClock
 } from "lucide-react";
+
+// Event statuses in order, for the "Events by Status" section shown to
+// levels without finance access.
+const EVENT_STATUSES = [
+  { key: "planning", label: "Planning", bar: "bg-slate-500" },
+  { key: "pending",  label: "Pending",  bar: "bg-orange-500" },
+  { key: "approved", label: "Approved", bar: "bg-emerald-500" },
+  { key: "done",     label: "Done",     bar: "bg-blue-500" },
+];
 
 const FUND_COLORS = {
   income: "bg-emerald-500",
@@ -55,6 +66,11 @@ function A(dark, color) {
 export default function ReportsPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
+  const { role } = useAuth();
+  // Finance sections only for levels with finance reports (Pastor, Leader,
+  // Finance). Admin and Secretary get member and event figures instead —
+  // the database wouldn't return finance rows to them anyway.
+  const showFinance = can(role, 'financeReports');
 
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -63,6 +79,7 @@ export default function ReportsPage() {
   // Members
   const [totalMembers, setTotalMembers] = useState(0);
   const [activeMembers, setActiveMembers] = useState(0);
+  const [inactiveMembers, setInactiveMembers] = useState(0);
   const [membersByMinistry, setMembersByMinistry] = useState([]);
 
   // Finance
@@ -74,6 +91,7 @@ export default function ReportsPage() {
   // Events
   const [totalEvents, setTotalEvents] = useState(0);
   const [upcomingEvents, setUpcomingEvents] = useState(0);
+  const [eventsByStatus, setEventsByStatus] = useState({});
 
   useEffect(() => {
     async function fetchAll() {
@@ -88,6 +106,11 @@ export default function ReportsPage() {
           .from('member_directory')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'active');
+
+        const { count: mInactive } = await supabase
+          .from('member_directory')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'inactive');
 
         const { data: members } = await supabase
           .from('member_directory')
@@ -104,11 +127,13 @@ export default function ReportsPage() {
           .sort((a, b) => b.count - a.count)
           .slice(0, 5);
 
-        // ── Transactions ──────────────────────────────────────
-        const { data: allTrans } = await supabase
-          .from('transactions')
-          .select('amount, type, date_recorded, status')
-          .order('date_recorded', { ascending: false });
+        // ── Transactions (only for levels that can see finance) ──
+        const { data: allTrans } = showFinance
+          ? await supabase
+              .from('transactions')
+              .select('amount, type, date_recorded, status')
+              .order('date_recorded', { ascending: false })
+          : { data: [] };
         // Voided entries stay in the ledger but never count in a report.
         const trans = allTrans?.filter((t) => t.status !== 'Void');
 
@@ -144,9 +169,17 @@ export default function ReportsPage() {
           .select('*', { count: 'exact', head: true })
           .gte('date', new Date().toISOString().split('T')[0]);
 
+        const { data: evStatuses } = await supabase.from('events').select('status');
+        const statusMap = {};
+        (evStatuses || []).forEach((e) => {
+          const key = e.status || 'planning';
+          statusMap[key] = (statusMap[key] || 0) + 1;
+        });
+
         // Set all state
         setTotalMembers(mTotal || 0);
         setActiveMembers(mActive || 0);
+        setInactiveMembers(mInactive || 0);
         setMembersByMinistry(ministryList);
         setTotalIncome(income);
         setTotalExpense(expense);
@@ -154,6 +187,7 @@ export default function ReportsPage() {
         setMonthlyTotals(monthlyArr);
         setTotalEvents(evTotal || 0);
         setUpcomingEvents(evUpcoming || 0);
+        setEventsByStatus(statusMap);
 
       } catch (err) {
         console.error('Reports fetch error:', err);
@@ -163,7 +197,7 @@ export default function ReportsPage() {
     }
 
     fetchAll();
-  }, []);
+  }, [showFinance]);
 
   // ── PDF export ─────────────────────────────────────────────────────────
   // NOTE: this is a temporary layout — a proper branded / print-ready
@@ -221,11 +255,16 @@ export default function ReportsPage() {
       let y = 122;
 
       // ── Summary stat cards ───────────────────────────────────────────
-      const cards = [
+      const cards = showFinance ? [
         { label: 'TOTAL BALANCE',  value: peso(balance),                        color: BLUE },
         { label: 'ACTIVE MEMBERS', value: `${activeMembers} / ${totalMembers}`, color: INDIGO },
         { label: 'TOTAL EVENTS',   value: `${totalEvents} (${upcomingEvents} upcoming)`, color: PINK },
         { label: 'TOTAL EXPENSES', value: peso(totalExpense),                   color: ROSE },
+      ] : [
+        { label: 'ACTIVE MEMBERS',   value: `${activeMembers} / ${totalMembers}`, color: INDIGO },
+        { label: 'INACTIVE MEMBERS', value: String(inactiveMembers),              color: SUBTLE },
+        { label: 'TOTAL EVENTS',     value: String(totalEvents),                  color: PINK },
+        { label: 'UPCOMING EVENTS',  value: String(upcomingEvents),               color: EMERALD },
       ];
       const cardGap = 12;
       const cardW = (pageWidth - marginX * 2 - cardGap * 3) / 4;
@@ -258,7 +297,8 @@ export default function ReportsPage() {
         y += 16;
       }
 
-      // ── Finance Summary ──────────────────────────────────────────────
+      // ── Finance Summary (finance levels) / Events by Status (others) ──
+      if (showFinance) {
       sectionTitle('Finance Summary', BLUE);
       autoTable(doc, {
         startY: y,
@@ -276,6 +316,20 @@ export default function ReportsPage() {
         columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
       });
       y = doc.lastAutoTable.finalY + 28;
+      } else {
+        sectionTitle('Events by Status', PINK);
+        autoTable(doc, {
+          startY: y,
+          margin: { left: marginX, right: marginX },
+          head: [['Status', 'Events']],
+          body: EVENT_STATUSES.map((st) => [st.label, String(eventsByStatus[st.key] || 0)]),
+          theme: 'striped',
+          styles: { fontSize: 10, cellPadding: 7, textColor: INK },
+          headStyles: { fillColor: PINK, textColor: 255, fontStyle: 'bold', fontSize: 9 },
+          columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+        });
+        y = doc.lastAutoTable.finalY + 28;
+      }
 
       // ── Members by Ministry ──────────────────────────────────────────
       sectionTitle('Members by Ministry', INDIGO);
@@ -297,7 +351,8 @@ export default function ReportsPage() {
       });
       y = doc.lastAutoTable.finalY + 28;
 
-      // ── Recent Transactions ───────────────────────────────────────────
+      // ── Recent Transactions (finance levels only) ──────────────────────
+      if (showFinance) {
       sectionTitle('Recent Transactions', EMERALD);
       const txRows = recentTransactions.length > 0
         ? recentTransactions.map((tx) => {
@@ -324,6 +379,7 @@ export default function ReportsPage() {
           }
         },
       });
+      }
 
       // ── Footer on every page ──────────────────────────────────────────
       const pageCount = doc.internal.getNumberOfPages();
@@ -374,6 +430,76 @@ export default function ReportsPage() {
     ? Math.round((activeMembers / totalMembers) * 100)
     : 0;
 
+  const summaryCards = showFinance ? [
+          {
+            label: "Total Balance",
+            val: loading ? "..." : `₱${balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
+            sub: "Income minus expenses",
+            up: balance >= 0,
+            icon: Wallet,
+            color: A(dark, "blue"),
+          },
+          {
+            label: "Active Members",
+            val: loading ? "..." : activeMembers.toString(),
+            sub: `${attendanceRate}% of ${totalMembers} total`,
+            up: true,
+            icon: Users,
+            color: A(dark, "indigo"),
+          },
+          {
+            label: "Total Events",
+            val: loading ? "..." : totalEvents.toString(),
+            sub: `${upcomingEvents} upcoming`,
+            up: true,
+            icon: Calendar,
+            color: A(dark, "pink"),
+          },
+          {
+            label: "Total Expenses",
+            val: loading ? "..." : `₱${totalExpense.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
+            sub: "All recorded expenses",
+            up: false,
+            icon: TrendingDown,
+            color: A(dark, "rose"),
+          },
+  ] : [
+          {
+            label: "Active Members",
+            val: loading ? "..." : activeMembers.toString(),
+            sub: `${attendanceRate}% of ${totalMembers} total`,
+            up: true,
+            icon: Users,
+            color: A(dark, "indigo"),
+          },
+          {
+            label: "Inactive Members",
+            val: loading ? "..." : inactiveMembers.toString(),
+            sub: "Not archived, not active",
+            up: false,
+            icon: UserMinus,
+            color: A(dark, "rose"),
+          },
+          {
+            label: "Total Events",
+            val: loading ? "..." : totalEvents.toString(),
+            sub: "All recorded events",
+            up: true,
+            icon: Calendar,
+            color: A(dark, "pink"),
+          },
+          {
+            label: "Upcoming Events",
+            val: loading ? "..." : upcomingEvents.toString(),
+            sub: "From today onward",
+            up: true,
+            icon: CalendarClock,
+            color: A(dark, "emerald"),
+          },
+  ];
+
+  const maxStatus = Math.max(...EVENT_STATUSES.map((st) => eventsByStatus[st.key] || 0), 1);
+
   // Bar chart: normalize heights
   const maxMonthly = Math.max(...monthlyTotals.map(m => Math.max(m.income, m.expense)), 1);
 
@@ -412,40 +538,7 @@ export default function ReportsPage() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-        {[
-          {
-            label: "Total Balance",
-            val: loading ? "..." : `₱${balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
-            sub: "Income minus expenses",
-            up: balance >= 0,
-            icon: Wallet,
-            color: A(dark, "blue"),
-          },
-          {
-            label: "Active Members",
-            val: loading ? "..." : activeMembers.toString(),
-            sub: `${attendanceRate}% of ${totalMembers} total`,
-            up: true,
-            icon: Users,
-            color: A(dark, "indigo"),
-          },
-          {
-            label: "Total Events",
-            val: loading ? "..." : totalEvents.toString(),
-            sub: `${upcomingEvents} upcoming`,
-            up: true,
-            icon: Calendar,
-            color: A(dark, "pink"),
-          },
-          {
-            label: "Total Expenses",
-            val: loading ? "..." : `₱${totalExpense.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
-            sub: "All recorded expenses",
-            up: false,
-            icon: TrendingDown,
-            color: A(dark, "rose"),
-          },
-        ].map((s, i) => (
+        {summaryCards.map((s, i) => (
           <div key={i} className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 relative overflow-hidden group`}>
             <s.icon className="absolute -right-2 -bottom-2 w-16 h-16 text-white/3 group-hover:text-blue-500/10 transition-colors" />
             <p className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-2`}>{s.label}</p>
@@ -460,7 +553,41 @@ export default function ReportsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 
+        {/* Events by Status (levels without finance) */}
+        {!showFinance && (
+          <div className={`lg:col-span-2 ${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
+            <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2 mb-6 border-b ${t.divider} pb-4`}>
+              <Calendar className={`w-4 h-4 ${A(dark, "pink")}`} /> Events by Status
+            </h3>
+            {loading ? (
+              <p className={`${t.textFaint} text-sm text-center py-8`}>Syncing...</p>
+            ) : totalEvents === 0 ? (
+              <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
+                <p className={`${t.textFaint} text-sm`}>No events yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {EVENT_STATUSES.map((st) => {
+                  const n = eventsByStatus[st.key] || 0;
+                  return (
+                    <div key={st.key}>
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className={`${t.textMuted} font-medium`}>{st.label}</span>
+                        <span className={`${t.textPrimary} font-black`}>{n}</span>
+                      </div>
+                      <div className={`w-full h-2 ${t.trackBg} rounded-full overflow-hidden`}>
+                        <div className={`h-full ${st.bar} rounded-full transition-all duration-700`} style={{ width: `${(n / maxStatus) * 100}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Income vs Expense Bar Chart */}
+        {showFinance && (
         <div className={`lg:col-span-2 ${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
           <div className={`flex justify-between items-center mb-6 border-b ${t.divider} pb-4`}>
             <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2`}>
@@ -514,6 +641,7 @@ export default function ReportsPage() {
             </div>
           )}
         </div>
+        )}
 
         {/* Members by Ministry */}
         <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
@@ -559,7 +687,8 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Finance Summary + Recent Transactions */}
+      {/* Finance Summary + Recent Transactions (finance levels only) */}
+      {showFinance && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Income vs Expense Summary */}
@@ -633,6 +762,7 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
