@@ -5,11 +5,12 @@ import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { ROLES, ROLE_LABELS, GLOBAL_ROLES } from "@/app/lib/permissions";
-import { Search, UserCog, Sun, Moon } from "lucide-react";
+import { Search, UserCog, Sun, Moon, Ban, CheckCircle2 } from "lucide-react";
 
 // Admin sets each login's level and branch. The database enforces the same
-// rules (db/009): only an admin changes levels or branches, and nobody
-// changes their own level. Logins are still created by signing up.
+// rules (db/009, db/013): only an admin changes levels, branches or
+// disables a login, and nobody changes their own level or disables
+// themselves. Logins are still created by signing up.
 
 const LEVEL_COLORS = {
   admin:     "bg-rose-500/10 text-rose-400 border-rose-500/20",
@@ -60,13 +61,14 @@ export default function UsersPage() {
   const [search, setSearch]           = useState("");
   const [filterLevel, setFilterLevel] = useState("all");
   const [filterChurch, setFilterChurch] = useState("all");
+  const [filterAccess, setFilterAccess] = useState("all");
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     async function load() {
       const [{ data: profiles }, { data: churchList }] = await Promise.all([
-        supabase.from('profiles').select('id, email, full_name, role, church_id').order('full_name'),
+        supabase.from('profiles').select('id, email, full_name, role, church_id, disabled').order('full_name'),
         supabase.from('churches').select('id, name').order('name'),
       ]);
       setUsers(profiles || []);
@@ -89,7 +91,7 @@ export default function UsersPage() {
       .from('profiles')
       .update(changes)
       .eq('id', u.id)
-      .select('id, role, church_id');
+      .select('id, role, church_id, disabled');
     setSavingId(null);
 
     if (error || !data?.length) {
@@ -115,6 +117,14 @@ export default function UsersPage() {
     saveChange(u, { church_id }, `Move ${displayName(u)} to ${to}?`);
   }
 
+  function handleAccessToggle(u) {
+    const disabled = !u.disabled;
+    const question = disabled
+      ? `Disable ${displayName(u)}'s login? They will be signed out and can't use FaithSync until enabled again.`
+      : `Enable ${displayName(u)}'s login again?`;
+    saveChange(u, { disabled }, question);
+  }
+
   // ── Filtered list + counts ────────────────────────────────────────────────
 
   const q = search.toLowerCase();
@@ -122,7 +132,8 @@ export default function UsersPage() {
     const matchSearch = u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
     const matchLevel  = filterLevel === "all" || u.role === filterLevel;
     const matchChurch = filterChurch === "all" || (filterChurch === "none" ? !u.church_id : u.church_id === filterChurch);
-    return (!q || matchSearch) && matchLevel && matchChurch;
+    const matchAccess = filterAccess === "all" || (filterAccess === "disabled" ? u.disabled : !u.disabled);
+    return (!q || matchSearch) && matchLevel && matchChurch && matchAccess;
   });
 
   const countFor = (role) => users.filter((u) => u.role === role).length;
@@ -187,6 +198,11 @@ export default function UsersPage() {
           {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           <option value="none">No branch</option>
         </select>
+        <select value={filterAccess} onChange={(e) => setFilterAccess(e.target.value)} className={selectStyle}>
+          <option value="all">Enabled and disabled</option>
+          <option value="enabled">Enabled only</option>
+          <option value="disabled">Disabled only</option>
+        </select>
       </div>
 
       {/* Table */}
@@ -198,16 +214,17 @@ export default function UsersPage() {
                 <th className="px-6 py-4">User</th>
                 <th className="px-6 py-4">Level</th>
                 <th className="px-6 py-4">Branch</th>
+                <th className="px-6 py-4">Access</th>
               </tr>
             </thead>
             <tbody className={`divide-y ${t.divider}`}>
               {loading ? (
                 <tr>
-                  <td colSpan={3} className={`text-center py-14 ${t.textSub} text-sm`}>Loading users...</td>
+                  <td colSpan={4} className={`text-center py-14 ${t.textSub} text-sm`}>Loading users...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="text-center py-14">
+                  <td colSpan={4} className="text-center py-14">
                     <UserCog className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
                     <p className={`${t.textSub} text-sm`}>No users match your search.</p>
                   </td>
@@ -217,7 +234,7 @@ export default function UsersPage() {
                   const isMe   = u.id === user?.id;
                   const saving = savingId === u.id;
                   return (
-                    <tr key={u.id} className={`${t.rowHover} transition-colors`}>
+                    <tr key={u.id} className={`${t.rowHover} transition-colors ${u.disabled ? "opacity-50" : ""}`}>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-xl bg-blue-600/15 border border-blue-500/20 flex items-center justify-center shrink-0">
@@ -227,6 +244,7 @@ export default function UsersPage() {
                             <p className={`font-semibold ${t.textPrimary} text-sm truncate`}>
                               {displayName(u)}
                               {isMe && <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-blue-400">You</span>}
+                              {u.disabled && <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-rose-400">Disabled</span>}
                             </p>
                             <p className={`text-xs ${t.textSub} truncate`}>{u.email}</p>
                           </div>
@@ -262,6 +280,21 @@ export default function UsersPage() {
                           {(!u.church_id || GLOBAL_ROLES.includes(u.role)) && <option value="">No branch</option>}
                           {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
+                      </td>
+                      <td className="px-6 py-4">
+                        {!isMe && (
+                          <button
+                            onClick={() => handleAccessToggle(u)}
+                            disabled={saving}
+                            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                              u.disabled
+                                ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20"
+                                : "text-rose-400 bg-rose-500/10 border-rose-500/20 hover:bg-rose-500/20"
+                            }`}
+                          >
+                            {u.disabled ? <><CheckCircle2 size={13} /> Enable</> : <><Ban size={13} /> Disable</>}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

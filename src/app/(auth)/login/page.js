@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
 import { homePathFor } from '@/app/lib/permissions';
+import { DISABLED_MESSAGE, DISABLED_FLAG } from '@/app/lib/disabledLogin';
 import { Eye, EyeOff, Sun, Moon } from 'lucide-react';
 
 function useTheme() {
@@ -35,16 +36,33 @@ export default function LoginPage() {
   // Already logged in? Skip straight through
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) redirectByRole(session.user.id);
+      if (session) {
+        redirectByRole(session.user.id);
+        return;
+      }
+      // Signed out because the account was disabled? Say so.
+      try {
+        if (sessionStorage.getItem(DISABLED_FLAG)) {
+          sessionStorage.removeItem(DISABLED_FLAG);
+          setError(DISABLED_MESSAGE);
+        }
+      } catch {}
     });
   }, []);
 
   async function redirectByRole(userId) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, disabled')
       .eq('id', userId)
       .single();
+
+    if (profile?.disabled) {
+      await supabase.auth.signOut();
+      setError(DISABLED_MESSAGE);
+      setLoading(false);
+      return;
+    }
 
     router.replace(homePathFor(profile?.role));
   }

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { DISABLED_FLAG } from '@/app/lib/disabledLogin';
 
 const AuthContext = createContext({});
 
@@ -13,6 +14,24 @@ export function AuthProvider({ children }) {
   // signed-in user's role arrives, so pages never check access against the
   // previous user's role. Token refreshes keep the same id and don't reload.
   const roleUserId = useRef(null);
+
+  const fetchRole = async (userId) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role, disabled')
+      .eq('id', userId)
+      .single();
+
+    // A disabled login is signed out; the login page shows why.
+    if (data?.disabled) {
+      try { sessionStorage.setItem(DISABLED_FLAG, '1'); } catch {}
+      await supabase.auth.signOut();
+      return;
+    }
+
+    setRole(!error && data ? data.role : null);
+    setLoading(false);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -57,17 +76,6 @@ export function AuthProvider({ children }) {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  const fetchRole = async (userId) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    setRole(!error && data ? data.role : null);
-    setLoading(false);
-  };
 
   const signOut = async () => {
     await supabase.auth.signOut();
