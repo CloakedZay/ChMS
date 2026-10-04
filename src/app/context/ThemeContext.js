@@ -12,6 +12,11 @@ export function ThemeProvider({ children }) {
     if (stored) setDark(stored === 'dark');
   }, []);
 
+  // Tell the stylesheet too (scrollbars follow the theme, see globals.css).
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  }, [dark]);
+
   function toggle() {
     setDark((prev) => {
       const next = !prev;

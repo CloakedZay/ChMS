@@ -184,10 +184,12 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
   const disabled = sending || loadingChurch || !churchId;
 
   return (
-    <div className={`flex-1 flex flex-col ${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm min-h-0`}>
+    // Fixed to the window height so the question box stays in view; long
+    // answers scroll inside the card instead of pushing it down.
+    <div className={`flex flex-col ${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm h-[calc(100dvh-20rem)] min-h-[24rem]`}>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-[50vh]">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center py-16">
             <Sparkles className={`w-8 h-8 ${t.emptyIcon} mb-3`} />

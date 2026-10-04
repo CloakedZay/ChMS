@@ -18,3 +18,44 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Scrollbars that match the app theme (ThemeContext sets data-theme on
+   <html>). Dark is the default. */
+:root {
+  --scroll-track: #0f111a;
+  --scroll-thumb: #2a3048;
+  --scroll-thumb-hover: #3b4466;
+}
+:root[data-theme="light"] {
+  --scroll-track: #e2e8f0;
+  --scroll-thumb: #94a3b8;
+  --scroll-thumb-hover: #64748b;
+}
+
+/* Chrome, Edge, Brave, Safari */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scroll-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 9999px;
+  border: 2px solid var(--scroll-track);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+}
+::-webkit-scrollbar-corner {
+  background: var(--scroll-track);
+}
+
+/* Firefox (doesn't support the rules above) */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+  }
+}

@@ -76,10 +76,11 @@ export default function MemberChatbotPage() {
         <p className="text-slate-500 text-sm mt-0.5">Ask questions answered from your church&apos;s reference documents</p>
       </div>
 
-      <div className="flex-1 flex flex-col bg-[#1a1d2e] border border-white/10 rounded-3xl overflow-hidden min-h-0">
+      {/* Fixed to the window height so the question box stays in view. */}
+      <div className="flex flex-col bg-[#1a1d2e] border border-white/10 rounded-3xl overflow-hidden h-[calc(100dvh-13rem)] min-h-[24rem]">
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-[50vh]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-16">
               <Sparkles className="w-8 h-8 text-slate-700 mb-3" />

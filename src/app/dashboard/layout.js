@@ -12,6 +12,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext"; // NEW
 import { canOpenPage, homePathFor, ROLE_LABELS } from "@/app/lib/permissions";
 import { usePageVisit } from "@/app/lib/usePageVisit";
+import BranchLabel from "@/app/components/BranchLabel";
 
 const NAV_LINKS = [
   { href: "/dashboard",            icon: LayoutDashboard, label: "Dashboard" },
@@ -101,7 +102,7 @@ export default function DashboardLayout({ children }) {
             </div>
             <span className={`hidden lg:inline text-lg font-black tracking-widest ${s.logoText} uppercase italic`}>FaithSync</span>
           </div>
-          <p className={`hidden lg:block text-[10px] ${s.logoSub} mt-1.5 ml-0.5 uppercase tracking-wider`}>GGCF-GMI Pandi</p>
+          <p className={`hidden lg:block text-[10px] ${s.logoSub} mt-1.5 ml-0.5 uppercase tracking-wider`}><BranchLabel /></p>
         </div>
 
         {/* Nav */}
