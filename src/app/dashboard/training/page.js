@@ -260,7 +260,8 @@ export default function TrainingPage() {
   async function handleReview(progressId, status) {
     setReviewing((p) => ({ ...p, [progressId]: true }));
     const note = reviewNotes[progressId]?.trim() || null;
-    await supabase.from("discipleship_progress").update({ status, notes: note, reviewed_at: new Date().toISOString(), reviewed_by: "Pastor" }).eq("id", progressId);
+    // The database records who reviewed it and when (db/008).
+    await supabase.from("discipleship_progress").update({ status, notes: note }).eq("id", progressId);
     setSubmissions((prev) => prev.map((s) => (s.id === progressId ? { ...s, status, notes: note } : s)));
     setReviewing((p) => ({ ...p, [progressId]: false }));
   }
