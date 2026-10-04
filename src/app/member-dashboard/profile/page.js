@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
-import { Save, Loader2 } from 'lucide-react';
+import { Save, Loader2, KeyRound } from 'lucide-react';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -113,7 +114,12 @@ export default function ProfilePage() {
             </div>
             <div className="flex items-center justify-between py-2">
               <p className="text-xs text-white/40">Password</p>
-              <p className="text-xs text-white/20">Managed by church admin</p>
+              <Link
+                href="/change-password"
+                className="flex items-center gap-1.5 text-xs font-bold text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                <KeyRound className="w-3.5 h-3.5" /> Change password
+              </Link>
             </div>
           </div>
         </div>

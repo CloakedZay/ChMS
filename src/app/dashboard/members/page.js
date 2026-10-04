@@ -5,7 +5,8 @@ import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
-import { UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon } from "lucide-react";
+import { authFetch } from "@/app/lib/authFetch";
+import { UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check } from "lucide-react";
 
 const EMPTY_FORM = {
   full_name: '',
@@ -13,6 +14,7 @@ const EMPTY_FORM = {
   ministry: '',
   status: 'active',
   phone: '',
+  email: '',
 };
 
 const MINISTRIES = [
@@ -95,6 +97,11 @@ export default function MembersPage() {
   const [search, setSearch]               = useState("");
   const [filterStatus, setFilterStatus]   = useState("all");
   const [form, setForm]                   = useState(EMPTY_FORM);
+  // Logins linked to member records (db/014): profile id → profile.
+  const [logins, setLogins]               = useState({});
+  const [creatingLoginId, setCreatingLoginId] = useState(null);
+  const [newLogin, setNewLogin]           = useState(null);   // { name, email, password }
+  const [copied, setCopied]               = useState(false);
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
@@ -102,6 +109,13 @@ export default function MembersPage() {
     setLoading(true);
     const { data } = await supabase.from('members').select('*').order('full_name');
     if (data) setMembers(data);
+    const ids = (data || []).map((m) => m.profile_id).filter(Boolean);
+    if (ids.length) {
+      const { data: profiles } = await supabase.from('profiles').select('id, email, full_name, disabled').in('id', ids);
+      const map = {};
+      (profiles || []).forEach((p) => { map[p.id] = p; });
+      setLogins(map);
+    }
     setLoading(false);
   }
 
@@ -123,6 +137,7 @@ export default function MembersPage() {
       ministry:  member.ministry  || '',
       status:    member.status    || 'active',
       phone:     member.phone     || '',
+      email:     member.email     || '',
     });
     setOpenMenuId(null);
     setShowModal(true);
@@ -144,15 +159,16 @@ export default function MembersPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
+    const payload = { ...form, email: form.email.trim().toLowerCase() || null };
 
     if (editingMember) {
       const { error } = await supabase
         .from('members')
-        .update(form)
+        .update(payload)
         .eq('id', editingMember.id);
       if (error) alert('Error updating member: ' + error.message);
     } else {
-      const { error } = await supabase.from('members').insert([form]);
+      const { error } = await supabase.from('members').insert([payload]);
       if (error) alert('Error saving member: ' + error.message);
     }
 
@@ -186,6 +202,39 @@ export default function MembersPage() {
     }
 
     await fetchMembers();
+  }
+
+  // Secretary: create a login for this member (server route, db/014).
+  async function handleCreateLogin(member) {
+    const loginName = member.email || 'a made-up username';
+    if (!window.confirm(`Create a login for ${member.full_name}? It will use ${loginName} and a temporary password that they change on first sign-in.`)) return;
+    setCreatingLoginId(member.id);
+    try {
+      const res = await authFetch('/api/members/create-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member_id: member.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Could not create the login.'); return; }
+      setCopied(false);
+      setNewLogin({ name: member.full_name, email: data.email, password: data.password });
+      await fetchMembers();
+    } catch (err) {
+      alert('Could not create the login: ' + err.message);
+    } finally {
+      setCreatingLoginId(null);
+    }
+  }
+
+  async function copyNewLogin() {
+    if (!newLogin) return;
+    try {
+      await navigator.clipboard.writeText(`FaithSync login\nUsername: ${newLogin.email}\nTemporary password: ${newLogin.password}`);
+      setCopied(true);
+    } catch {
+      alert('Could not copy — please write the details down instead.');
+    }
   }
 
   // ── Filtered list ─────────────────────────────────────────────────────────
@@ -298,6 +347,7 @@ export default function MembersPage() {
                 <th className="px-6 py-4">Role</th>
                 <th className="px-6 py-4">Ministry</th>
                 <th className="px-6 py-4">Phone</th>
+                <th className="px-6 py-4">Login</th>
                 <th className="px-6 py-4 text-center">Status</th>
                 <th className="px-6 py-4" />
               </tr>
@@ -305,13 +355,13 @@ export default function MembersPage() {
             <tbody className={`divide-y ${t.divider}`}>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className={`text-center py-14 ${t.textSub} text-sm`}>
+                  <td colSpan={7} className={`text-center py-14 ${t.textSub} text-sm`}>
                     Loading congregation data...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-14">
+                  <td colSpan={7} className="text-center py-14">
                     <Users className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
                     <p className={`${t.textSub} text-sm`}>
                       {search || filterStatus !== "all" ? "No members match your search." : "No members yet. Add one!"}
@@ -333,6 +383,24 @@ export default function MembersPage() {
                     <td className={`px-6 py-4 ${t.textSub} text-sm capitalize`}>{member.role || '—'}</td>
                     <td className="px-6 py-4 text-blue-400 text-xs font-medium">{member.ministry || '—'}</td>
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{member.phone || '—'}</td>
+                    <td className="px-6 py-4">
+                      {member.profile_id ? (
+                        <span className={`text-xs ${t.textSub} break-all`}>
+                          {logins[member.profile_id]?.email || 'Linked'}
+                          {logins[member.profile_id]?.disabled && <span className="ml-1 text-rose-400 font-bold">(disabled)</span>}
+                        </span>
+                      ) : canEdit && member.status !== ARCHIVED ? (
+                        <button
+                          onClick={() => handleCreateLogin(member)}
+                          disabled={creatingLoginId === member.id}
+                          className="flex items-center gap-1.5 text-xs font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                        >
+                          <KeyRound size={12} /> {creatingLoginId === member.id ? 'Creating...' : 'Create login'}
+                        </button>
+                      ) : (
+                        <span className={`text-xs ${t.textMuted}`}>No login</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-center">
                       <span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${STATUS_COLORS[member.status] || STATUS_COLORS.active}`}>
                         {member.status || 'active'}
@@ -401,6 +469,43 @@ export default function MembersPage() {
         </>
       )}
 
+      {/* ── New login details (shown once) ── */}
+      {newLogin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
+            <h2 className={`text-lg font-black ${t.textPrimary} mb-1`}>Login created</h2>
+            <p className={`text-xs ${t.textSub} mb-5`}>
+              Give these to <span className="font-bold">{newLogin.name}</span>. The password won&apos;t be shown again —
+              they&apos;ll choose their own the first time they sign in.
+            </p>
+            <div className={`${t.inputBg} border ${t.inputBorder} rounded-xl p-4 space-y-3 mb-5`}>
+              <div>
+                <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Username</p>
+                <p className={`text-sm font-mono ${t.textPrimary} break-all select-all`}>{newLogin.email}</p>
+              </div>
+              <div>
+                <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Temporary password</p>
+                <p className={`text-lg font-mono font-bold ${t.textPrimary} tracking-wider select-all`}>{newLogin.password}</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={copyNewLogin}
+                className={`flex-1 flex items-center justify-center gap-2 ${t.cancelBtn} rounded-xl py-2.5 text-sm font-semibold transition-all`}
+              >
+                {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
+              </button>
+              <button
+                onClick={() => { if (copied || window.confirm("Close? You won't see this password again.")) setNewLogin(null); }}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2.5 text-sm font-bold transition-all"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Add / Edit Modal ── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -448,6 +553,15 @@ export default function MembersPage() {
                   type="tel" name="phone" value={form.phone}
                   onChange={handleChange}
                   placeholder="e.g. 09XX XXX XXXX"
+                  className={inputStyle(t)}
+                />
+              </Field>
+
+              <Field label="Email (optional)" t={t}>
+                <input
+                  type="email" name="email" value={form.email}
+                  onChange={handleChange}
+                  placeholder="Used as their login name, if given"
                   className={inputStyle(t)}
                 />
               </Field>

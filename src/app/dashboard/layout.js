@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import {
   LayoutDashboard, Users, Calendar, Wallet,
-  ClipboardList, BarChart3, LogOut, ShieldCheck, Bot,
+  ClipboardList, BarChart3, LogOut, ShieldCheck, Bot, KeyRound,
   Book, BookOpen, UserCog, History
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
@@ -31,7 +31,7 @@ const NAV_LINKS = [
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, role, loading, signOut } = useAuth();
+  const { user, role, loading, signOut, mustChangePassword } = useAuth();
   const { dark } = useTheme(); // NEW
 
   // Signed out → login; a page this level can't open → their own home page.
@@ -41,11 +41,12 @@ export default function DashboardLayout({ children }) {
   useEffect(() => {
     if (loading) return;
     if (!user) router.replace('/login');
+    else if (mustChangePassword) router.replace('/change-password');
     else if (!allowed) router.replace(homePathFor(level));
-  }, [loading, user, level, allowed, router]);
+  }, [loading, user, level, allowed, mustChangePassword, router]);
 
   // Screen time: only pages this person actually stays on.
-  usePageVisit(user?.id, pathname, !loading && allowed);
+  usePageVisit(user?.id, pathname, !loading && allowed && !mustChangePassword);
 
   const handleSignOut = async () => {
     await signOut();
@@ -140,6 +141,16 @@ export default function DashboardLayout({ children }) {
               <p className={`text-[10px] ${s.userEmail} truncate`}>{user?.email || 'Loading...'}</p>
             </div>
           </div>
+
+          {/* Change password */}
+          <Link
+            href="/change-password"
+            title="Change password"
+            className="w-full flex items-center justify-center lg:justify-start gap-3 px-3 lg:px-4 py-2.5 rounded-2xl text-slate-500 hover:text-blue-400 hover:bg-blue-500/5 transition-all"
+          >
+            <KeyRound size={17} className="shrink-0" />
+            <span className="hidden lg:inline text-sm font-semibold">Change password</span>
+          </Link>
 
           {/* Sign Out */}
           <button

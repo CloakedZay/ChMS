@@ -23,7 +23,7 @@ const NAV_LINKS = [
 ];
 
 export default function MemberDashboardLayout({ children }) {
-  const { user, role, loading, signOut } = useAuth();
+  const { user, role, loading, signOut, mustChangePassword } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -34,11 +34,12 @@ export default function MemberDashboardLayout({ children }) {
   useEffect(() => {
     if (loading) return;
     if (!user) router.replace('/login?type=member');
+    else if (mustChangePassword) router.replace('/change-password');
     else if (!allowed) router.replace(homePathFor(level));
-  }, [loading, user, level, allowed, router]);
+  }, [loading, user, level, allowed, mustChangePassword, router]);
 
   // Screen time: only pages this person actually stays on.
-  usePageVisit(user?.id, pathname, !loading && allowed);
+  usePageVisit(user?.id, pathname, !loading && allowed && !mustChangePassword);
 
   const handleSignOut = async () => {
     await signOut();

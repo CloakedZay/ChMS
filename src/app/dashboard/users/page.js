@@ -5,12 +5,14 @@ import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { ROLES, ROLE_LABELS, GLOBAL_ROLES } from "@/app/lib/permissions";
-import { Search, UserCog, Sun, Moon, Ban, CheckCircle2 } from "lucide-react";
+import { authFetch } from "@/app/lib/authFetch";
+import { Search, UserCog, Sun, Moon, Ban, CheckCircle2, KeyRound, Copy, Check } from "lucide-react";
 
 // Admin sets each login's level and branch. The database enforces the same
 // rules (db/009, db/013): only an admin changes levels, branches or
 // disables a login, and nobody changes their own level or disables
-// themselves. Logins are still created by signing up.
+// themselves. Logins are created by signing up or by the Secretary from a
+// member record; the Admin resets forgotten passwords here.
 
 const LEVEL_COLORS = {
   admin:     "bg-rose-500/10 text-rose-400 border-rose-500/20",
@@ -62,6 +64,9 @@ export default function UsersPage() {
   const [filterLevel, setFilterLevel] = useState("all");
   const [filterChurch, setFilterChurch] = useState("all");
   const [filterAccess, setFilterAccess] = useState("all");
+  const [resetting, setResetting]     = useState(null);
+  const [newPassword, setNewPassword] = useState(null);   // { name, email, password }
+  const [copied, setCopied]           = useState(false);
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +128,37 @@ export default function UsersPage() {
       ? `Disable ${displayName(u)}'s login? They will be signed out and can't use FaithSync until enabled again.`
       : `Enable ${displayName(u)}'s login again?`;
     saveChange(u, { disabled }, question);
+  }
+
+  // Forgotten password: a new temporary one, changed at next sign-in.
+  async function handleResetPassword(u) {
+    if (!window.confirm(`Reset ${displayName(u)}'s password? Their current password stops working, and they must choose a new one at their next sign-in.`)) return;
+    setResetting(u.id);
+    try {
+      const res = await authFetch('/api/users/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: u.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Could not reset the password.'); return; }
+      setCopied(false);
+      setNewPassword({ name: displayName(u), email: data.email, password: data.password });
+    } catch (err) {
+      alert('Could not reset the password: ' + err.message);
+    } finally {
+      setResetting(null);
+    }
+  }
+
+  async function copyNewPassword() {
+    if (!newPassword) return;
+    try {
+      await navigator.clipboard.writeText(`FaithSync login\nUsername: ${newPassword.email}\nTemporary password: ${newPassword.password}`);
+      setCopied(true);
+    } catch {
+      alert('Could not copy — please write the details down instead.');
+    }
   }
 
   // ── Filtered list + counts ────────────────────────────────────────────────
@@ -214,7 +250,7 @@ export default function UsersPage() {
                 <th className="px-6 py-4">User</th>
                 <th className="px-6 py-4">Level</th>
                 <th className="px-6 py-4">Branch</th>
-                <th className="px-6 py-4">Access</th>
+                <th className="px-6 py-4">Actions</th>
               </tr>
             </thead>
             <tbody className={`divide-y ${t.divider}`}>
@@ -283,6 +319,14 @@ export default function UsersPage() {
                       </td>
                       <td className="px-6 py-4">
                         {!isMe && (
+                          <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleResetPassword(u)}
+                            disabled={saving || resetting === u.id}
+                            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 text-blue-400 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 whitespace-nowrap"
+                          >
+                            <KeyRound size={13} /> {resetting === u.id ? 'Resetting...' : 'Reset password'}
+                          </button>
                           <button
                             onClick={() => handleAccessToggle(u)}
                             disabled={saving}
@@ -294,6 +338,7 @@ export default function UsersPage() {
                           >
                             {u.disabled ? <><CheckCircle2 size={13} /> Enable</> : <><Ban size={13} /> Disable</>}
                           </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -304,6 +349,43 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
+
+      {/* ── New temporary password (shown once) ── */}
+      {newPassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className={`${dark ? "bg-[#1a1d2e] border-slate-700" : "bg-slate-50 border-slate-300"} border rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
+            <h2 className={`text-lg font-black ${t.textPrimary} mb-1`}>Password reset</h2>
+            <p className={`text-xs ${t.textSub} mb-5`}>
+              Give these to <span className="font-bold">{newPassword.name}</span>. The password won&apos;t be shown again —
+              they&apos;ll choose their own at their next sign-in.
+            </p>
+            <div className={`${t.inputBg} border ${t.inputBorder} rounded-xl p-4 space-y-3 mb-5`}>
+              <div>
+                <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Username</p>
+                <p className={`text-sm font-mono ${t.textPrimary} break-all select-all`}>{newPassword.email}</p>
+              </div>
+              <div>
+                <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Temporary password</p>
+                <p className={`text-lg font-mono font-bold ${t.textPrimary} tracking-wider select-all`}>{newPassword.password}</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={copyNewPassword}
+                className={`flex-1 flex items-center justify-center gap-2 border ${t.iconBtn} rounded-xl py-2.5 text-sm font-semibold transition-all`}
+              >
+                {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
+              </button>
+              <button
+                onClick={() => { if (copied || window.confirm("Close? You won't see this password again.")) setNewPassword(null); }}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2.5 text-sm font-bold transition-all"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

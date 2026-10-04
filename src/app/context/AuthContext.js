@@ -9,6 +9,9 @@ const AuthContext = createContext({});
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  // Set for a login the Secretary created with a temporary password (db/014);
+  // the dashboards send the person to /change-password until it's cleared.
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [loading, setLoading] = useState(true);
   // Whose role we've loaded (or are loading). Stays loading until a newly
   // signed-in user's role arrives, so pages never check access against the
@@ -18,7 +21,7 @@ export function AuthProvider({ children }) {
   const fetchRole = async (userId) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('role, disabled')
+      .select('role, disabled, must_change_password')
       .eq('id', userId)
       .single();
 
@@ -30,6 +33,7 @@ export function AuthProvider({ children }) {
     }
 
     setRole(!error && data ? data.role : null);
+    setMustChangePassword(!!data?.must_change_password);
     setLoading(false);
   };
 
@@ -69,6 +73,7 @@ export function AuthProvider({ children }) {
           roleUserId.current = null;
           setUser(null);
           setRole(null);
+          setMustChangePassword(false);
           setLoading(false);
         }
       }
@@ -82,7 +87,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loading, signOut }}>
+    <AuthContext.Provider value={{ user, role, loading, signOut, mustChangePassword, setMustChangePassword }}>
       {children}
     </AuthContext.Provider>
   );
