@@ -102,6 +102,7 @@ export const PAGE_FEATURES = {
   '/dashboard/chatbot':          ['aiAssistant'],
   '/dashboard/reports':          ['reports'],
   '/dashboard/users':            ['users'],
+  '/dashboard/activity':         ['activityLog'],
 
   '/member-dashboard':              null,
   '/member-dashboard/members':      ['members'],
