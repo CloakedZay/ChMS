@@ -7,6 +7,7 @@ import {
   ChevronRight, ChevronDown, BookOpen, FileText,
   Download, Loader2, ClipboardList,
 } from 'lucide-react';
+import BranchLabel from '@/app/components/BranchLabel';
 
 const MINISTRIES = [
   { name: 'Program & Music Ministry', head: 'Mr. Israel Dadap',    members: 12, initials: 'ID' },
@@ -79,7 +80,7 @@ export default function MemberMinistriesPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
       <div className="mb-8">
-        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Ministries</h1>
         <p className="text-slate-500 text-sm mt-0.5">Tap a ministry to see its training modules and handouts</p>
       </div>

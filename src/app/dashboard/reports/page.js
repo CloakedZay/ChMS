@@ -10,6 +10,7 @@ import {
   Download, Filter, ArrowUpRight, ArrowDownRight,
   Users, Wallet, Calendar, TrendingDown, Sun, Moon, UserMinus, CalendarClock
 } from "lucide-react";
+import BranchLabel, { branchLabelText } from "@/app/components/BranchLabel";
 
 // Event statuses in order, for the "Events by Status" section shown to
 // levels without finance access.
@@ -66,7 +67,7 @@ function A(dark, color) {
 export default function ReportsPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
-  const { role } = useAuth();
+  const { role, churchName } = useAuth();
   // Finance sections only for levels with finance reports (Pastor, Leader,
   // Finance). Admin and Secretary get member and event figures instead —
   // the database wouldn't return finance rows to them anyway.
@@ -242,7 +243,7 @@ export default function ReportsPage() {
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9);
-      doc.text('GGCF-GMI  ·  PANDI, BULACAN', marginX, 30);
+      doc.text(branchLabelText(role, churchName).toUpperCase(), marginX, 30);
       doc.setFontSize(21);
       doc.text('Reports & Analytics', marginX, 56);
       doc.setFont('helvetica', 'normal');
@@ -509,7 +510,7 @@ export default function ReportsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textFaint} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textFaint} mb-1`}><BranchLabel /></p>
           <h1 className={`text-3xl font-black ${t.textPrimary} tracking-tight`}>Reports & Analytics</h1>
           <p className={`${t.textMuted} text-sm mt-0.5`}>
             {loading ? 'Syncing live data...' : 'Live data from all church modules.'}

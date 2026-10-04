@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { Wallet, TrendingUp, TrendingDown, Search, History } from 'lucide-react';
+import BranchLabel from '@/app/components/BranchLabel';
 
 const FUNDS = ['Monthly Budget', 'General Fund', 'Project Fund', 'Lot Fund'];
 const FUND_DOTS = { 'Monthly Budget': 'bg-yellow-500', 'General Fund': 'bg-blue-500', 'Project Fund': 'bg-purple-500', 'Lot Fund': 'bg-pink-500' };
@@ -58,7 +59,7 @@ export default function MemberFinancesPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
       <div className="mb-8">
-        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Finances</h1>
         <p className="text-slate-500 text-sm mt-0.5">Church tithes, offerings, and fund allocations</p>
       </div>

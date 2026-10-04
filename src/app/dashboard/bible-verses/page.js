@@ -7,6 +7,7 @@ import { can } from "@/app/lib/permissions";
 import { authFetch } from "@/app/lib/authFetch";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import { BookOpen, Upload, Trash2, Loader2, Plus, X, Sun, Moon, Sparkles, Clock } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 function T(dark) {
   return {
@@ -149,7 +150,7 @@ export default function BibleVersesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Bible Verses</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Upload a PDF of verses — one is shown on the member dashboard each day, rotating automatically at midnight.</p>
         </div>

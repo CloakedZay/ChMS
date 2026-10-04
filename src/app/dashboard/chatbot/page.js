@@ -10,6 +10,7 @@ import {
   Send, Bot, User, Sparkles, Loader2, Sun, Moon,
   Upload, FileText, Trash2, Eye, EyeOff, File as FileIcon
 } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 const DOC_TYPES = ["Policy", "Handbook", "FAQ", "Announcement", "Other"];
 const GLOBAL_ROLES = ["admin", "pastor"];
@@ -85,7 +86,7 @@ export default function ChatbotPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Church Assistant</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Ask questions answered from your church's reference documents</p>
         </div>

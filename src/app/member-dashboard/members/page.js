@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { Search, Users } from 'lucide-react';
+import BranchLabel from '@/app/components/BranchLabel';
 
 export default function MemberDirectoryPage() {
   const [members, setMembers] = useState([]);
@@ -34,7 +35,7 @@ export default function MemberDirectoryPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
       <div className="mb-8">
-        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Church Members</h1>
         <p className="text-slate-500 text-sm mt-0.5">
           {loading ? 'Loading...' : `${members.length} member${members.length === 1 ? '' : 's'} in the congregation`}

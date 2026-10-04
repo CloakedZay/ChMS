@@ -10,6 +10,7 @@ import {
   Wallet, TrendingUp, TrendingDown, Plus,
   Search, X, Ban, Pencil, History, Sun, Moon
 } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 const EMPTY_FORM = {
   category: 'Tithe',
@@ -297,7 +298,7 @@ export default function FinancePage() {
 
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Financial Ledger</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Track tithes, offerings, and church fund allocations</p>
         </div>

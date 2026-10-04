@@ -9,6 +9,7 @@ import {
   Calendar, Plus, Search, MoreHorizontal,
   CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon
 } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 const EMPTY_FORM = {
   title: '',
@@ -211,7 +212,7 @@ export default function EventsPage() {
 
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Events & Services</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Schedule and track church activities and ministry projects</p>
         </div>

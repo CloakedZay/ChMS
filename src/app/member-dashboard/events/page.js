@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { Search, CalendarDays, Calendar } from 'lucide-react';
+import BranchLabel from '@/app/components/BranchLabel';
 
 const STATUS_COLORS = {
   approved: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
@@ -41,7 +42,7 @@ export default function MemberEventsPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
       <div className="mb-8">
-        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Events &amp; Services</h1>
         <p className="text-slate-500 text-sm mt-0.5">Church activities and ministry projects</p>
       </div>

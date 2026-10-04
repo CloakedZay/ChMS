@@ -8,6 +8,7 @@ import {
   BookOpen, ChevronRight, ChevronUp, CheckCircle, Clock, Lock,
   Send, FileText, Download,
 } from 'lucide-react';
+import BranchLabel from '@/app/components/BranchLabel';
 
 const ANSWER_STATUS = {
   approved: { label: 'Approved',       cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
@@ -140,7 +141,7 @@ export default function DiscipleshipPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
       <div className="mb-6">
-        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Discipleship</h1>
         <p className="text-slate-500 text-sm mt-0.5">Grow through each module at your own pace</p>
       </div>

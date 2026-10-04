@@ -7,6 +7,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import { authFetch } from "@/app/lib/authFetch";
 import { UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 const EMPTY_FORM = {
   full_name: '',
@@ -333,7 +334,7 @@ export default function MembersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Member Database</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Congregation records and ministry assignments</p>
         </div>

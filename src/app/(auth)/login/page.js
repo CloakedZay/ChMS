@@ -159,7 +159,7 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1 className={`text-2xl font-black ${textMain} tracking-tight`}>FaithSync</h1>
-          <p className={`${textSub} text-xs mt-1 tracking-widest uppercase`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`${textSub} text-xs mt-1 tracking-widest uppercase`}>GGCF-GMI</p>
         </div>
 
         {/* Card */}

@@ -13,6 +13,7 @@ import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
+import BranchLabel from "@/app/components/BranchLabel";
 
 // ─── Theme token maps ──────────────────────────────────────────────────────────
 
@@ -278,7 +279,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8 lg:mb-10">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h2 className={`text-2xl font-black ${t.textPrimary}`}>Dashboard Overview</h2>
           <p className={`${t.textSub} text-sm mt-0.5`}>
             {loading ? "Syncing with Supabase..." : "Live data from all church modules."}

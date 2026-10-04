@@ -9,6 +9,7 @@ import {
   ChevronRight, ChevronDown, BookOpen, Upload,
   FileText, Trash2, Download, Loader2, Plus, X, Sun, Moon
 } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -210,7 +211,7 @@ export default function MinistriesTab() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Ministries</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Ministry teams, training modules, and handouts</p>
         </div>

@@ -10,6 +10,7 @@ import {
   Loader2, Plus, X, Sun, Moon, CheckCircle, XCircle, Clock, MessageSquare,
   Eye, EyeOff, HelpCircle, Users, Search,
 } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 function formatBytes(bytes) {
   if (!bytes) return "—";
@@ -286,7 +287,7 @@ export default function TrainingPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Training</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Manage discipleship modules, questions, handouts, and review member submissions</p>
         </div>

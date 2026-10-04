@@ -5,6 +5,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
 import { authFetch } from '@/app/lib/authFetch';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
+import BranchLabel from '@/app/components/BranchLabel';
 
 export default function MemberChatbotPage() {
   const { user } = useAuth();
@@ -70,7 +71,7 @@ export default function MemberChatbotPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen flex flex-col">
       <div className="mb-6">
-        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Church Assistant</h1>
         <p className="text-slate-500 text-sm mt-0.5">Ask questions answered from your church&apos;s reference documents</p>
       </div>
