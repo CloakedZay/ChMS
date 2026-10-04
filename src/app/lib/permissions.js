@@ -101,6 +101,7 @@ export const PAGE_FEATURES = {
   '/dashboard/bible-verses':     ['bibleVerses'],
   '/dashboard/chatbot':          ['aiAssistant'],
   '/dashboard/reports':          ['reports'],
+  '/dashboard/users':            ['users'],
 
   '/member-dashboard':              null,
   '/member-dashboard/members':      ['members'],

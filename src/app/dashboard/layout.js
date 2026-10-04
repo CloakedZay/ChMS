@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import {
   LayoutDashboard, Users, Calendar, Wallet,
   ClipboardList, BarChart3, LogOut, ShieldCheck, Bot,
-  Book, BookOpen
+  Book, BookOpen, UserCog
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext"; // NEW
@@ -22,6 +22,7 @@ const NAV_LINKS = [
   { href: "/dashboard/bible-verses", icon: BookOpen,      label: "Bible Verses" },
   { href: "/dashboard/chatbot",    icon: Bot,             label: "Assistant" },
   { href: "/dashboard/reports",    icon: BarChart3,       label: "Reports" },
+  { href: "/dashboard/users",      icon: UserCog,         label: "Users" },
 
 ];
 
