@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import {
   BookOpen, ChevronRight, ChevronDown, Upload, FileText, Trash2, Download,
   Loader2, Plus, X, Sun, Moon, CheckCircle, XCircle, Clock, MessageSquare,
@@ -62,6 +64,9 @@ function A(dark, color) {
 export default function TrainingPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
+  const { role } = useAuth();
+  const canEdit   = can(role, 'modules', 'edit');
+  const canReview = can(role, 'answerReview', 'approve');
 
   const [activeTab, setActiveTab] = useState("modules");
   const [loading, setLoading]     = useState(true);
@@ -330,12 +335,14 @@ export default function TrainingPage() {
       {activeTab === "modules" && (
         <div className="space-y-4">
           <div className="flex justify-end">
+            {canEdit && (
             <button
               onClick={() => setShowAddModule(true)}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-95"
             >
               <Plus size={14} /> Add Module
             </button>
+            )}
           </div>
 
           {loading ? (
@@ -372,11 +379,14 @@ export default function TrainingPage() {
                         <span className={`text-[10px] ${t.textMuted}`}>{modQs.length} question{modQs.length !== 1 ? "s" : ""}</span>
                         <button
                           onClick={() => handleToggleActive(mod)}
-                          title={mod.is_active ? "Visible to members — click to hide" : "Hidden from members — click to activate"}
-                          className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-colors ${
+                          disabled={!canEdit}
+                          title={!canEdit
+                            ? (mod.is_active ? "Visible to members" : "Hidden from members")
+                            : mod.is_active ? "Visible to members — click to hide" : "Hidden from members — click to activate"}
+                          className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-colors disabled:cursor-default ${
                             mod.is_active
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
-                              : "bg-slate-500/10 text-slate-500 border-slate-500/20 hover:bg-slate-500/20"
+                              ? `bg-emerald-500/10 text-emerald-400 border-emerald-500/20 ${canEdit ? "hover:bg-emerald-500/20" : ""}`
+                              : `bg-slate-500/10 text-slate-500 border-slate-500/20 ${canEdit ? "hover:bg-slate-500/20" : ""}`
                           }`}
                         >
                           {mod.is_active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -404,16 +414,19 @@ export default function TrainingPage() {
                                 <div key={q.id} className={`flex items-center gap-3 p-3 ${t.deepCard} rounded-xl border ${t.innerDivider}`}>
                                   <span className="text-xs font-black text-blue-400 shrink-0">Q{qi + 1}</span>
                                   <p className={`flex-1 text-xs ${t.textPrimary}`}>{q.question}</p>
+                                  {canEdit && (
                                   <button
                                     onClick={() => handleDeleteQuestion(q)}
                                     className={`${t.textMuted} hover:text-rose-400 hover:bg-rose-500/10 p-1 rounded-lg transition-colors shrink-0`}
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
                           )}
+                          {canEdit && (
                           <div className="flex gap-2">
                             <input
                               type="text"
@@ -432,6 +445,7 @@ export default function TrainingPage() {
                               Add
                             </button>
                           </div>
+                          )}
                         </div>
 
                         {/* Handouts */}
@@ -460,15 +474,18 @@ export default function TrainingPage() {
                                     <button onClick={() => handleDownload(hf)} title="Download" className={`p-1.5 ${t.textSub} hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors`}>
                                       <Download className="w-3.5 h-3.5" />
                                     </button>
+                                    {canEdit && (
                                     <button onClick={() => handleDeleteHandout(hf, mod.id)} title="Delete" className={`p-1.5 ${t.textSub} hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors`}>
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
+                                    )}
                                   </div>
                                 </div>
                               ))}
                             </div>
                           )}
 
+                          {canEdit && (
                           <div className="space-y-2">
                             <input
                               type="text"
@@ -497,6 +514,7 @@ export default function TrainingPage() {
                               <p className={`text-xs ${dark ? "text-rose-400" : "text-rose-600"}`}>{uploadError[mod.id]}</p>
                             )}
                           </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -613,17 +631,21 @@ export default function TrainingPage() {
                                               <XCircle className="w-3.5 h-3.5" /> Rejected
                                               {sub.notes && <span className={`${t.textSub} font-normal ml-1`}>· Note: {sub.notes}</span>}
                                             </div>
+                                            {canReview && (
                                             <div className="flex gap-2 pt-1">
                                               <button onClick={() => handleReview(sub.id, "approved")} disabled={isReviewing} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
                                                 <CheckCircle className="w-3 h-3" /> Approve
                                               </button>
                                             </div>
+                                            )}
                                           </div>
                                         ) : (
                                           <div className="space-y-2 pt-1">
                                             <div className={`flex items-center gap-1.5 text-xs ${A(dark, "yellow")} font-bold mb-2`}>
                                               <Clock className="w-3.5 h-3.5" /> Awaiting Review
                                             </div>
+                                            {canReview && (
+                                              <>
                                             <div className="flex items-center gap-2">
                                               <MessageSquare className={`w-3.5 h-3.5 ${t.textMuted} shrink-0`} />
                                               <input
@@ -642,6 +664,8 @@ export default function TrainingPage() {
                                                 <XCircle className="w-3.5 h-3.5" /> {isReviewing ? "Saving..." : "Reject"}
                                               </button>
                                             </div>
+                                              </>
+                                            )}
                                           </div>
                                         )}
                                       </div>

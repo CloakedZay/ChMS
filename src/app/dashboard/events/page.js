@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import {
   Calendar, Plus, Search, MoreHorizontal,
   CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon
@@ -35,6 +37,8 @@ const STATUS_COLORS = {
 
 const FILTERS = ["all", "planning", "pending", "approved", "done"];
 const GLOBAL_ROLES = ["admin", "pastor"];
+// Statuses a leader may give an event; approving is the Pastor's job.
+const LEADER_STATUSES = ["planning", "pending"];
 
 // ─── Theme token map — same pattern as DashboardPage.js ────────────────────
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
@@ -76,6 +80,7 @@ function A(dark, color) {
 export default function EventsPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
+  const { user, role } = useAuth();
 
   const [events, setEvents]         = useState([]);
   const [churches, setChurches]     = useState([]);
@@ -89,6 +94,14 @@ export default function EventsPage() {
   const [form, setForm]             = useState(EMPTY_FORM);
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
+
+  // Pastor manages every event; a leader adds events and edits their own
+  // until they're approved. Everyone else only views (same as db/007).
+  const canManageAll = can(role, 'events', 'approve');
+  const canSubmit    = can(role, 'events', 'submit');
+  const canEditEvent = (ev) =>
+    canManageAll ||
+    (canSubmit && ev.created_by === user?.id && LEADER_STATUSES.includes(ev.status));
 
   async function fetchProfile() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -210,12 +223,14 @@ export default function EventsPage() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button
-            onClick={openAdd}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20 shrink-0"
-          >
-            <Plus size={16} /> Add Event
-          </button>
+          {(canManageAll || canSubmit) && (
+            <button
+              onClick={openAdd}
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20 shrink-0"
+            >
+              <Plus size={16} /> Add Event
+            </button>
+          )}
         </div>
       </div>
 
@@ -262,7 +277,7 @@ export default function EventsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filtered.map((event) => (
-            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={openEdit} onDelete={handleDeleteLocal} t={t} dark={dark} />
+            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={canEditEvent(event) ? openEdit : null} onDelete={canManageAll ? handleDeleteLocal : null} t={t} dark={dark} />
           ))}
         </div>
       )}
@@ -308,8 +323,8 @@ export default function EventsPage() {
                 <select name="status" value={form.status} onChange={handleChange} className={inputStyle(t)}>
                   <option value="planning">Planning</option>
                   <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="done">Done</option>
+                  {canManageAll && <option value="approved">Approved</option>}
+                  {canManageAll && <option value="done">Done</option>}
                 </select>
               </Field>
 
@@ -359,18 +374,18 @@ function EventCard({ event, branchName, onEdit, onDelete, t, dark }) {
     <div className={`${t.cardBg} border ${t.cardBorder} p-6 rounded-3xl backdrop-blur-sm hover:border-blue-500/40 transition-all group relative`}>
       <div className="flex justify-between items-start mb-4">
         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[phase] || STATUS_COLORS.planning}`}>{phase}</span>
-        <div className="relative">
+        {(onEdit || onDelete) && <div className="relative">
           <button onClick={() => setMenuOpen(!menuOpen)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${t.menuHover}`}><MoreHorizontal size={16} /></button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
               <div className={`absolute right-0 top-8 z-20 ${t.menuBg} border rounded-xl shadow-xl w-36 overflow-hidden`}>
-                <button onClick={() => { setMenuOpen(false); onEdit(event); }} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}><Pencil size={13} /> Edit</button>
-                <button onClick={() => { setMenuOpen(false); handleDelete(); }} disabled={deleting} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"><Trash2 size={13} /> {deleting ? 'Deleting...' : 'Delete'}</button>
+                {onEdit && <button onClick={() => { setMenuOpen(false); onEdit(event); }} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}><Pencil size={13} /> Edit</button>}
+                {onDelete && <button onClick={() => { setMenuOpen(false); handleDelete(); }} disabled={deleting} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"><Trash2 size={13} /> {deleting ? 'Deleting...' : 'Delete'}</button>}
               </div>
             </>
           )}
-        </div>
+        </div>}
       </div>
 
       <h3 className={`text-base font-black ${t.textPrimary} mb-1 group-hover:text-blue-400 transition-colors leading-snug`}>{event.title}</h3>

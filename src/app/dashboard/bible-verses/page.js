@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import { authFetch } from "@/app/lib/authFetch";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import { BookOpen, Upload, Trash2, Loader2, Plus, X, Sun, Moon, Sparkles, Clock } from "lucide-react";
@@ -33,6 +35,8 @@ export default function BibleVersesPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
   const fileInputRef = useRef(null);
+  const { role } = useAuth();
+  const canEdit = can(role, 'bibleVerses', 'edit');
 
   const [verses, setVerses]       = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -183,6 +187,8 @@ export default function BibleVersesPage() {
         </div>
       </div>
 
+      {canEdit && (
+        <>
       {/* Upload */}
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 mb-6 backdrop-blur-sm`}>
         <h2 className={`text-sm font-black ${t.textPrimary} mb-3 flex items-center gap-2`}>
@@ -260,6 +266,8 @@ export default function BibleVersesPage() {
           </form>
         )}
       </div>
+        </>
+      )}
 
       {/* List */}
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm`}>
@@ -267,7 +275,7 @@ export default function BibleVersesPage() {
           <h2 className={`text-sm font-black ${t.textPrimary} flex items-center gap-2`}>
             <BookOpen className="w-4 h-4 text-blue-400" /> {loading ? 'Loading...' : `${verses.length} Verse${verses.length === 1 ? '' : 's'}`}
           </h2>
-          {verses.length > 0 && (
+          {canEdit && verses.length > 0 && (
             <button
               onClick={handleClearAll}
               disabled={clearing}
@@ -292,13 +300,15 @@ export default function BibleVersesPage() {
                   <p className="text-xs font-bold text-blue-400">{v.reference}</p>
                   <p className={`text-sm ${t.textPrimary} mt-1`}>{v.verse_text}</p>
                 </div>
-                <button
-                  onClick={() => handleDelete(v.id)}
-                  disabled={deletingId === v.id}
-                  className="text-slate-600 hover:text-rose-400 disabled:opacity-50 transition-colors shrink-0 p-1"
-                >
-                  <Trash2 size={15} />
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => handleDelete(v.id)}
+                    disabled={deletingId === v.id}
+                    className="text-slate-600 hover:text-rose-400 disabled:opacity-50 transition-colors shrink-0 p-1"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

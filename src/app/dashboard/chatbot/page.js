@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { authFetch } from "@/app/lib/authFetch";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import {
   Send, Bot, User, Sparkles, Loader2, Sun, Moon,
   Upload, FileText, Trash2, Eye, EyeOff, File as FileIcon
@@ -44,6 +46,10 @@ function T(dark) {
 export default function ChatbotPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
+  const { role } = useAuth();
+  // Admin sees the documents read-only; Finance and Secretary only chat.
+  const canSeeDocs  = can(role, 'aiDocuments');
+  const canEditDocs = can(role, 'aiDocuments', 'edit');
 
   const [activeTab, setActiveTab] = useState("chat");
 
@@ -106,7 +112,7 @@ export default function ChatbotPage() {
       )}
 
       {/* Tabs */}
-      <div className={`flex gap-1 ${t.tabBar} border rounded-xl p-1 w-fit mb-6`}>
+      {canSeeDocs && <div className={`flex gap-1 ${t.tabBar} border rounded-xl p-1 w-fit mb-6`}>
         {[
           { key: "chat", label: "Chat" },
           { key: "documents", label: "Documents" },
@@ -121,12 +127,12 @@ export default function ChatbotPage() {
             {tab.label}
           </button>
         ))}
-      </div>
+      </div>}
 
-      {activeTab === "chat" ? (
+      {activeTab === "chat" || !canSeeDocs ? (
         <ChatPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} />
       ) : (
-        <DocumentsPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} />
+        <DocumentsPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} canEdit={canEditDocs} />
       )}
     </div>
   );
@@ -246,7 +252,7 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
 
 // ─── Documents tab ───────────────────────────────────────────────────────────
 
-function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
+function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
   const [documents, setDocuments] = useState([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [title, setTitle] = useState("");
@@ -360,6 +366,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
     <div className="space-y-6">
 
       {/* Upload */}
+      {canEdit && (
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 backdrop-blur-sm`}>
         <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-4`}>Upload a Document</h3>
         <form onSubmit={handleUpload} className="space-y-3">
@@ -414,6 +421,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
           </button>
         </form>
       </div>
+      )}
 
       {/* List */}
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm`}>
@@ -425,7 +433,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
         ) : documents.length === 0 ? (
           <div className="py-14 text-center">
             <FileText className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
-            <p className={`${t.textMuted} text-sm`}>No documents yet. Upload one above.</p>
+            <p className={`${t.textMuted} text-sm`}>{canEdit ? "No documents yet. Upload one above." : "No documents yet."}</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-800/20">
@@ -442,6 +450,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
                     {!doc.is_active ? ' · Inactive' : ''}
                   </p>
                 </div>
+                {canEdit && (
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={() => toggleActive(doc)}
@@ -460,6 +469,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
+                )}
               </div>
             ))}
           </div>

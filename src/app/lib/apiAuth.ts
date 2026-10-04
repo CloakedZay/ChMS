@@ -6,8 +6,11 @@ import { supabaseUrl, supabaseAnonKey } from "@/app/lib/supabase";
 export const GLOBAL_ROLES = ["admin", "pastor"];
 
 // Roles that can manage shared content (chatbot documents, bible verses).
-// Matches the module/handout policies in db/001.
-export const CONTENT_ROLES = ["admin", "pastor", "leader", "staff"];
+// Matches the content policies in db/007; Admin is view-only.
+export const CONTENT_ROLES = ["pastor", "leader"];
+
+// Roles that can see the chatbot document list (aiDocuments in permissions.js).
+export const AI_DOCUMENT_VIEWERS = ["admin", ...CONTENT_ROLES];
 
 export type Caller = {
   db: SupabaseClient; // queries run as the caller, so RLS applies

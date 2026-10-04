@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCaller, resolveChurchId, CONTENT_ROLES } from "@/app/lib/apiAuth";
+import { getCaller, resolveChurchId, CONTENT_ROLES, AI_DOCUMENT_VIEWERS } from "@/app/lib/apiAuth";
 
 export const runtime = "nodejs";
 
@@ -38,7 +38,7 @@ async function extractText(file: File): Promise<string> {
 
 // List documents for a church
 export async function GET(req: NextRequest) {
-  const caller = await getCaller(req, CONTENT_ROLES);
+  const caller = await getCaller(req, AI_DOCUMENT_VIEWERS);
   if (caller instanceof NextResponse) return caller;
 
   const church_id = resolveChurchId(caller, req.nextUrl.searchParams.get("church_id"));

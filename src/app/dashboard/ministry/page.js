@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import {
   ChevronRight, ChevronDown, BookOpen, Upload,
   FileText, Trash2, Download, Loader2, Plus, X, Sun, Moon
@@ -62,6 +64,8 @@ function T(dark) {
 export default function MinistriesTab() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
+  const { role } = useAuth();
+  const canEdit = can(role, 'modules', 'edit');
 
   const [expandedMinistry, setExpandedMinistry] = useState(null);
   const [expandedModule, setExpandedModule]     = useState(null);
@@ -274,12 +278,14 @@ export default function MinistriesTab() {
                       <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>
                         Training Modules & Handouts
                       </p>
-                      <button
-                        onClick={() => setShowAddModule(true)}
-                        className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-bold transition-colors"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add Module
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => setShowAddModule(true)}
+                          className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-bold transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Module
+                        </button>
+                      )}
                     </div>
 
                     {modulesLoading ? (
@@ -359,13 +365,15 @@ export default function MinistriesTab() {
                                             >
                                               <Download className="w-3.5 h-3.5" />
                                             </button>
-                                            <button
-                                              onClick={() => handleDelete(hf, mod.id)}
-                                              title="Delete"
-                                              className={`p-1.5 ${t.textSub} hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors`}
-                                            >
-                                              <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
+                                            {canEdit && (
+                                              <button
+                                                onClick={() => handleDelete(hf, mod.id)}
+                                                title="Delete"
+                                                className={`p-1.5 ${t.textSub} hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors`}
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            )}
                                           </div>
                                         </div>
                                       ))}
@@ -373,6 +381,7 @@ export default function MinistriesTab() {
                                   )}
 
                                   {/* Upload */}
+                                  {canEdit && (
                                   <div className={`space-y-2 pt-1 border-t ${t.innerDivider}`}>
                                     <p className={`text-[10px] ${t.textSub} uppercase tracking-wider font-bold pt-1`}>Upload Handout</p>
                                     <input
@@ -404,6 +413,7 @@ export default function MinistriesTab() {
                                       <p className={`text-xs ${dark ? "text-rose-400" : "text-rose-600"}`}>{uploadError[mod.id]}</p>
                                     )}
                                   </div>
+                                  )}
                                 </div>
                               )}
                             </div>
