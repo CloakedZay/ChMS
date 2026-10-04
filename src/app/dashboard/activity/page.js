@@ -24,7 +24,14 @@ const TYPE_LABELS = {
   discipleship_questions: "Question",
   module_handouts:        "Handout",
   chatbot_documents:      "AI document",
+  expense_requests:       "Spending request",
+  expense_approvals:      "Spending approval",
+  expense_receipts:       "Receipt",
+  finance_settings:       "Approval limit",
 };
+
+// Finance records: only for levels with finance access (never Admin).
+const FINANCE_TYPES = ["transactions", "expense_requests", "expense_approvals", "expense_receipts", "finance_settings"];
 
 const ACTIONS = ["added", "changed", "archived", "restored", "voided", "deleted"];
 
@@ -104,10 +111,13 @@ export default function ActivityPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
   const { role } = useAuth();
-  // Admin has no finance access, so finance entries aren't offered as a filter.
-  const types = Object.keys(TYPE_LABELS).filter((k) => k !== "transactions" || can(role, "finance"));
+  // Admin has no finance access, so finance records aren't offered as a filter.
+  const types = Object.keys(TYPE_LABELS).filter((k) => !FINANCE_TYPES.includes(k) || can(role, "finance"));
+  // Changes are the Admin's audit trail; the Pastor sees screen time only.
+  const canSeeChanges = can(role, "changeLog");
 
-  const [tab, setTab]           = useState("changes");
+  const [chosenTab, setTab]     = useState("changes");
+  const tab = canSeeChanges ? chosenTab : "screen";
   const [entries, setEntries]   = useState([]);
   const [people, setPeople]     = useState({});
   const [churches, setChurches] = useState([]);
@@ -201,7 +211,11 @@ export default function ActivityPage() {
         <div>
           <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>All branches</p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Activity Log</h1>
-          <p className={`${t.textSub} text-sm mt-0.5`}>Who added, changed, archived or voided records, and when. Entries can&apos;t be edited or deleted.</p>
+          <p className={`${t.textSub} text-sm mt-0.5`}>
+            {canSeeChanges
+              ? "Who added, changed, archived or voided records, and when. Entries can't be edited or deleted."
+              : "Who opened which pages, and for how long."}
+          </p>
         </div>
         <button
           onClick={toggleTheme}
@@ -215,7 +229,7 @@ export default function ActivityPage() {
       {/* Tabs */}
       <div className={`flex gap-1 ${t.cardBg} border ${t.cardBorder} rounded-xl p-1 w-fit mb-6`}>
         {[
-          { key: "changes", label: "Changes" },
+          ...(canSeeChanges ? [{ key: "changes", label: "Changes" }] : []),
           { key: "screen",  label: "Screen time" },
         ].map((x) => (
           <button

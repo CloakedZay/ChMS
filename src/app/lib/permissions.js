@@ -37,7 +37,10 @@ export const GLOBAL_ROLES = ['admin', 'pastor']
 export const PERMISSIONS = {
   // People and accounts
   users:              { admin: 'edit' },
-  activityLog:        { admin: 'view', pastor: 'view' },
+  // Activity page: the change log is the Admin's audit trail (finance changes
+  // excluded, as Admin has no finance); screen time for Admin and Pastor.
+  changeLog:          { admin: 'view' },
+  screenTime:         { admin: 'view', pastor: 'view' },
   members:            { admin: 'view', pastor: 'view', leader: 'view', finance: 'names', secretary: 'edit', member: 'own' },
   memberImport:       { secretary: 'edit' },
   memberArchive:      { pastor: 'edit', secretary: 'edit' },
@@ -102,7 +105,7 @@ export const PAGE_FEATURES = {
   '/dashboard/chatbot':          ['aiAssistant'],
   '/dashboard/reports':          ['reports'],
   '/dashboard/users':            ['users'],
-  '/dashboard/activity':         ['activityLog'],
+  '/dashboard/activity':         ['changeLog', 'screenTime'],
 
   '/member-dashboard':              null,
   '/member-dashboard/members':      ['members'],
