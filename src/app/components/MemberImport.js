@@ -10,7 +10,9 @@ import { X, Upload, Download, Loader2, CheckCircle2, AlertTriangle, XCircle } fr
 // preview, and only good rows are added — to the Secretary's own branch,
 // by the same database rules as adding one member by hand. Possible
 // duplicates (same name already in the branch, or twice in the file) are
-// skipped unless the Secretary ticks "import them anyway".
+// skipped unless the Secretary ticks "import them anyway". Ministries are
+// not imported: the Pastor or a ministry's head assigns them (Ministries
+// page); a Ministry column in an old file is simply ignored.
 
 const TEMPLATE_URL = '/templates/faithsync-members-template.xlsx';
 // The template's example row; skipped if someone forgets to delete it.
@@ -25,7 +27,6 @@ const BATCH = 100;
 const HEADER_ALIASES = {
   full_name: ['full name', 'fullname', 'name', 'member name', 'pangalan'],
   role: ['role'],
-  ministry: ['ministry'],
   phone: ['phone', 'phone number', 'mobile', 'mobile number', 'contact', 'contact number', 'cellphone'],
   email: ['email', 'e-mail', 'email address'],
   status: ['status'],
@@ -49,7 +50,7 @@ function fixPhone(v) {
   return s;
 }
 
-function checkRows(rows, existingNames, ministries) {
+function checkRows(rows, existingNames) {
   const header = (rows[0] || []).map((h) => nameKey(h));
   const col = {};
   for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
@@ -60,8 +61,6 @@ function checkRows(rows, existingNames, ministries) {
     throw new Error('The first row must have the column headings, including "Full name". Use the template.');
   }
 
-  const ministryByKey = {};
-  ministries.forEach((m) => { ministryByKey[m.toLowerCase()] = m; });
   const seen = new Set();
   const out = [];
 
@@ -73,7 +72,6 @@ function checkRows(rows, existingNames, ministries) {
       line: idx + 2,
       full_name: get('full_name'),
       role: get('role').toLowerCase(),
-      ministry: get('ministry'),
       phone: col.phone === undefined ? '' : fixPhone(cells[col.phone]),
       email: get('email').toLowerCase(),
       status: get('status').toLowerCase() || 'active',
@@ -86,11 +84,6 @@ function checkRows(rows, existingNames, ministries) {
     }
     if (!r.full_name) r.errors.push('Full name is missing');
     if (r.role && !ROLES.includes(r.role)) r.errors.push(`Role "${get('role')}" — use ${ROLES.join(', ')}`);
-    if (r.ministry) {
-      const match = ministryByKey[r.ministry.toLowerCase()];
-      if (match) r.ministry = match;
-      else r.errors.push(`Ministry "${r.ministry}" not recognised`);
-    }
     if (!STATUSES.includes(r.status)) r.errors.push(`Status "${get('status')}" — use ${STATUSES.join(', ')}`);
     if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) r.errors.push('Email looks wrong');
 
@@ -105,7 +98,7 @@ function checkRows(rows, existingNames, ministries) {
   return out;
 }
 
-export default function MemberImport({ t, existingMembers, ministries, onClose, onImported }) {
+export default function MemberImport({ t, existingMembers, onClose, onImported }) {
   const [fileName, setFileName]     = useState('');
   const [reading, setReading]       = useState(false);
   const [rows, setRows]             = useState(null);
@@ -125,7 +118,7 @@ export default function MemberImport({ t, existingMembers, ministries, onClose, 
       const raw = await readRows(file);
       if (raw.length - 1 > MAX_ROWS) throw new Error(`That file has more than ${MAX_ROWS} rows. Please split it.`);
       const existing = new Set(existingMembers.map((m) => nameKey(m.full_name)));
-      const checked = checkRows(raw, existing, ministries);
+      const checked = checkRows(raw, existing);
       if (!checked.length) throw new Error('No member rows found under the headings.');
       setRows(checked);
     } catch (err) {
@@ -152,7 +145,6 @@ export default function MemberImport({ t, existingMembers, ministries, onClose, 
         .insert(chunk.map((r) => ({
           full_name: r.full_name,
           role: r.role || null,
-          ministry: r.ministry || null,
           phone: r.phone || null,
           email: r.email || null,
           status: r.status,
@@ -204,7 +196,7 @@ export default function MemberImport({ t, existingMembers, ministries, onClose, 
           <div className={`text-xs ${t.textSub} leading-relaxed space-y-1`}>
             <p>1. Download the Excel template and fill in the <span className="font-bold">Members</span> sheet, one person per row. Only <span className="font-bold">Full name</span> is required. The <span className="font-bold">Choices</span> sheet lists the words to use.</p>
             <p>2. <span className="font-bold">Role:</span> {ROLES.join(', ')}. <span className="font-bold">Status:</span> {STATUSES.join(', ')} (blank = active).</p>
-            <p>3. <span className="font-bold">Ministry</span> must be one of: {ministries.join(', ')}.</p>
+            <p>3. Ministries aren&apos;t imported — the Pastor or each ministry&apos;s head adds members on the Ministries page.</p>
             <p>4. Save it, then choose the file here. You&apos;ll see a preview before anything is added.</p>
           </div>
         )}
@@ -222,7 +214,7 @@ export default function MemberImport({ t, existingMembers, ministries, onClose, 
                 <thead className={`${t.tableHeadBg} ${t.textSub} uppercase tracking-widest text-[10px] sticky top-0`}>
                   <tr>
                     <th className="px-3 py-2">Row</th><th className="px-3 py-2">Full name</th><th className="px-3 py-2">Role</th>
-                    <th className="px-3 py-2">Ministry</th><th className="px-3 py-2">Phone</th><th className="px-3 py-2">Email</th>
+                    <th className="px-3 py-2">Phone</th><th className="px-3 py-2">Email</th>
                     <th className="px-3 py-2">Status</th><th className="px-3 py-2">Check</th>
                   </tr>
                 </thead>
@@ -232,7 +224,6 @@ export default function MemberImport({ t, existingMembers, ministries, onClose, 
                       <td className={`px-3 py-2 ${t.textMuted}`}>{r.line}</td>
                       <td className="px-3 py-2 font-semibold">{r.full_name || '—'}</td>
                       <td className="px-3 py-2 capitalize">{r.role || '—'}</td>
-                      <td className="px-3 py-2">{r.ministry || '—'}</td>
                       <td className="px-3 py-2">{r.phone || '—'}</td>
                       <td className="px-3 py-2">{r.email || '—'}</td>
                       <td className="px-3 py-2 capitalize">{r.status}</td>

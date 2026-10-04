@@ -21,13 +21,7 @@ const EMPTY_FORM = {
   church_id: '',
 };
 
-const MINISTRIES = [
-  "Program & Music Ministry",
-  "Mission & Evangelism",
-  "Training & Life Ministry",
-  "Building & Equipment",
-  "Finance Ministry",
-];
+// The ministry list comes from each branch's real ministries (db/022).
 
 const STATUS_COLORS = {
   approved: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -93,6 +87,7 @@ export default function EventsPage() {
   const [search, setSearch]         = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [form, setForm]             = useState(EMPTY_FORM);
+  const [ministries, setMinistries] = useState([]);
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
 
@@ -121,6 +116,8 @@ export default function EventsPage() {
     const { data, error } = await supabase.from('churches').select('id, name').order('name', { ascending: true });
     if (error) { console.error('Error fetching churches:', error.message); return; }
     if (data) setChurches(data);
+    const { data: list } = await supabase.from('ministries').select('name, church_id').eq('is_active', true).order('name');
+    setMinistries(list || []);
   }
 
   async function fetchEvents() {
@@ -199,6 +196,10 @@ export default function EventsPage() {
     const matchFilter = activeFilter === "all" || ev.status === activeFilter;
     return matchSearch && matchFilter;
   });
+
+  // Ministries of the branch the event belongs to.
+  const eventChurch = isGlobal ? form.church_id : profile?.church_id;
+  const branchMinistries = ministries.filter((m) => m.church_id === eventChurch).map((m) => m.name);
 
   const counts = {
     total:    events.length,
@@ -307,8 +308,10 @@ export default function EventsPage() {
 
               <Field label="Ministry" t={t}>
                 <select name="ministry" value={form.ministry} onChange={handleChange} className={inputStyle(t)}>
-                  <option value="">Select a ministry</option>
-                  {MINISTRIES.map((m) => <option key={m} value={m}>{m}</option>)}
+                  <option value="">{eventChurch ? 'Select a ministry' : 'Choose the branch first'}</option>
+                  {branchMinistries.map((name) => <option key={name} value={name}>{name}</option>)}
+                  {/* An older event may name a ministry that isn't in the list. */}
+                  {form.ministry && !branchMinistries.includes(form.ministry) && <option value={form.ministry}>{form.ministry}</option>}
                 </select>
               </Field>
 

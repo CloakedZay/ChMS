@@ -117,11 +117,12 @@ export default function ReportsPage() {
           .from('member_directory')
           .select('ministry');
 
-        // Group by ministry
+        // Group by ministry. The directory lists a member's real ministries
+        // as "A, B" (db/023); someone in two ministries counts in both.
         const ministryMap = {};
         (members || []).forEach((m) => {
-          const key = m.ministry || 'Unassigned';
-          ministryMap[key] = (ministryMap[key] || 0) + 1;
+          const names = m.ministry ? m.ministry.split(', ') : ['Unassigned'];
+          names.forEach((key) => { ministryMap[key] = (ministryMap[key] || 0) + 1; });
         });
         const ministryList = Object.entries(ministryMap)
           .map(([name, count]) => ({ name, count }))

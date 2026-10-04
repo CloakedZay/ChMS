@@ -23,6 +23,7 @@ export default function MemberDashboard() {
 
   const [dataLoading, setDataLoading]       = useState(true);
   const [memberCount, setMemberCount]       = useState(null);
+  const [myMinistryCount, setMyMinistryCount] = useState(null);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [totalFunds, setTotalFunds]         = useState(null);
   const [totalIncome, setTotalIncome]       = useState(null);
@@ -45,6 +46,11 @@ export default function MemberDashboard() {
       try {
         const { count: mCount } = await supabase
           .from('member_directory').select('*', { count: 'exact', head: true });
+
+        // Ministries this member is in (they only see their own, db/024).
+        const { count: myMinCount } = await supabase
+          .from('ministry_assignments').select('id', { count: 'exact', head: true });
+        setMyMinistryCount(myMinCount || 0);
 
         const { data: evts } = await supabase
           .from('events').select('id, title, date, ministry, status')
@@ -231,7 +237,7 @@ export default function MemberDashboard() {
             {[
               { label: 'Total Members',   value: dataLoading ? '...' : memberCount,           icon: '👥', href: '/member-dashboard/members' },
               { label: 'Upcoming Events', value: dataLoading ? '...' : upcomingEvents.length, icon: '📅', href: '/member-dashboard/events' },
-              { label: 'Ministries',      value: '5',                                         icon: '✝️', href: '/member-dashboard/ministries' },
+              { label: 'My Ministries',   value: dataLoading ? '...' : myMinistryCount ?? 0,  icon: '✝️', href: '/member-dashboard/ministries' },
             ].map((s) => (
               <Link
                 key={s.label}

@@ -13,19 +13,13 @@ import BranchLabel from "@/app/components/BranchLabel";
 const EMPTY_FORM = {
   full_name: '',
   role: '',
-  ministry: '',
   status: 'active',
   phone: '',
   email: '',
 };
 
-const MINISTRIES = [
-  "Program & Music Ministry",
-  "Mission & Evangelism",
-  "Training & Life Ministry",
-  "Building & Equipment",
-  "Finance Ministry",
-];
+// Ministries come from ministry_assignments (db/022). The Pastor or a
+// ministry's head assigns them on the Ministries page, not here.
 
 const STATUS_COLORS = {
   active:   "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -110,6 +104,7 @@ export default function MembersPage() {
   const [filterStatus, setFilterStatus]   = useState("all");
   const [form, setForm]                   = useState(EMPTY_FORM);
   const [showImport, setShowImport]       = useState(false);
+  const [ministriesOf, setMinistriesOf]   = useState({});  // member id → "A, B"
   // Logins linked to member records (db/014): profile id → profile.
   const [logins, setLogins]               = useState({});
   const [creatingLoginId, setCreatingLoginId] = useState(null);
@@ -128,6 +123,20 @@ export default function MembersPage() {
     setLoading(true);
     const { data } = await supabase.from('members').select('*').order('full_name');
     if (data) setMembers(data);
+    const [{ data: assigned }, { data: ministryList }] = await Promise.all([
+      supabase.from('ministry_assignments').select('member_id, ministry_id'),
+      supabase.from('ministries').select('id, name, is_active'),
+    ]);
+    const nameOf = {};
+    (ministryList || []).forEach((mi) => { if (mi.is_active) nameOf[mi.id] = mi.name; });
+    const byMember = {};
+    (assigned || []).forEach((a) => {
+      if (nameOf[a.ministry_id]) (byMember[a.member_id] ||= []).push(nameOf[a.ministry_id]);
+    });
+    const joined = {};
+    Object.entries(byMember).forEach(([id, names]) => { joined[id] = names.sort().join(', '); });
+    setMinistriesOf(joined);
+
     const ids = (data || []).map((m) => m.profile_id).filter(Boolean);
     if (ids.length) {
       const { data: profiles } = await supabase.from('profiles').select('id, email, full_name, disabled').in('id', ids);
@@ -153,7 +162,6 @@ export default function MembersPage() {
     setForm({
       full_name: member.full_name || '',
       role:      member.role      || '',
-      ministry:  member.ministry  || '',
       status:    member.status    || 'active',
       phone:     member.phone     || '',
       email:     member.email     || '',
@@ -310,7 +318,7 @@ export default function MembersPage() {
   const filtered = members.filter((m) => {
     const matchSearch =
       m.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      m.ministry?.toLowerCase().includes(search.toLowerCase()) ||
+      ministriesOf[m.id]?.toLowerCase().includes(search.toLowerCase()) ||
       m.role?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === "all" ? m.status !== ARCHIVED : m.status === filterStatus;
     return matchSearch && matchStatus;
@@ -458,7 +466,7 @@ export default function MembersPage() {
                       </div>
                     </td>
                     <td className={`px-6 py-4 ${t.textSub} text-sm capitalize`}>{member.role || '—'}</td>
-                    <td className="px-6 py-4 text-blue-400 text-xs font-medium">{member.ministry || '—'}</td>
+                    <td className="px-6 py-4 text-blue-400 text-xs font-medium">{ministriesOf[member.id] || '—'}</td>
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{member.phone || '—'}</td>
                     <td className="px-6 py-4">
                       {member.profile_id ? (
@@ -567,7 +575,6 @@ export default function MembersPage() {
         <MemberImport
           t={t}
           existingMembers={members}
-          ministries={MINISTRIES}
           onClose={() => setShowImport(false)}
           onImported={fetchMembers}
         />
@@ -697,15 +704,6 @@ export default function MembersPage() {
                   <option value="leader">Leader</option>
                   <option value="member">Member</option>
                   <option value="volunteer">Volunteer</option>
-                </select>
-              </Field>
-
-              <Field label="Ministry" t={t}>
-                <select name="ministry" value={form.ministry} onChange={handleChange} className={inputStyle(t)}>
-                  <option value="">Select a ministry</option>
-                  {MINISTRIES.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
                 </select>
               </Field>
 
