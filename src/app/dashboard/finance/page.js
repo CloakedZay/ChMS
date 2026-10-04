@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { can } from "@/app/lib/permissions";
+import { useAuth } from "@/app/context/AuthContext";
+import SpendingRequests from "@/app/components/SpendingRequests";
 import {
   Wallet, TrendingUp, TrendingDown, Plus,
   Search, X, Ban, Pencil, History, Sun, Moon
@@ -108,6 +110,8 @@ export default function FinancePage() {
   const [filterType, setFilterType]     = useState("all");
   const [form, setForm]                 = useState(EMPTY_FORM);
   const [page, setPage]                 = useState(1);
+  const [tab, setTab]                   = useState("ledger");
+  const { user } = useAuth();
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
   // Only the Finance level records money; Pastor and Leaders view.
@@ -305,7 +309,7 @@ export default function FinancePage() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          {canEdit && (
+          {canEdit && tab === "ledger" && (
             <button onClick={openAdd} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20 shrink-0">
               <Plus size={16} /> New Entry
             </button>
@@ -324,6 +328,29 @@ export default function FinancePage() {
         </div>
       )}
 
+      {/* Tabs: ledger and spending requests (F2) */}
+      <div className={`flex gap-1 ${t.cardBg} border ${t.cardBorder} rounded-xl p-1 w-fit mb-6`}>
+        {[
+          { key: "ledger",   label: "Ledger" },
+          { key: "requests", label: "Spending requests" },
+        ].map((x) => (
+          <button key={x.key} onClick={() => setTab(x.key)}
+            className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-all ${tab === x.key ? "bg-blue-600 text-white shadow" : t.textSub}`}>
+            {x.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "requests" && (
+        <SpendingRequests
+          t={t} dark={dark}
+          role={profile?.role} userId={user?.id}
+          churches={churches} isGlobal={isGlobal} branch={selectedBranch}
+          onReleased={fetchTransactions}
+        />
+      )}
+
+      {tab === "ledger" && (<>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <StatCard label="Total Balance"  amount={totalBalance} icon={Wallet}       color={A(dark, "blue")} t={t} />
         <StatCard label="Total Income"   amount={totalIncome}  icon={TrendingUp}   color={A(dark, "emerald")} t={t} />
@@ -440,6 +467,7 @@ export default function FinancePage() {
           </div>
         )}
       </div>
+      </>)}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
