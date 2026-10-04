@@ -6,7 +6,7 @@ import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import { authFetch } from "@/app/lib/authFetch";
-import { UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check } from "lucide-react";
+import { UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink } from "lucide-react";
 
 const EMPTY_FORM = {
   full_name: '',
@@ -35,6 +35,15 @@ const STATUS_COLORS = {
 // Members are archived, never deleted. Archived members drop out of the
 // directory and every count, and show only under the "archived" filter.
 const ARCHIVED = 'archived';
+
+// How alike a login's name/email is to a member's name, for sorting the
+// "Link existing login" list: shared words count most.
+function nameScore(memberName = "", login) {
+  const words = (str) => (str || "").toLowerCase().split(/[^a-z0-9ñ]+/).filter((w) => w.length > 1);
+  const target = words(memberName);
+  const theirs = new Set([...words(login.full_name), ...words(login.email?.split("@")[0])]);
+  return target.filter((w) => theirs.has(w)).length;
+}
 
 function getInitials(name = "") {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
@@ -102,6 +111,12 @@ export default function MembersPage() {
   const [creatingLoginId, setCreatingLoginId] = useState(null);
   const [newLogin, setNewLogin]           = useState(null);   // { name, email, password }
   const [copied, setCopied]               = useState(false);
+  // Step E3: link a login that already exists (self sign-up) to a record.
+  const [linkFor, setLinkFor]             = useState(null);   // member being linked
+  const [candidates, setCandidates]       = useState([]);
+  const [linkSearch, setLinkSearch]       = useState("");
+  const [linkLoading, setLinkLoading]     = useState(false);
+  const [linkingId, setLinkingId]         = useState(null);
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
@@ -235,6 +250,55 @@ export default function MembersPage() {
     } catch {
       alert('Could not copy — please write the details down instead.');
     }
+  }
+
+  // E3: logins in this branch that aren't linked to any member record yet.
+  // (People who signed up themselves appear once the Admin sets their branch.)
+  async function openLinkExisting(member) {
+    setLinkFor(member);
+    setLinkSearch("");
+    setLinkLoading(true);
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, role, disabled')
+      .eq('disabled', false);
+    const taken = new Set(members.map((m) => m.profile_id).filter(Boolean));
+    setCandidates((data || []).filter((p) => !taken.has(p.id)));
+    setLinkLoading(false);
+  }
+
+  async function linkExisting(login) {
+    const who = login.full_name || login.email;
+    if (!window.confirm(`Link ${who} (${login.email || 'no email'}) to the member record "${linkFor.full_name}"?`)) return;
+    setLinkingId(login.id);
+    const { data, error } = await supabase
+      .from('members')
+      .update({ profile_id: login.id })
+      .eq('id', linkFor.id)
+      .is('profile_id', null)
+      .select('id');
+    setLinkingId(null);
+    if (error) {
+      alert(error.code === '23505'
+        ? 'That login is already linked to another member record.'
+        : 'Could not link: ' + error.message);
+      return;
+    }
+    if (!data?.length) { alert('Could not link — this member may already have a login.'); return; }
+    setLinkFor(null);
+    await fetchMembers();
+  }
+
+  async function unlinkLogin(member) {
+    setOpenMenuId(null);
+    if (!window.confirm(`Unlink the login from "${member.full_name}"? The login itself keeps working; it just won't be connected to this member record.`)) return;
+    const { data, error } = await supabase
+      .from('members')
+      .update({ profile_id: null })
+      .eq('id', member.id)
+      .select('id');
+    if (error || !data?.length) { alert('Could not unlink: ' + (error?.message || "you don't have permission.")); return; }
+    await fetchMembers();
   }
 
   // ── Filtered list ─────────────────────────────────────────────────────────
@@ -390,13 +454,21 @@ export default function MembersPage() {
                           {logins[member.profile_id]?.disabled && <span className="ml-1 text-rose-400 font-bold">(disabled)</span>}
                         </span>
                       ) : canEdit && member.status !== ARCHIVED ? (
-                        <button
-                          onClick={() => handleCreateLogin(member)}
-                          disabled={creatingLoginId === member.id}
-                          className="flex items-center gap-1.5 text-xs font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
-                        >
-                          <KeyRound size={12} /> {creatingLoginId === member.id ? 'Creating...' : 'Create login'}
-                        </button>
+                        <div className="flex flex-col items-start gap-1">
+                          <button
+                            onClick={() => handleCreateLogin(member)}
+                            disabled={creatingLoginId === member.id}
+                            className="flex items-center gap-1.5 text-xs font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                          >
+                            <KeyRound size={12} /> {creatingLoginId === member.id ? 'Creating...' : 'Create login'}
+                          </button>
+                          <button
+                            onClick={() => openLinkExisting(member)}
+                            className={`flex items-center gap-1 text-[11px] font-semibold ${t.textSub} hover:text-blue-400 transition-colors whitespace-nowrap`}
+                          >
+                            <Link2 size={11} /> or link existing
+                          </button>
+                        </div>
                       ) : (
                         <span className={`text-xs ${t.textMuted}`}>No login</span>
                       )}
@@ -450,6 +522,14 @@ export default function MembersPage() {
                 <Pencil size={13} /> Edit
               </button>
             )}
+            {canEdit && activeMenuMember.profile_id && (
+              <button
+                onClick={() => unlinkLogin(activeMenuMember)}
+                className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}
+              >
+                <Unlink size={13} /> Unlink login
+              </button>
+            )}
             {canArchive && (activeMenuMember.status === ARCHIVED ? (
               <button
                 onClick={() => handleArchive(activeMenuMember, false)}
@@ -468,6 +548,63 @@ export default function MembersPage() {
           </div>
         </>
       )}
+
+      {/* ── Link an existing login (E3) ── */}
+      {linkFor && (() => {
+        const q = linkSearch.toLowerCase();
+        const list = candidates
+          .filter((c) => !q || c.full_name?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q))
+          .map((c) => ({ ...c, score: nameScore(linkFor.full_name, c) }))
+          .sort((a, b) => b.score - a.score || (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''));
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-lg p-6 shadow-2xl mx-4 max-h-[85vh] flex flex-col`}>
+              <div className="flex justify-between items-start mb-1">
+                <h2 className={`text-lg font-black ${t.textPrimary}`}>Link existing login</h2>
+                <button onClick={() => setLinkFor(null)} className={`${t.textSub} hover:text-blue-400 transition-colors`}><X size={18} /></button>
+              </div>
+              <p className={`text-xs ${t.textSub} mb-4`}>
+                Pick the login that belongs to <span className="font-bold">{linkFor.full_name}</span>. Closest name matches are first.
+                Someone who signed up themselves appears here once the Admin has set their branch.
+              </p>
+              <div className="relative mb-3">
+                <Search className={`absolute left-3 top-2.5 w-4 h-4 ${t.textSub}`} />
+                <input
+                  type="text"
+                  value={linkSearch}
+                  onChange={(e) => setLinkSearch(e.target.value)}
+                  placeholder="Search name or email..."
+                  className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 pl-9 pr-4 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
+                />
+              </div>
+              <div className={`flex-1 overflow-y-auto border ${t.cardBorder} rounded-xl divide-y ${t.divider}`}>
+                {linkLoading ? (
+                  <p className={`text-center py-8 text-sm ${t.textSub}`}>Loading logins...</p>
+                ) : list.length === 0 ? (
+                  <p className={`text-center py-8 text-sm ${t.textSub}`}>No unlinked logins in this branch.</p>
+                ) : list.map((c) => (
+                  <div key={c.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold ${t.textPrimary} truncate`}>
+                        {c.full_name || c.email?.split('@')[0] || 'Unnamed'}
+                        {c.score > 0 && <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-emerald-400">Match</span>}
+                      </p>
+                      <p className={`text-xs ${t.textSub} truncate`}>{c.email || 'No email'} · <span className="capitalize">{c.role}</span></p>
+                    </div>
+                    <button
+                      onClick={() => linkExisting(c)}
+                      disabled={linkingId === c.id}
+                      className="flex items-center gap-1.5 text-xs font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                    >
+                      <Link2 size={12} /> {linkingId === c.id ? 'Linking...' : 'Link'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── New login details (shown once) ── */}
       {newLogin && (

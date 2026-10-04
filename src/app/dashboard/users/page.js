@@ -57,6 +57,8 @@ export default function UsersPage() {
   const { user } = useAuth();
 
   const [users, setUsers]             = useState([]);
+  // Member record each login is linked to (db/014), by profile id.
+  const [linkedRecords, setLinkedRecords] = useState({});
   const [churches, setChurches]       = useState([]);
   const [loading, setLoading]         = useState(true);
   const [savingId, setSavingId]       = useState(null);
@@ -72,12 +74,16 @@ export default function UsersPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: profiles }, { data: churchList }] = await Promise.all([
+      const [{ data: profiles }, { data: churchList }, { data: records }] = await Promise.all([
         supabase.from('profiles').select('id, email, full_name, role, church_id, disabled').order('full_name'),
         supabase.from('churches').select('id, name').order('name'),
+        supabase.from('members').select('full_name, profile_id').not('profile_id', 'is', null),
       ]);
       setUsers(profiles || []);
       setChurches(churchList || []);
+      const map = {};
+      (records || []).forEach((r) => { map[r.profile_id] = r.full_name; });
+      setLinkedRecords(map);
       setLoading(false);
     }
     load();
@@ -283,6 +289,11 @@ export default function UsersPage() {
                               {u.disabled && <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-rose-400">Disabled</span>}
                             </p>
                             <p className={`text-xs ${t.textSub} truncate`}>{u.email}</p>
+                            {u.role === 'member' && (
+                              <p className={`text-[10px] truncate ${linkedRecords[u.id] ? t.textMuted : 'text-orange-400'}`}>
+                                {linkedRecords[u.id] ? `Member record: ${linkedRecords[u.id]}` : 'Not linked to a member record'}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>

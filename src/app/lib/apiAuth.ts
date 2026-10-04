@@ -43,9 +43,14 @@ export async function getCaller(
 
   const { data: profile } = await db
     .from("profiles")
-    .select("role, church_id")
+    .select("role, church_id, disabled")
     .eq("id", user.id)
     .single();
+
+  // A disabled login (db/013) can't use any route.
+  if (profile?.disabled) {
+    return NextResponse.json({ error: "This account has been disabled." }, { status: 403 });
+  }
 
   const role = profile?.role ?? "member";
   if (allowedRoles && !allowedRoles.includes(role)) {
