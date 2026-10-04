@@ -6,7 +6,8 @@ import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import { authFetch } from "@/app/lib/authFetch";
-import { UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink } from "lucide-react";
+import MemberImport from "@/app/components/MemberImport";
+import { FileSpreadsheet, UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 
 const EMPTY_FORM = {
@@ -96,6 +97,7 @@ export default function MembersPage() {
   // Secretary adds and edits; Pastor and Secretary archive; others view.
   const canEdit    = can(role, 'members', 'edit');
   const canArchive = can(role, 'memberArchive', 'edit');
+  const canImport  = can(role, 'memberImport', 'edit');
 
   const [members, setMembers]             = useState([]);
   const [loading, setLoading]             = useState(true);
@@ -107,6 +109,7 @@ export default function MembersPage() {
   const [search, setSearch]               = useState("");
   const [filterStatus, setFilterStatus]   = useState("all");
   const [form, setForm]                   = useState(EMPTY_FORM);
+  const [showImport, setShowImport]       = useState(false);
   // Logins linked to member records (db/014): profile id → profile.
   const [logins, setLogins]               = useState({});
   const [creatingLoginId, setCreatingLoginId] = useState(null);
@@ -346,6 +349,15 @@ export default function MembersPage() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
+          {canImport && (
+            <button
+              onClick={() => setShowImport(true)}
+              className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm border transition-all shrink-0 ${t.iconBtn}`}
+            >
+              <FileSpreadsheet size={16} />
+              Import
+            </button>
+          )}
           {canEdit && (
             <button
               onClick={openAdd}
@@ -548,6 +560,17 @@ export default function MembersPage() {
             ))}
           </div>
         </>
+      )}
+
+      {/* ── Import from Excel / CSV ── */}
+      {showImport && (
+        <MemberImport
+          t={t}
+          existingMembers={members}
+          ministries={MINISTRIES}
+          onClose={() => setShowImport(false)}
+          onImported={fetchMembers}
+        />
       )}
 
       {/* ── Link an existing login (E3) ── */}
