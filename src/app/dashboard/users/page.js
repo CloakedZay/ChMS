@@ -14,6 +14,8 @@ import { Search, UserCog, Sun, Moon, Ban, CheckCircle2, KeyRound, Copy, Check } 
 // themselves. Logins are created by signing up or by the Secretary from a
 // member record; the Admin resets forgotten passwords here.
 
+const PAGE_SIZE = 10;
+
 const LEVEL_COLORS = {
   admin:     "bg-rose-500/10 text-rose-400 border-rose-500/20",
   pastor:    "bg-violet-500/10 text-violet-400 border-violet-500/20",
@@ -66,6 +68,7 @@ export default function UsersPage() {
   const [filterLevel, setFilterLevel] = useState("all");
   const [filterChurch, setFilterChurch] = useState("all");
   const [filterAccess, setFilterAccess] = useState("all");
+  const [page, setPage]               = useState(1);
   const [resetting, setResetting]     = useState(null);
   const [newPassword, setNewPassword] = useState(null);   // { name, email, password }
   const [copied, setCopied]           = useState(false);
@@ -186,6 +189,12 @@ export default function UsersPage() {
     return (!q || matchSearch) && matchLevel && matchChurch && matchAccess;
   });
 
+  // 10 per page; a filter change goes back to page 1 (see onFilter).
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows    = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const onFilter = (setter) => (value) => { setter(value); setPage(1); };
+
   const countFor = (role) => users.filter((u) => u.role === role).length;
 
   const selectStyle = `${t.inputBg} border ${t.inputBorder} rounded-xl py-2 px-3 text-sm ${t.inputText} focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50`;
@@ -216,7 +225,7 @@ export default function UsersPage() {
         {ROLES.map((r) => (
           <button
             key={r}
-            onClick={() => setFilterLevel(filterLevel === r ? "all" : r)}
+            onClick={() => onFilter(setFilterLevel)(filterLevel === r ? "all" : r)}
             className={`text-left ${t.cardBg} border rounded-2xl px-4 py-3 backdrop-blur-sm transition-colors ${
               filterLevel === r ? "border-blue-500" : t.cardBorder
             }`}
@@ -238,20 +247,20 @@ export default function UsersPage() {
             type="text"
             placeholder="Search by name or email..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => onFilter(setSearch)(e.target.value)}
             className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 pl-9 pr-4 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
           />
         </div>
-        <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)} className={selectStyle}>
+        <select value={filterLevel} onChange={(e) => onFilter(setFilterLevel)(e.target.value)} className={selectStyle}>
           <option value="all">All levels</option>
           {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
         </select>
-        <select value={filterChurch} onChange={(e) => setFilterChurch(e.target.value)} className={selectStyle}>
+        <select value={filterChurch} onChange={(e) => onFilter(setFilterChurch)(e.target.value)} className={selectStyle}>
           <option value="all">All branches</option>
           {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           <option value="none">No branch</option>
         </select>
-        <select value={filterAccess} onChange={(e) => setFilterAccess(e.target.value)} className={selectStyle}>
+        <select value={filterAccess} onChange={(e) => onFilter(setFilterAccess)(e.target.value)} className={selectStyle}>
           <option value="all">Enabled and disabled</option>
           <option value="enabled">Enabled only</option>
           <option value="disabled">Disabled only</option>
@@ -283,7 +292,7 @@ export default function UsersPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((u) => {
+                pageRows.map((u) => {
                   const isMe   = u.id === user?.id;
                   const saving = savingId === u.id;
                   return (
@@ -382,6 +391,24 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pages */}
+        {!loading && filtered.length > 0 && (
+          <div className={`px-6 py-3 border-t ${t.divider} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`}>
+            <span className={`text-[10px] ${t.textMuted} uppercase tracking-widest`}>
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} user{filtered.length === 1 ? "" : "s"}
+            </span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${t.iconBtn}`}>Prev</button>
+                <span className={`text-xs ${t.textSub} font-semibold px-1`}>Page {currentPage} of {totalPages}</span>
+                <button type="button" onClick={() => setPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${t.iconBtn}`}>Next</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── New temporary password (shown once) ── */}
