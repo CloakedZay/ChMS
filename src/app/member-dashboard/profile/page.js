@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
 import { Save, Loader2, KeyRound } from 'lucide-react';
+import GoogleAccountCard from '@/app/components/GoogleAccountCard';
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -123,6 +124,8 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+
+        <GoogleAccountCard />
       </div>
     </div>
   );

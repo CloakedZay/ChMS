@@ -145,11 +145,11 @@ export default function DashboardLayout({ children }) {
           {/* Change password */}
           <Link
             href="/change-password"
-            title="Change password"
+            title="Password & Google sign-in"
             className="w-full flex items-center justify-center lg:justify-start gap-3 px-3 lg:px-4 py-2.5 rounded-2xl text-slate-500 hover:text-blue-400 hover:bg-blue-500/5 transition-all"
           >
             <KeyRound size={17} className="shrink-0" />
-            <span className="hidden lg:inline text-sm font-semibold">Change password</span>
+            <span className="hidden lg:inline text-sm font-semibold">Password & Google</span>
           </Link>
 
           {/* Sign Out */}

@@ -8,6 +8,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
 import { homePathFor } from '@/app/lib/permissions';
 import { Eye, EyeOff, KeyRound } from 'lucide-react';
+import GoogleAccountCard from '@/app/components/GoogleAccountCard';
 
 // First sign-in for a login the Secretary created (db/014): the member
 // replaces the temporary password with their own, then goes to their
@@ -111,7 +112,7 @@ export default function ChangePasswordPage() {
             <KeyRound className="w-6 h-6 text-blue-400" />
           </div>
           <h1 className={`text-2xl font-black ${textMain} tracking-tight`}>
-            {mustChangePassword ? 'Set your password' : 'Change password'}
+            {mustChangePassword ? 'Set your password' : 'Password & sign-in'}
           </h1>
           <p className={`${textSub} text-xs mt-2 leading-relaxed`}>
             {mustChangePassword
@@ -193,6 +194,13 @@ export default function ChangePasswordPage() {
             </Link>
           )}
         </form>
+
+        {/* Not during the forced first change — one thing at a time. */}
+        {!mustChangePassword && (
+          <div className="mt-5">
+            <GoogleAccountCard dark={dark} />
+          </div>
+        )}
       </div>
     </div>
   );
