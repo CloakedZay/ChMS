@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
+import { recordModuleView } from '@/app/lib/moduleViews';
 import {
   BookOpen, ChevronRight, ChevronUp, CheckCircle, Clock, Lock,
   Send, FileText, Download,
@@ -63,6 +64,7 @@ export default function DiscipleshipPage() {
       setExpandedModule(null);
     } else {
       setExpandedModule(moduleId);
+      recordModuleView(moduleId);
       if (!handouts[moduleId]) fetchHandouts(moduleId);
     }
   }
@@ -72,6 +74,7 @@ export default function DiscipleshipPage() {
       .from('handouts')
       .createSignedUrl(handout.file_path, 60);
     if (error) { alert('Could not generate download link.'); return; }
+    recordModuleView(handout.module_id, 'handout');
     window.open(data.signedUrl, '_blank');
   }
 

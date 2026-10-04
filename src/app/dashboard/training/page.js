@@ -8,7 +8,7 @@ import { can } from "@/app/lib/permissions";
 import {
   BookOpen, ChevronRight, ChevronDown, Upload, FileText, Trash2, Download,
   Loader2, Plus, X, Sun, Moon, CheckCircle, XCircle, Clock, MessageSquare,
-  Eye, EyeOff, HelpCircle, Users,
+  Eye, EyeOff, HelpCircle, Users, Search,
 } from "lucide-react";
 
 function formatBytes(bytes) {
@@ -319,6 +319,7 @@ export default function TrainingPage() {
         {[
           { key: "modules",     label: "Modules & Content" },
           { key: "submissions", label: "Submissions Review" },
+          { key: "progress",    label: "Member Progress" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -331,6 +332,11 @@ export default function TrainingPage() {
           </button>
         ))}
       </div>
+
+      {/* ── MEMBER PROGRESS ── */}
+      {activeTab === "progress" && (
+        <ProgressPanel t={t} dark={dark} card={card} modules={modules} questions={questions} submissions={submissions} loadingBase={loading} />
+      )}
 
       {/* ── MODULES & CONTENT ── */}
       {activeTab === "modules" && (
@@ -743,6 +749,192 @@ export default function TrainingPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Member Progress tab ─────────────────────────────────────────────────────
+// Per member: which modules they opened (module_views, db/012) and how far
+// their answers got (discipleship_progress). A module is finished when every
+// one of its questions has an approved answer. Only active modules count
+// toward the progress %. What each viewer sees is limited by the database:
+// leaders their own church, pastor and admin everyone.
+
+const MODULE_STATUS = {
+  finished:   { label: "Finished",    cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+  inProgress: { label: "In progress", cls: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+  opened:     { label: "Opened",      cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
+  notStarted: { label: "Not started", cls: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
+};
+
+function shortDate(ts) {
+  return ts ? new Date(ts).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—";
+}
+
+function ProgressPanel({ t, dark, card, modules, questions, submissions, loadingBase }) {
+  const [members, setMembers]   = useState([]);
+  const [views, setViews]       = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [search, setSearch]     = useState("");
+  const [expanded, setExpanded] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      const [{ data: profiles }, { data: mv }] = await Promise.all([
+        supabase.from("profiles").select("id, email, full_name, role").eq("role", "member"),
+        supabase.from("module_views").select("member_id, module_id, kind, created_at"),
+      ]);
+      setMembers(profiles || []);
+      setViews(mv || []);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const activeModules = modules.filter((m) => m.is_active);
+  const questionsOf = (moduleId) => questions.filter((q) => q.module_id === moduleId);
+  const totalQuestions = activeModules.reduce((n, m) => n + questionsOf(m.id).length, 0);
+
+  function summarize(memberId) {
+    const subs   = submissions.filter((s) => s.member_id === memberId);
+    const myView = views.filter((v) => v.member_id === memberId);
+    const perModule = activeModules.map((m) => {
+      const qIds     = new Set(questionsOf(m.id).map((q) => q.id));
+      const mySubs   = subs.filter((s) => qIds.has(s.question_id));
+      const approved = mySubs.filter((s) => s.status === "approved").length;
+      const opens    = myView.filter((v) => v.module_id === m.id && v.kind === "opened");
+      const handouts = myView.filter((v) => v.module_id === m.id && v.kind === "handout").length;
+      const status =
+        qIds.size > 0 && approved === qIds.size ? "finished" :
+        mySubs.length > 0 ? "inProgress" :
+        opens.length > 0  ? "opened" : "notStarted";
+      return {
+        module: m, status, approved, answered: mySubs.length, total: qIds.size,
+        opens: opens.length, handouts,
+        lastOpened: opens.reduce((a, v) => (v.created_at > a ? v.created_at : a), null),
+      };
+    });
+    const approvedTotal = perModule.reduce((n, x) => n + x.approved, 0);
+    const lastActivity = [...myView.map((v) => v.created_at), ...subs.map((s) => s.updated_at || s.created_at)]
+      .filter(Boolean)
+      .sort()
+      .pop() || null;
+    return {
+      perModule,
+      pct: totalQuestions > 0 ? Math.round((approvedTotal / totalQuestions) * 100) : 0,
+      finished: perModule.filter((x) => x.status === "finished").length,
+      opened: perModule.filter((x) => x.opens > 0).length,
+      lastActivity,
+    };
+  }
+
+  // Members with a login, plus anyone else who has answers or views here.
+  const memberIds = new Set([
+    ...members.map((m) => m.id),
+    ...submissions.map((s) => s.member_id),
+    ...views.map((v) => v.member_id),
+  ]);
+  const profileOf = (id) => members.find((m) => m.id === id);
+  const nameOf = (id) => {
+    const p = profileOf(id);
+    return p?.full_name || p?.email?.split("@")[0] || `Member ...${String(id).slice(-6)}`;
+  };
+
+  const q = search.toLowerCase();
+  const rows = [...memberIds]
+    .map((id) => ({ id, name: nameOf(id), email: profileOf(id)?.email || "", ...summarize(id) }))
+    .filter((r) => !q || r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q))
+    .sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name));
+
+  if (loading || loadingBase) {
+    return (
+      <div className={`flex items-center justify-center gap-2 py-14 ${t.textMuted} text-sm`}>
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading member progress...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative flex-1">
+          <Search className={`absolute left-3 top-2.5 w-4 h-4 ${t.textSub}`} />
+          <input
+            type="text"
+            placeholder="Search members..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 pl-9 pr-4 text-sm ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
+          />
+        </div>
+        <p className={`text-xs ${t.textMuted}`}>
+          {activeModules.length} active module{activeModules.length === 1 ? "" : "s"} · {totalQuestions} question{totalQuestions === 1 ? "" : "s"} · members with a login only
+        </p>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className={`py-16 text-center border border-dashed ${t.dashed} rounded-3xl`}>
+          <Users className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-3`} />
+          <p className={`${t.textMuted} text-sm`}>No members found.</p>
+        </div>
+      ) : (
+        <div className={`${card} overflow-hidden divide-y ${t.innerDivider}`}>
+          {rows.map((r) => {
+            const isOpen = expanded === r.id;
+            return (
+              <div key={r.id}>
+                <button
+                  onClick={() => setExpanded(isOpen ? null : r.id)}
+                  className={`w-full text-left px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-5 ${t.hoverRow} transition-colors`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{r.name}</p>
+                    {r.email && <p className={`text-xs ${t.textSub} truncate`}>{r.email}</p>}
+                  </div>
+                  <div className="sm:w-48">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={t.textSub}>Progress</span>
+                      <span className={`font-black ${A(dark, "blue")}`}>{r.pct}%</span>
+                    </div>
+                    <div className={`w-full h-1.5 ${t.deepCard} rounded-full overflow-hidden`}>
+                      <div className="h-full bg-blue-500 rounded-full transition-all duration-700" style={{ width: `${r.pct}%` }} />
+                    </div>
+                  </div>
+                  <span className={`text-xs ${t.textSub} sm:w-28`}>
+                    <span className={`font-black ${A(dark, "emerald")}`}>{r.finished}</span> finished · {r.opened} opened
+                  </span>
+                  <span className={`text-xs ${t.textMuted} sm:w-32`}>Last active {shortDate(r.lastActivity)}</span>
+                  <span className={`${t.textMuted} hidden sm:block`}>
+                    {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="px-5 pb-4">
+                    <div className={`${t.deepCard} rounded-2xl border ${t.innerDivider} divide-y ${t.innerDivider}`}>
+                      {r.perModule.length === 0 ? (
+                        <p className={`px-4 py-3 text-xs ${t.textMuted}`}>No active modules.</p>
+                      ) : r.perModule.map((x) => (
+                        <div key={x.module.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-4 py-3 text-xs">
+                          <span className={`flex-1 min-w-0 font-bold ${t.textPrimary} truncate`}>{x.module.title}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border w-fit ${MODULE_STATUS[x.status].cls}`}>
+                            {MODULE_STATUS[x.status].label}
+                          </span>
+                          <span className={`${t.textSub} sm:w-36`}>{x.approved}/{x.total} approved · {x.answered} answered</span>
+                          <span className={`${t.textSub} sm:w-40`}>
+                            Opened {x.opens}× {x.lastOpened ? `(last ${shortDate(x.lastOpened)})` : ""}
+                          </span>
+                          <span className={`${t.textSub} sm:w-24`}>{x.handouts} download{x.handouts === 1 ? "" : "s"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

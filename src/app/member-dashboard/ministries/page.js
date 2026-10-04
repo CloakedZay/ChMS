@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { recordModuleView } from '@/app/lib/moduleViews';
 import {
   ChevronRight, ChevronDown, BookOpen, FileText,
   Download, Loader2, ClipboardList,
@@ -61,6 +62,7 @@ export default function MemberMinistriesPage() {
       setExpandedModule(null);
     } else {
       setExpandedModule(moduleId);
+      recordModuleView(moduleId);
       if (!handouts[moduleId]) fetchHandouts(moduleId);
     }
   }
@@ -70,6 +72,7 @@ export default function MemberMinistriesPage() {
       .from('handouts')
       .createSignedUrl(handout.file_path, 60);
     if (error) { alert('Could not generate download link.'); return; }
+    recordModuleView(handout.module_id, 'handout');
     window.open(data.signedUrl, '_blank');
   }
 
