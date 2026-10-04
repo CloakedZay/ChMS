@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { stripPageMarkers } from "@/app/lib/pdfText";
 import { getCaller, resolveChurchId, CONTENT_ROLES, AI_DOCUMENT_VIEWERS } from "@/app/lib/apiAuth";
 
 export const runtime = "nodejs";
@@ -14,7 +15,7 @@ async function extractText(file: File): Promise<string> {
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
     try {
       const result = await parser.getText();
-      return result.text;
+      return stripPageMarkers(result.text);
     } finally {
       await parser.destroy();
     }
