@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
+import Link from "next/link";
 import { GLOBAL_ROLES } from "@/app/lib/permissions";
 import {
   ChevronRight, ChevronDown, Plus, X, Sun, Moon, Pencil, UserPlus,
@@ -18,7 +19,9 @@ import BranchLabel from "@/app/components/BranchLabel";
 //   ministry's head   (a Leader set as its login) add or remove members of
 //                     their own ministry
 //   others            view
-// Training modules and handouts are managed on the Training page.
+// Each ministry lists its own modules (step M3, db/025); the Pastor or the
+// ministry's head can add one here. Questions and handouts are managed on
+// the Training page.
 
 const COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#f43f5e", "#06b6d4", "#64748b"];
 const EMPTY = { name: "", description: "", head_name: "", leader_id: "", meeting_schedule: "", color_code: COLORS[0], is_active: true, church_id: "" };
@@ -75,20 +78,29 @@ export default function MinistriesPage() {
   const [formError, setFormError] = useState("");
 
   const [addPick, setAddPick]   = useState({});    // ministry id → member id
+  const [modules, setModules]   = useState([]);
+  const [questionCount, setQuestionCount] = useState({});   // module id → n
+  const [newModule, setNewModule] = useState({});  // ministry id → title being typed
   const [busy, setBusy]         = useState(null);
 
   async function load() {
-    const [m, a, mem, lead, ch] = await Promise.all([
+    const [m, a, mem, lead, ch, mods, qs] = await Promise.all([
       supabase.from("ministries").select("*").order("name"),
       supabase.from("ministry_assignments").select("id, ministry_id, member_id, role, assigned_at"),
       supabase.from("members").select("id, full_name, status, church_id").order("full_name"),
       supabase.from("profiles").select("id, full_name, email, church_id, role").eq("role", "leader"),
       supabase.from("churches").select("id, name").order("name"),
+      supabase.from("discipleship_modules").select("id, title, is_active, order_index, ministry_id").not("ministry_id", "is", null).order("order_index"),
+      supabase.from("discipleship_questions").select("module_id"),
     ]);
-    return { m: m.data || [], a: a.data || [], mem: mem.data || [], lead: lead.data || [], ch: ch.data || [] };
+    const qc = {};
+    (qs.data || []).forEach((q) => { qc[q.module_id] = (qc[q.module_id] || 0) + 1; });
+    return { m: m.data || [], a: a.data || [], mem: mem.data || [], lead: lead.data || [], ch: ch.data || [], mods: mods.data || [], qc };
   }
 
-  function apply({ m, a, mem, lead, ch }) {
+  function apply({ m, a, mem, lead, ch, mods, qc }) {
+    setModules(mods);
+    setQuestionCount(qc);
     setMinistries(m);
     setAssignments(a);
     setMembers(mem);
@@ -186,16 +198,32 @@ export default function MinistriesPage() {
     await refresh();
   }
 
+  // ── Modules of a ministry (Pastor or its head) ──────────────────────────
+  async function addModule(m) {
+    const title = (newModule[m.id] || "").trim();
+    if (!title) return;
+    setBusy(`mod-${m.id}`);
+    const next = modules.filter((x) => x.ministry_id === m.id).reduce((n, x) => Math.max(n, x.order_index || 0), 0) + 1;
+    const { error } = await supabase.from("discipleship_modules").insert({ title, ministry_id: m.id, order_index: next, is_active: true });
+    setBusy(null);
+    if (error) { alert("Could not add the module: " + error.message); return; }
+    setNewModule((p) => ({ ...p, [m.id]: "" }));
+    await refresh();
+  }
+
   // ── UI ──────────────────────────────────────────────────────────────────
   const input = `w-full ${t.inputBg} border ${t.inputBorder} ${t.inputText} rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500 placeholder:text-slate-500`;
 
-  function MinistryCard({ m }) {
+  // Called as a function (not <MinistryCard />) so the card isn't rebuilt
+  // on every keystroke, which would drop the cursor from its text boxes.
+  function renderMinistryCard(m) {
     const isOpen = expanded === m.id;
     const people = peopleIn(m.id);
     const head = m.head_name || (m.leader_id ? leaderName(leaderById(m.leader_id)) : null);
     const assignable = canAssign(m);
     const taken = new Set(people.map((a) => a.member_id));
     const candidates = members.filter((x) => x.church_id === m.church_id && x.status !== "archived" && !taken.has(x.id));
+    const ministryModules = modules.filter((x) => x.ministry_id === m.id);
 
     return (
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm ${m.is_active ? "" : "opacity-60"}`}>
@@ -297,6 +325,41 @@ export default function MinistriesPage() {
                 </div>
               )}
             </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Training modules</p>
+                <Link href="/dashboard/training" className="text-xs text-blue-400 hover:text-blue-300 font-bold">
+                  Questions &amp; handouts on Training →
+                </Link>
+              </div>
+              {ministryModules.length === 0 ? (
+                <p className={`text-xs ${t.textMuted} mb-3`}>No modules for this ministry yet. Members still follow the general discipleship path.</p>
+              ) : (
+                <div className={`border ${t.cardBorder} rounded-2xl divide-y ${t.divider} mb-3`}>
+                  {ministryModules.map((x, i) => (
+                    <div key={x.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className={`text-xs font-black ${t.textMuted} w-5`}>{i + 1}</span>
+                      <BookOpen size={14} className="text-blue-400 shrink-0" />
+                      <p className={`flex-1 min-w-0 text-sm font-semibold ${t.textPrimary} truncate`}>{x.title}</p>
+                      <span className={`text-[10px] ${t.textMuted}`}>{questionCount[x.id] || 0} question{questionCount[x.id] === 1 ? "" : "s"}</span>
+                      {!x.is_active && <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Hidden</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {assignable && m.is_active && (
+                <div className="flex gap-2">
+                  <input value={newModule[m.id] || ""} onChange={(e) => setNewModule((p) => ({ ...p, [m.id]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") addModule(m); }}
+                    placeholder={`New module for ${m.name}…`} className={input} />
+                  <button onClick={() => addModule(m)} disabled={!(newModule[m.id] || "").trim() || busy === `mod-${m.id}`}
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold px-4 rounded-xl shrink-0">
+                    {busy === `mod-${m.id}` ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Add
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -349,13 +412,13 @@ export default function MinistriesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {active.map((m) => <MinistryCard key={m.id} m={m} />)}
+          {active.map((m) => <div key={m.id}>{renderMinistryCard(m)}</div>)}
           {off.length > 0 && isPastor && (
             <>
               <button onClick={() => setShowOff((v) => !v)} className={`text-xs font-bold ${t.textSub} hover:text-blue-400 flex items-center gap-1 pt-2`}>
                 {showOff ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Switched off ({off.length})
               </button>
-              {showOff && off.map((m) => <MinistryCard key={m.id} m={m} />)}
+              {showOff && off.map((m) => <div key={m.id}>{renderMinistryCard(m)}</div>)}
             </>
           )}
         </div>
@@ -363,7 +426,7 @@ export default function MinistriesPage() {
 
       <div className={`${t.cardBg} border border-dashed ${t.dashed} rounded-3xl p-5 flex items-center gap-3`}>
         <BookOpen className={`w-5 h-5 ${t.emptyIcon} shrink-0`} />
-        <p className={`text-xs ${t.textMuted}`}>Training modules and handouts are on the <span className="font-bold">Training</span> page. Modules for each ministry are coming next.</p>
+        <p className={`text-xs ${t.textMuted}`}>General discipleship modules, questions and handouts are managed on the <span className="font-bold">Training</span> page.</p>
       </div>
 
       {/* Add / edit ministry (Pastor) */}

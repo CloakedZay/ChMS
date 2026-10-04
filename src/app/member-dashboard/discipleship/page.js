@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
 import { recordModuleView } from '@/app/lib/moduleViews';
@@ -27,14 +27,24 @@ export default function DiscipleshipPage() {
   const [submitting, setSubmitting]         = useState(false);
   const [submitMsg, setSubmitMsg]           = useState({});
   const [handouts, setHandouts]             = useState({});
+  const [myMinistries, setMyMinistries]     = useState([]);   // { id, name }
 
   useEffect(() => {
     if (!user) return;
     async function fetchTraining() {
-      const { data: mods } = await supabase
+      const { data: allMods } = await supabase
         .from('discipleship_modules')
         .select('*').eq('is_active', true)
         .order('order_index', { ascending: true });
+      // The general path plus the modules of this member's ministries (M3).
+      const [{ data: assigned }, { data: mins }] = await Promise.all([
+        supabase.from('ministry_assignments').select('ministry_id'),
+        supabase.from('ministries').select('id, name').eq('is_active', true),
+      ]);
+      const mineIds = new Set((assigned || []).map((a) => a.ministry_id));
+      const mine = (mins || []).filter((m) => mineIds.has(m.id)).sort((a, b) => a.name.localeCompare(b.name));
+      setMyMinistries(mine);
+      const mods = (allMods || []).filter((m) => !m.ministry_id || mineIds.has(m.ministry_id));
 
       const { data: qs } = await supabase
         .from('discipleship_questions')
@@ -85,11 +95,22 @@ export default function DiscipleshipPage() {
     const qs = moduleQuestions(moduleId);
     return qs.length > 0 && qs.every(q => getProgress(q.id)?.status === 'approved');
   };
+  // Each group (general path, each ministry) has its own order: a module
+  // opens once the previous one in the same group is complete.
+  const byOrder = (a, b) => (a.order_index || 0) - (b.order_index || 0);
+  const groupOf = (mod) => modules.filter(m => (m.ministry_id || null) === (mod.ministry_id || null)).sort(byOrder);
   const isModuleUnlocked = (mod) => {
-    if (mod.order_index <= 1) return true;
-    const prev = modules.find(m => m.order_index === mod.order_index - 1);
-    return prev ? isModuleComplete(prev.id) : false;
+    const group = groupOf(mod);
+    const i = group.findIndex(m => m.id === mod.id);
+    return i <= 0 || isModuleComplete(group[i - 1].id);
   };
+  const orderedModules = [
+    ...modules.filter(m => !m.ministry_id).sort(byOrder),
+    ...myMinistries.flatMap(mi => modules.filter(m => m.ministry_id === mi.id).sort(byOrder)),
+  ];
+  const groupLabel = (mod) => mod.ministry_id
+    ? (myMinistries.find(mi => mi.id === mod.ministry_id)?.name || 'Ministry') + ' modules'
+    : 'Discipleship path';
   const isModuleSubmitted = (moduleId) =>
     moduleQuestions(moduleId).some(q => getProgress(q.id));
 
@@ -180,7 +201,8 @@ export default function DiscipleshipPage() {
             <p className="text-slate-600 text-sm">No modules have been set up yet.</p>
             <p className="text-slate-700 text-xs mt-1">Your pastor will add them soon.</p>
           </div>
-        ) : modules.map((mod) => {
+        ) : orderedModules.map((mod, idx) => {
+          const newGroup  = idx === 0 || (orderedModules[idx - 1].ministry_id || null) !== (mod.ministry_id || null);
           const unlocked  = isModuleUnlocked(mod);
           const complete  = isModuleComplete(mod.id);
           const submitted = isModuleSubmitted(mod.id);
@@ -188,8 +210,11 @@ export default function DiscipleshipPage() {
           const isOpen    = expandedModule === mod.id;
 
           return (
+            <Fragment key={mod.id}>
+            {newGroup && (
+              <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold pt-2">{groupLabel(mod)}</p>
+            )}
             <div
-              key={mod.id}
               className={`rounded-3xl border overflow-hidden transition-all ${
                 complete  ? 'bg-emerald-500/5 border-emerald-500/20' :
                 !unlocked ? 'bg-[#1a1d2e]/40 border-white/5 opacity-60' :
@@ -356,6 +381,7 @@ export default function DiscipleshipPage() {
                 </div>
               )}
             </div>
+            </Fragment>
           );
         })}
       </div>

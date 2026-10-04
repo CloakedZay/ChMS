@@ -8,7 +8,8 @@ import BranchLabel from '@/app/components/BranchLabel';
 
 // The member's ministries (step M2, db/022 + db/024): the ones they belong
 // to, then the other ministries of their branch. The Pastor or a
-// ministry's head adds members; training modules are on Discipleship.
+// ministry's head adds members. Each of the member's ministries lists its
+// training modules (M3); they're taken on the Discipleship page.
 
 const shortDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
@@ -19,18 +20,21 @@ function initials(name = '') {
 export default function MemberMinistriesPage() {
   const [ministries, setMinistries] = useState([]);
   const [mine, setMine]             = useState([]);   // { ministry_id, assigned_at }
+  const [modules, setModules]       = useState([]);
   const [loading, setLoading]       = useState(true);
 
   useEffect(() => {
     async function load() {
       // Members only see their own branch's ministries and their own
       // assignments (database rules).
-      const [{ data: list }, { data: assigned }] = await Promise.all([
+      const [{ data: list }, { data: assigned }, { data: mods }] = await Promise.all([
         supabase.from('ministries').select('id, name, description, head_name, meeting_schedule, color_code').eq('is_active', true).order('name'),
         supabase.from('ministry_assignments').select('ministry_id, assigned_at'),
+        supabase.from('discipleship_modules').select('id, title, ministry_id, order_index').eq('is_active', true).not('ministry_id', 'is', null).order('order_index'),
       ]);
       setMinistries(list || []);
       setMine(assigned || []);
+      setModules(mods || []);
       setLoading(false);
     }
     load();
@@ -82,6 +86,19 @@ export default function MemberMinistriesPage() {
                         <p className="flex items-center gap-2"><UserRound size={13} /> Head: <span className="text-white/80 font-semibold">{m.head_name || 'Not set'}</span></p>
                         <p className="flex items-center gap-2"><CalendarClock size={13} /> Meets: <span className="text-white/80 font-semibold">{m.meeting_schedule || '—'}</span></p>
                       </div>
+                      {modules.some((x) => x.ministry_id === m.id) && (
+                        <div className="mt-4 pt-3 border-t border-white/5">
+                          <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold mb-2">Training modules</p>
+                          <div className="space-y-1">
+                            {modules.filter((x) => x.ministry_id === m.id).map((x, i) => (
+                              <Link key={x.id} href="/member-dashboard/discipleship"
+                                className="flex items-center gap-2 text-xs text-white/70 hover:text-blue-400 transition-colors">
+                                <span className="text-white/30 w-4">{i + 1}</span><BookOpen size={12} className="text-blue-400" /> {x.title}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

@@ -65,12 +65,22 @@ function A(dark, color) {
 export default function TrainingPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const canEdit   = can(role, 'modules', 'edit');
   const canReview = can(role, 'answerReview', 'approve');
 
   const [activeTab, setActiveTab] = useState("modules");
   const [loading, setLoading]     = useState(true);
+
+  // ── Ministries (step M3, db/025): a module is general (no ministry) or
+  // belongs to one ministry. Pastor edits any module; a Leader edits general
+  // modules and those of ministries they head. ─────────────────────────────
+  const [ministries, setMinistries] = useState([]);
+  const headedIds = new Set(ministries.filter((m) => m.leader_id && m.leader_id === user?.id).map((m) => m.id));
+  const canEditGroup = (ministryId) =>
+    role === "pastor" || (role === "leader" && (!ministryId || headedIds.has(ministryId)));
+  const canEditModule = (mod) => canEditGroup(mod.ministry_id);
+  const ministryName = (id) => ministries.find((m) => m.id === id)?.name || "Ministry";
 
   // ── Modules & questions ───────────────────────────────────────────────────
   const [modules, setModules]     = useState([]);
@@ -80,6 +90,7 @@ export default function TrainingPage() {
   const [showAddModule, setShowAddModule]   = useState(false);
   const [newModuleTitle, setNewModuleTitle] = useState("");
   const [newModuleDesc, setNewModuleDesc]   = useState("");
+  const [newModuleGroup, setNewModuleGroup] = useState("");   // "" = general, else ministry id
   const [addingModule, setAddingModule]     = useState(false);
 
   const [newQuestionText, setNewQuestionText] = useState({});
@@ -105,12 +116,14 @@ export default function TrainingPage() {
   useEffect(() => {
     async function fetchAll() {
       setLoading(true);
-      const [{ data: mods }, { data: qs }, { data: subs }] = await Promise.all([
+      const [{ data: mods }, { data: qs }, { data: subs }, { data: mins }] = await Promise.all([
         supabase.from("discipleship_modules").select("*").order("order_index", { ascending: true }),
         supabase.from("discipleship_questions").select("*").order("order_index", { ascending: true }),
         supabase.from("discipleship_progress").select("*, discipleship_questions(question, order_index, module_id)").order("created_at", { ascending: false }),
+        supabase.from("ministries").select("id, name, leader_id, church_id, is_active").order("name"),
       ]);
       setModules(mods || []);
+      setMinistries(mins || []);
       setQuestions(qs || []);
       setSubmissions(subs || []);
       if (subs && subs.length > 0) {
@@ -139,12 +152,16 @@ export default function TrainingPage() {
   async function handleAddModule() {
     if (!newModuleTitle.trim()) return;
     setAddingModule(true);
-    const maxOrder = modules.reduce((a, m) => Math.max(a, m.order_index || 0), 0);
+    const group = newModuleGroup || null;
+    const maxOrder = modules
+      .filter((m) => (m.ministry_id || null) === group)
+      .reduce((a, m) => Math.max(a, m.order_index || 0), 0);
     const { error } = await supabase.from("discipleship_modules").insert({
       title:       newModuleTitle.trim(),
       description: newModuleDesc.trim() || null,
       order_index: maxOrder + 1,
       is_active:   true,
+      ministry_id: group,
     });
     if (!error) {
       await refetchModules();
@@ -292,6 +309,19 @@ export default function TrainingPage() {
 
   const card = `${t.cardBg} border ${t.cardBorder} rounded-3xl backdrop-blur-sm`;
 
+  const byOrder = (a, b) => (a.order_index || 0) - (b.order_index || 0);
+  const moduleGroups = [
+    { key: "general", label: "General discipleship path", modules: modules.filter((m) => !m.ministry_id).sort(byOrder) },
+    ...[...new Set(modules.filter((m) => m.ministry_id).map((m) => m.ministry_id))]
+      .map((id) => ({ key: id, label: ministryName(id), modules: modules.filter((m) => m.ministry_id === id).sort(byOrder) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  ].filter((g) => g.modules.length);
+  // Where the signed-in person may add a module.
+  const addableGroups = [
+    ...(canEditGroup(null) ? [{ id: "", name: "General discipleship path" }] : []),
+    ...ministries.filter((m) => m.is_active && canEditGroup(m.id)).map((m) => ({ id: m.id, name: m.name })),
+  ];
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
 
@@ -354,9 +384,9 @@ export default function TrainingPage() {
       {activeTab === "modules" && (
         <div className="space-y-4">
           <div className="flex justify-end">
-            {canEdit && (
+            {canEdit && addableGroups.length > 0 && (
             <button
-              onClick={() => setShowAddModule(true)}
+              onClick={() => { setNewModuleGroup(addableGroups[0].id); setShowAddModule(true); }}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-95"
             >
               <Plus size={14} /> Add Module
@@ -375,8 +405,14 @@ export default function TrainingPage() {
               <p className={`${t.textMuted} text-xs mt-1 opacity-60`}>Add one to start building your discipleship curriculum.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {modules.map((mod) => {
+            <div className="space-y-6">
+              {moduleGroups.map((g) => (
+              <div key={g.key} className="space-y-3">
+                <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>
+                  {g.label} <span className={t.textMuted}>· {g.modules.length} module{g.modules.length === 1 ? "" : "s"}</span>
+                </p>
+              {g.modules.map((mod) => {
+                const canEditMod = canEditModule(mod);
                 const isOpen    = expandedModule === mod.id;
                 const modQs     = questions.filter((q) => q.module_id === mod.id);
                 const modFiles  = handouts[mod.id] || [];
@@ -398,14 +434,14 @@ export default function TrainingPage() {
                         <span className={`text-[10px] ${t.textMuted}`}>{modQs.length} question{modQs.length !== 1 ? "s" : ""}</span>
                         <button
                           onClick={() => handleToggleActive(mod)}
-                          disabled={!canEdit}
-                          title={!canEdit
+                          disabled={!canEditMod}
+                          title={!canEditMod
                             ? (mod.is_active ? "Visible to members" : "Hidden from members")
                             : mod.is_active ? "Visible to members — click to hide" : "Hidden from members — click to activate"}
                           className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-colors disabled:cursor-default ${
                             mod.is_active
-                              ? `bg-emerald-500/10 text-emerald-400 border-emerald-500/20 ${canEdit ? "hover:bg-emerald-500/20" : ""}`
-                              : `bg-slate-500/10 text-slate-500 border-slate-500/20 ${canEdit ? "hover:bg-slate-500/20" : ""}`
+                              ? `bg-emerald-500/10 text-emerald-400 border-emerald-500/20 ${canEditMod ? "hover:bg-emerald-500/20" : ""}`
+                              : `bg-slate-500/10 text-slate-500 border-slate-500/20 ${canEditMod ? "hover:bg-slate-500/20" : ""}`
                           }`}
                         >
                           {mod.is_active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -433,7 +469,7 @@ export default function TrainingPage() {
                                 <div key={q.id} className={`flex items-center gap-3 p-3 ${t.deepCard} rounded-xl border ${t.innerDivider}`}>
                                   <span className="text-xs font-black text-blue-400 shrink-0">Q{qi + 1}</span>
                                   <p className={`flex-1 text-xs ${t.textPrimary}`}>{q.question}</p>
-                                  {canEdit && (
+                                  {canEditMod && (
                                   <button
                                     onClick={() => handleDeleteQuestion(q)}
                                     className={`${t.textMuted} hover:text-rose-400 hover:bg-rose-500/10 p-1 rounded-lg transition-colors shrink-0`}
@@ -445,7 +481,7 @@ export default function TrainingPage() {
                               ))}
                             </div>
                           )}
-                          {canEdit && (
+                          {canEditMod && (
                           <div className="flex gap-2">
                             <input
                               type="text"
@@ -493,7 +529,7 @@ export default function TrainingPage() {
                                     <button onClick={() => handleDownload(hf)} title="Download" className={`p-1.5 ${t.textSub} hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors`}>
                                       <Download className="w-3.5 h-3.5" />
                                     </button>
-                                    {canEdit && (
+                                    {canEditMod && (
                                     <button onClick={() => handleDeleteHandout(hf, mod.id)} title="Delete" className={`p-1.5 ${t.textSub} hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors`}>
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -504,7 +540,7 @@ export default function TrainingPage() {
                             </div>
                           )}
 
-                          {canEdit && (
+                          {canEditMod && (
                           <div className="space-y-2">
                             <input
                               type="text"
@@ -540,6 +576,8 @@ export default function TrainingPage() {
                   </div>
                 );
               })}
+              </div>
+              ))}
             </div>
           )}
         </div>
@@ -721,6 +759,21 @@ export default function TrainingPage() {
             <div className="space-y-3">
               <div>
                 <label className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
+                  For
+                </label>
+                <select
+                  value={newModuleGroup}
+                  onChange={(e) => setNewModuleGroup(e.target.value)}
+                  className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-4 py-2.5 text-sm ${t.textPrimary} focus:outline-none focus:border-blue-500 transition-colors`}
+                >
+                  {addableGroups.map((g) => <option key={g.id || "general"} value={g.id}>{g.name}</option>)}
+                </select>
+                <p className={`text-[10px] ${t.textMuted} mt-1`}>
+                  General modules are for everyone, in order. Ministry modules are only for that ministry&apos;s members, in their own order.
+                </p>
+              </div>
+              <div>
+                <label className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
                   Module Title <span className="text-rose-400">*</span>
                 </label>
                 <input
@@ -791,13 +844,25 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState("");
   const [expanded, setExpanded] = useState(null);
+  // login id → ministry ids, via the member record linked to that login.
+  const [ministriesOfLogin, setMinistriesOfLogin] = useState({});
 
   useEffect(() => {
     async function load() {
-      const [{ data: profiles }, { data: mv }] = await Promise.all([
+      const [{ data: profiles }, { data: mv }, { data: records }, { data: assigned }] = await Promise.all([
         supabase.from("profiles").select("id, email, full_name, role").eq("role", "member"),
         supabase.from("module_views").select("member_id, module_id, kind, created_at"),
+        supabase.from("members").select("id, profile_id").not("profile_id", "is", null),
+        supabase.from("ministry_assignments").select("member_id, ministry_id"),
       ]);
+      const loginOf = {};
+      (records || []).forEach((r) => { loginOf[r.id] = r.profile_id; });
+      const map = {};
+      (assigned || []).forEach((a) => {
+        const login = loginOf[a.member_id];
+        if (login) (map[login] ||= new Set()).add(a.ministry_id);
+      });
+      setMinistriesOfLogin(map);
       setMembers(profiles || []);
       setViews(mv || []);
       setLoading(false);
@@ -807,12 +872,20 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
 
   const activeModules = modules.filter((m) => m.is_active);
   const questionsOf = (moduleId) => questions.filter((q) => q.module_id === moduleId);
-  const totalQuestions = activeModules.reduce((n, m) => n + questionsOf(m.id).length, 0);
+  const generalModules = activeModules.filter((m) => !m.ministry_id);
+  const generalQuestions = generalModules.reduce((n, m) => n + questionsOf(m.id).length, 0);
+  // A member's modules: the general path plus their own ministries' (M3).
+  const modulesFor = (memberId) => {
+    const mine = ministriesOfLogin[memberId];
+    return activeModules.filter((m) => !m.ministry_id || mine?.has(m.ministry_id));
+  };
 
   function summarize(memberId) {
     const subs   = submissions.filter((s) => s.member_id === memberId);
     const myView = views.filter((v) => v.member_id === memberId);
-    const perModule = activeModules.map((m) => {
+    const myModules = modulesFor(memberId);
+    const totalQuestions = myModules.reduce((n, m) => n + questionsOf(m.id).length, 0);
+    const perModule = myModules.map((m) => {
       const qIds     = new Set(questionsOf(m.id).map((q) => q.id));
       const mySubs   = subs.filter((s) => qIds.has(s.question_id));
       const approved = mySubs.filter((s) => s.status === "approved").length;
@@ -882,7 +955,7 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
           />
         </div>
         <p className={`text-xs ${t.textMuted}`}>
-          {activeModules.length} active module{activeModules.length === 1 ? "" : "s"} · {totalQuestions} question{totalQuestions === 1 ? "" : "s"} · members with a login only
+          {generalModules.length} general module{generalModules.length === 1 ? "" : "s"} ({generalQuestions} question{generalQuestions === 1 ? "" : "s"}) plus each member&apos;s ministry modules · members with a login only
         </p>
       </div>
 
