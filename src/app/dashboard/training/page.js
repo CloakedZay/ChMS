@@ -262,9 +262,20 @@ export default function TrainingPage() {
     setReviewing((p) => ({ ...p, [progressId]: true }));
     const note = reviewNotes[progressId]?.trim() || null;
     // The database records who reviewed it and when (db/008).
-    await supabase.from("discipleship_progress").update({ status, notes: note }).eq("id", progressId);
-    setSubmissions((prev) => prev.map((s) => (s.id === progressId ? { ...s, status, notes: note } : s)));
+    // .select() returns the saved row, so a review the database refused
+    // (e.g. another branch, or your own answer) shows up instead of
+    // looking saved.
+    const { data, error } = await supabase
+      .from("discipleship_progress")
+      .update({ status, notes: note })
+      .eq("id", progressId)
+      .select("id");
     setReviewing((p) => ({ ...p, [progressId]: false }));
+    if (error || !data?.length) {
+      alert("Could not save the review: " + (error?.message || "you don't have permission to review this answer."));
+      return;
+    }
+    setSubmissions((prev) => prev.map((s) => (s.id === progressId ? { ...s, status, notes: note } : s)));
   }
 
   // ── Computed ──────────────────────────────────────────────────────────────
