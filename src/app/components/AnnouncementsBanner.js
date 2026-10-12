@@ -27,6 +27,7 @@ export default function AnnouncementsBanner({ manageHref }) {
   const { dark } = useTheme();
   const [items, setItems] = useState(null);       // null = loading
   const [branches, setBranches] = useState({});
+  const [ministryNames, setMinistryNames] = useState({});
   const [showAll, setShowAll] = useState(false);
   const [openId, setOpenId] = useState(null);     // expanded long message
 
@@ -38,13 +39,18 @@ export default function AnnouncementsBanner({ manageHref }) {
     (async () => {
       const { data, error } = await supabase
         .from('announcements')
-        .select('id, church_id, title, body, is_pinned, expires_on, created_at')
+        .select('id, church_id, ministry_id, title, body, is_pinned, expires_on, created_at')
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(30);
       if (cancelled) return;
       const today = todayManila();
-      setItems(error ? [] : (data || []).filter((a) => !a.expires_on || a.expires_on >= today));
+      const list = error ? [] : (data || []).filter((a) => !a.expires_on || a.expires_on >= today);
+      setItems(list);
+      if (list.some((a) => a.ministry_id)) {
+        const { data: mins } = await supabase.from('ministries').select('id, name');
+        if (!cancelled) setMinistryNames(Object.fromEntries((mins || []).map((m) => [m.id, m.name])));
+      }
       if (showBranch) {
         const { data: ch } = await supabase.from('churches').select('id, name');
         if (!cancelled) setBranches(Object.fromEntries((ch || []).map((c) => [c.id, c.name])));
@@ -109,7 +115,9 @@ export default function AnnouncementsBanner({ manageHref }) {
                       {open ? 'Show less' : 'Read more'}
                     </button>
                   )}
-                  {showBranch && (
+                  {a.ministry_id ? (
+                    <span className={`text-[11px] ${t.muted}`}>For {ministryNames[a.ministry_id] || 'your ministry'} members</span>
+                  ) : showBranch && (
                     <span className={`text-[11px] ${t.muted}`}>{a.church_id ? branches[a.church_id] || 'One branch' : 'All branches'}</span>
                   )}
                 </div>

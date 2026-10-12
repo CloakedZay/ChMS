@@ -80,7 +80,9 @@ export default function TrainingPage() {
   const [ministries, setMinistries] = useState([]);
   const headedIds = new Set(ministries.filter((m) => m.leader_id && m.leader_id === user?.id).map((m) => m.id));
   const canEditGroup = (ministryId) =>
-    role === "pastor" || (role === "leader" && (!ministryId || headedIds.has(ministryId)));
+    role === "pastor"
+    || (role === "leader" && (!ministryId || headedIds.has(ministryId)))
+    || (role === "ministry_head" && !!ministryId && headedIds.has(ministryId));   // own ministries only
   const canEditModule = (mod) => canEditGroup(mod.ministry_id);
   const ministryName = (id) => ministries.find((m) => m.id === id)?.name || "Ministry";
 
@@ -393,7 +395,8 @@ export default function TrainingPage() {
 
       {/* ── MEMBER PROGRESS ── */}
       {activeTab === "progress" && (
-        <ProgressPanel t={t} dark={dark} card={card} modules={modules} questions={questions} submissions={submissions} loadingBase={loading} />
+        <ProgressPanel t={t} dark={dark} card={card} modules={modules} questions={questions} submissions={submissions} loadingBase={loading}
+          onlyMinistries={role === "ministry_head" ? headedIds : null} />
       )}
 
       {/* ── MODULES & CONTENT ── */}
@@ -861,7 +864,9 @@ function shortDate(ts) {
   return ts ? new Date(ts).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—";
 }
 
-function ProgressPanel({ t, dark, card, modules, questions, submissions, loadingBase }) {
+// onlyMinistries: for a Ministry Head, the ministries they head — the panel
+// then shows only those ministries' members and modules (db/038).
+function ProgressPanel({ t, dark, card, modules, questions, submissions, loadingBase, onlyMinistries = null }) {
   const [members, setMembers]   = useState([]);
   const [views, setViews]       = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -900,6 +905,9 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
   // A member's modules: the general path plus their own ministries' (M3).
   const modulesFor = (memberId) => {
     const mine = ministriesOfLogin[memberId];
+    if (onlyMinistries) {
+      return activeModules.filter((m) => m.ministry_id && onlyMinistries.has(m.ministry_id) && mine?.has(m.ministry_id));
+    }
     return activeModules.filter((m) => !m.ministry_id || mine?.has(m.ministry_id));
   };
 
@@ -938,9 +946,12 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
     };
   }
 
+  // A Ministry Head sees only the members of the ministries they head.
+  const inScope = (loginId) => !onlyMinistries || [...(ministriesOfLogin[loginId] || [])].some((id) => onlyMinistries.has(id));
+
   // Members with a login, plus anyone else who has answers or views here.
   const memberIds = new Set([
-    ...members.map((m) => m.id),
+    ...members.filter((m) => inScope(m.id)).map((m) => m.id),
     ...submissions.map((s) => s.member_id),
     ...views.map((v) => v.member_id),
   ]);

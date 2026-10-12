@@ -330,7 +330,7 @@ export default function FollowUpPage() {
             <textarea id="fu-note" rows={4} value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000}
               placeholder="e.g. Called — busy with work, will attend next Sunday."
               className={`w-full border rounded-xl px-4 py-2.5 text-sm resize-y ${t.input}`} />
-            <p className={`text-[11px] mt-1.5 ${t.muted}`}>Visible to the Pastor, and to Leaders and the Secretary of this branch. Members never see it.</p>
+            <p className={`text-[11px] mt-1.5 ${t.muted}`}>Visible to the Pastor, to Leaders and the Secretary of this branch, and to the head of the member's ministry. Members never see it.</p>
 
             {formError && <p className="mt-3 text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{formError}</p>}
 

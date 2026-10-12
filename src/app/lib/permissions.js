@@ -7,13 +7,16 @@
 //
 // Leaders are limited to their own ministry / church by the data queries and
 // database rules, not here: "edit" for a leader means "edit in their own".
+// A Ministry Head (db/038) works only on the ministries they head: "edit"
+// for them means "in my ministries" — the database enforces it.
 
-export const ROLES = ['admin', 'pastor', 'leader', 'finance', 'secretary', 'member']
+export const ROLES = ['admin', 'pastor', 'leader', 'ministry_head', 'finance', 'secretary', 'member']
 
 export const ROLE_LABELS = {
   admin: 'Admin',
   pastor: 'Pastor',
   leader: 'Leader / Elder',
+  ministry_head: 'Ministry Head',
   finance: 'Finance',
   secretary: 'Secretary',
   member: 'Member',
@@ -21,7 +24,7 @@ export const ROLE_LABELS = {
 
 // Levels that use the staff dashboard (/dashboard); everyone else gets
 // the member dashboard.
-export const STAFF_ROLES = ['admin', 'pastor', 'leader', 'finance', 'secretary']
+export const STAFF_ROLES = ['admin', 'pastor', 'leader', 'ministry_head', 'finance', 'secretary']
 
 // Can switch between church branches; everyone else sees only their own.
 export const GLOBAL_ROLES = ['admin', 'pastor']
@@ -45,28 +48,28 @@ export const PERMISSIONS = {
   memberImport:       { secretary: 'edit' },
   memberArchive:      { pastor: 'edit', secretary: 'edit' },
   // Inactive-member follow-up (db/032): own branch; Pastor every branch.
-  followUp:           { pastor: 'edit', leader: 'edit', secretary: 'edit' },
-  ministryEnrollment: { pastor: 'edit', leader: 'edit', secretary: 'view' },
+  followUp:           { pastor: 'edit', leader: 'edit', ministry_head: 'edit', secretary: 'edit' },
+  ministryEnrollment: { pastor: 'edit', leader: 'edit', ministry_head: 'edit', secretary: 'view' },
 
   // Discipleship and AI assistant
-  modules:            { admin: 'view', pastor: 'edit', leader: 'edit', member: 'view' },
-  moduleProgress:     { admin: 'view', pastor: 'view', leader: 'view', member: 'own' },
-  answerReview:       { pastor: 'approve', leader: 'approve', member: 'own' },
+  modules:            { admin: 'view', pastor: 'edit', leader: 'edit', ministry_head: 'edit', member: 'view' },
+  moduleProgress:     { admin: 'view', pastor: 'view', leader: 'view', ministry_head: 'view', member: 'own' },
+  answerReview:       { pastor: 'approve', leader: 'approve', ministry_head: 'approve', member: 'own' },
   aiDocuments:        { admin: 'view', pastor: 'edit', leader: 'edit' },
-  aiAssistant:        { admin: 'view', pastor: 'view', leader: 'view', finance: 'view', secretary: 'view', member: 'view' },
+  aiAssistant:        { admin: 'view', pastor: 'view', leader: 'view', ministry_head: 'view', finance: 'view', secretary: 'view', member: 'view' },
 
   // Messages — one-to-one chat; everyone can write to the people the database
   // lists for them (own church, plus every Admin and Pastor). db/029.
-  messages:           { admin: 'edit', pastor: 'edit', leader: 'edit', finance: 'edit', secretary: 'edit', member: 'edit' },
+  messages:           { admin: 'edit', pastor: 'edit', leader: 'edit', ministry_head: 'edit', finance: 'edit', secretary: 'edit', member: 'edit' },
 
   // Events and announcements
-  events:             { admin: 'view', pastor: 'approve', leader: 'submit', finance: 'view', secretary: 'view', member: 'view' },
-  announcements:      { admin: 'view', pastor: 'edit', leader: 'edit', finance: 'view', secretary: 'view', member: 'view' },
+  events:             { admin: 'view', pastor: 'approve', leader: 'submit', ministry_head: 'submit', finance: 'view', secretary: 'view', member: 'view' },
+  announcements:      { admin: 'view', pastor: 'edit', leader: 'edit', ministry_head: 'edit', finance: 'view', secretary: 'view', member: 'view' },
   bibleVerses:        { admin: 'view', pastor: 'edit', leader: 'edit', member: 'view' },
 
   // Devotional journal — private to each person: everyone writes their own,
   // nobody (Admin and Pastor included) reads anyone else's. db/027 enforces it.
-  journal:            { admin: 'own', pastor: 'own', leader: 'own', finance: 'own', secretary: 'own', member: 'own' },
+  journal:            { admin: 'own', pastor: 'own', leader: 'own', ministry_head: 'own', finance: 'own', secretary: 'own', member: 'own' },
 
   // Finance — no Admin, no Secretary. Members' own giving history is still
   // an open question in the doc, so members have no access for now.

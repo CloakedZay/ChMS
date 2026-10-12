@@ -5,7 +5,7 @@ import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import Link from "next/link";
-import { GLOBAL_ROLES } from "@/app/lib/permissions";
+import { GLOBAL_ROLES, ROLE_LABELS } from "@/app/lib/permissions";
 import {
   ChevronRight, ChevronDown, Plus, X, Sun, Moon, Pencil, UserPlus,
   Trash2, Loader2, Users, CalendarClock, Link2, BookOpen,
@@ -87,8 +87,9 @@ export default function MinistriesPage() {
     const [m, a, mem, lead, ch, mods, qs] = await Promise.all([
       supabase.from("ministries").select("*").order("name"),
       supabase.from("ministry_assignments").select("id, ministry_id, member_id, role, assigned_at"),
-      supabase.from("members").select("id, full_name, status, church_id").order("full_name"),
-      supabase.from("profiles").select("id, full_name, email, church_id, role").eq("role", "leader"),
+      // A Ministry Head can't read member records (phone / email) — names only (db/038).
+      supabase.from(role === "ministry_head" ? "member_directory" : "members").select("id, full_name, status, church_id").order("full_name"),
+      supabase.from("profiles").select("id, full_name, email, church_id, role").in("role", ["leader", "ministry_head"]),
       supabase.from("churches").select("id, name").order("name"),
       supabase.from("discipleship_modules").select("id, title, is_active, order_index, ministry_id").not("ministry_id", "is", null).order("order_index"),
       supabase.from("discipleship_questions").select("module_id"),
@@ -127,7 +128,7 @@ export default function MinistriesPage() {
   const active = shown.filter((m) => m.is_active);
   const off = shown.filter((m) => !m.is_active);
   const peopleIn = (ministryId) => assignments.filter((a) => a.ministry_id === ministryId);
-  const canAssign = (m) => isPastor || (role === "leader" && m.leader_id && m.leader_id === user?.id);
+  const canAssign = (m) => isPastor || ((role === "leader" || role === "ministry_head") && m.leader_id && m.leader_id === user?.id);
 
   // ── Ministry add / edit (Pastor) ────────────────────────────────────────
   function openNew() {
@@ -458,7 +459,9 @@ export default function MinistriesPage() {
                 <select value={form.leader_id} onChange={(e) => setForm({ ...form, leader_id: e.target.value })} className={input}>
                   <option value="">No login linked</option>
                   {leaders.filter((l) => l.church_id === form.church_id).map((l) => (
-                    <option key={l.id} value={l.id}>{leaderName(l)}</option>
+                    <option key={l.id} value={l.id}>
+                      {[l.full_name, l.email].filter(Boolean).join(" — ")} · {ROLE_LABELS[l.role] || l.role}
+                    </option>
                   ))}
                 </select>
               </Field>

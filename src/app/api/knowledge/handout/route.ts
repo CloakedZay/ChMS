@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCaller, CONTENT_ROLES } from "@/app/lib/apiAuth";
+import { getCaller, HANDOUT_ROLES } from "@/app/lib/apiAuth";
 import { getHandout, indexHandout } from "@/app/lib/knowledge";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export const maxDuration = 60;
 // Add one discipleship handout to the assistant's search index. Called by
 // the Training page right after a handout is uploaded.
 export async function POST(req: NextRequest) {
-  const caller = await getCaller(req, CONTENT_ROLES);
+  const caller = await getCaller(req, HANDOUT_ROLES);
   if (caller instanceof NextResponse) return caller;
 
   const { handout_id } = await req.json().catch(() => ({}));

@@ -116,7 +116,7 @@ export default function EventsPage() {
     const { data, error } = await supabase.from('churches').select('id, name').order('name', { ascending: true });
     if (error) { console.error('Error fetching churches:', error.message); return; }
     if (data) setChurches(data);
-    const { data: list } = await supabase.from('ministries').select('name, church_id').eq('is_active', true).order('name');
+    const { data: list } = await supabase.from('ministries').select('name, church_id, leader_id').eq('is_active', true).order('name');
     setMinistries(list || []);
   }
 
@@ -199,7 +199,10 @@ export default function EventsPage() {
 
   // Ministries of the branch the event belongs to.
   const eventChurch = isGlobal ? form.church_id : profile?.church_id;
-  const branchMinistries = ministries.filter((m) => m.church_id === eventChurch).map((m) => m.name);
+  // A Ministry Head can only file events for the ministries they head (db/038).
+  const branchMinistries = ministries
+    .filter((m) => m.church_id === eventChurch && (role !== 'ministry_head' || m.leader_id === user?.id))
+    .map((m) => m.name);
 
   const counts = {
     total:    events.length,
