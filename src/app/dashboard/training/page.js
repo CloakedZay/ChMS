@@ -23,13 +23,13 @@ function formatBytes(bytes) {
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-slate-100/90",
+    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
+    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
     cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
     textPrimary: dark ? "text-white"           : "text-slate-900",
     textSub:     dark ? "text-slate-500"       : "text-slate-600",
     textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#0f111a]"        : "bg-slate-50",
+    inputBg:     dark ? "bg-[#111815]"        : "bg-slate-50",
     inputBorder: dark ? "border-slate-800"     : "border-slate-400",
     divider:     dark ? "border-slate-800/60"  : "border-slate-300",
     innerDivider:dark ? "border-slate-800/40"  : "border-slate-300",
@@ -41,13 +41,13 @@ function T(dark) {
     hoverRow2:   dark ? "hover:bg-slate-800/30" : "hover:bg-slate-200",
     emptyIcon:   dark ? "text-slate-800"       : "text-slate-400",
     dashed:      dark ? "border-slate-800"     : "border-slate-400",
-    modalBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    modalBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     modalBorder: dark ? "border-slate-800"     : "border-slate-300",
     cancelBtn:   dark ? "border-slate-700 text-slate-400 hover:text-white hover:border-slate-500" : "border-slate-400 text-slate-600 hover:text-slate-900 hover:border-slate-500",
     uploadBorder:  dark ? "border-slate-700 hover:border-blue-500/50 text-slate-500 hover:text-blue-400" : "border-slate-400 hover:border-blue-500/50 text-slate-600 hover:text-blue-600",
     uploadBorderDisabled: dark ? "border-slate-700 text-slate-600" : "border-slate-400 text-slate-500",
-    iconBtn:     dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    tabBar:      dark ? "bg-[#1a1d2e]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
+    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    tabBar:      dark ? "bg-[#1b2420]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
     tabInactive: dark ? "text-slate-500 hover:text-slate-200" : "text-slate-500 hover:text-slate-800",
   };
 }
@@ -670,7 +670,7 @@ export default function TrainingPage() {
                                           <span className="text-blue-400 mr-1">Q{qi + 1}.</span>
                                           {sub.discipleship_questions?.question || "—"}
                                         </p>
-                                        <div className={`${dark ? "bg-[#0f111a]" : "bg-slate-200"} border ${t.innerDivider} rounded-xl px-4 py-3`}>
+                                        <div className={`${dark ? "bg-[#111815]" : "bg-slate-200"} border ${t.innerDivider} rounded-xl px-4 py-3`}>
                                           <p className={`text-sm ${t.textPrimary} leading-relaxed`}>{sub.answer}</p>
                                           <p className={`text-[10px] ${t.textMuted} mt-2`}>
                                             Submitted {sub.created_at ? new Date(sub.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
@@ -710,7 +710,7 @@ export default function TrainingPage() {
                                                 placeholder="Add note (optional, shown to member if rejected)"
                                                 value={reviewNotes[sub.id] || ""}
                                                 onChange={(e) => setReviewNotes((p) => ({ ...p, [sub.id]: e.target.value }))}
-                                                className={`flex-1 ${dark ? "bg-[#0f111a]" : "bg-slate-50"} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
+                                                className={`flex-1 ${dark ? "bg-[#111815]" : "bg-slate-50"} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
                                               />
                                             </div>
                                             <div className="flex gap-2">

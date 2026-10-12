@@ -90,8 +90,8 @@ export default function ChangePasswordPage() {
     setDone(true);
   }
 
-  const pageBg    = dark ? 'bg-[#0f111a]'   : 'bg-slate-100';
-  const cardBg    = dark ? 'bg-[#1a1d2e]'   : 'bg-white';
+  const pageBg    = dark ? 'bg-[#111815]'   : 'bg-[#f8f7f2]';
+  const cardBg    = dark ? 'bg-[#1b2420]'   : 'bg-white';
   const cardBord  = dark ? 'border-white/10' : 'border-slate-200';
   const inputCls  = dark
     ? 'bg-white/5 border-white/10 text-white placeholder:text-white/30'
@@ -111,7 +111,7 @@ export default function ChangePasswordPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600/15 border border-blue-500/25 mb-4">
             <KeyRound className="w-6 h-6 text-blue-400" />
           </div>
-          <h1 className={`text-2xl font-black ${textMain} tracking-tight`}>
+          <h1 className={`text-2xl font-bold ${textMain} tracking-tight`}>
             {mustChangePassword ? 'Set your password' : 'Password & sign-in'}
           </h1>
           <p className={`${textSub} text-xs mt-2 leading-relaxed`}>
@@ -121,10 +121,10 @@ export default function ChangePasswordPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSave} className={`${cardBg} border ${cardBord} rounded-3xl p-8 shadow-2xl shadow-black/20 space-y-4`}>
+        <form onSubmit={handleSave} className={`${cardBg} border ${cardBord} rounded-3xl p-8 shadow-xl space-y-4`}>
           {askCurrent && (
             <div>
-              <label className={`block text-[10px] uppercase tracking-widest ${labelCls} font-bold mb-2`}>Current password</label>
+              <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Current password</label>
               <input
                 type={showPass ? 'text' : 'password'}
                 value={current}
@@ -136,7 +136,7 @@ export default function ChangePasswordPage() {
           )}
 
           <div>
-            <label className={`block text-[10px] uppercase tracking-widest ${labelCls} font-bold mb-2`}>New password</label>
+            <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>New password</label>
             <div className="relative">
               <input
                 type={showPass ? 'text' : 'password'}
@@ -158,7 +158,7 @@ export default function ChangePasswordPage() {
           </div>
 
           <div>
-            <label className={`block text-[10px] uppercase tracking-widest ${labelCls} font-bold mb-2`}>Type it again</label>
+            <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Type it again</label>
             <input
               type={showPass ? 'text' : 'password'}
               value={confirm}

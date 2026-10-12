@@ -9,6 +9,7 @@ import { authFetch } from "@/app/lib/authFetch";
 import MemberImport from "@/app/components/MemberImport";
 import { FileSpreadsheet, UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
+import { levelBadge } from "@/app/lib/roleColors";
 
 const EMPTY_FORM = {
   full_name: '',
@@ -16,6 +17,7 @@ const EMPTY_FORM = {
   status: 'active',
   phone: '',
   email: '',
+  birth_date: '',
 };
 
 // Ministries come from ministry_assignments (db/022). The Pastor or a
@@ -50,27 +52,27 @@ function getInitials(name = "") {
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-slate-100/90",
+    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
+    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
     cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
     textPrimary: dark ? "text-white"           : "text-slate-900",
     textSub:     dark ? "text-slate-500"       : "text-slate-600",
     textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     inputBorder: dark ? "border-slate-800"     : "border-slate-400",
     inputText:   dark ? "text-slate-200"       : "text-slate-800",
     divider:     dark ? "border-slate-800/40"  : "border-slate-300",
-    filterInactive: dark ? "bg-[#1a1d2e] border-slate-800 text-slate-500 hover:text-slate-200" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    modalBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    filterInactive: dark ? "bg-[#1b2420] border-slate-800 text-slate-500 hover:text-slate-200" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    modalBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     modalBorder: dark ? "border-slate-700"     : "border-slate-300",
     cancelBtn:   dark ? "bg-slate-800 hover:bg-slate-700 text-white" : "bg-slate-300 hover:bg-slate-400 text-slate-900",
     emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
     tableHeadBg: dark ? "bg-slate-900/50"      : "bg-slate-200",
     rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
-    menuBg:      dark ? "bg-[#1a1d2e] border-slate-700" : "bg-slate-50 border-slate-300",
+    menuBg:      dark ? "bg-[#1b2420] border-slate-700" : "bg-slate-50 border-slate-300",
     menuHover:   dark ? "hover:bg-slate-800"    : "hover:bg-slate-200",
     actionBtn:   dark ? "text-slate-600 hover:text-white hover:bg-slate-800" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200",
-    iconBtn:     dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
   };
 }
 
@@ -165,6 +167,7 @@ export default function MembersPage() {
       status:    member.status    || 'active',
       phone:     member.phone     || '',
       email:     member.email     || '',
+      birth_date: member.birth_date || '',
     });
     setOpenMenuId(null);
     setShowModal(true);
@@ -187,6 +190,9 @@ export default function MembersPage() {
     e.preventDefault();
     setSaving(true);
     const payload = { ...form, email: form.email.trim().toLowerCase() || null };
+    // Only send the birthday when there is something to save or clear.
+    if (!form.birth_date && !editingMember?.birth_date) delete payload.birth_date;
+    else payload.birth_date = form.birth_date || null;
 
     if (editingMember) {
       const { error } = await supabase
@@ -465,7 +471,11 @@ export default function MembersPage() {
                         <span className={`font-semibold ${t.textPrimary} text-sm`}>{member.full_name}</span>
                       </div>
                     </td>
-                    <td className={`px-6 py-4 ${t.textSub} text-sm capitalize`}>{member.role || '—'}</td>
+                    <td className="px-6 py-4">
+                      {member.role
+                        ? <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border capitalize ${levelBadge(member.role, dark)}`}>{member.role}</span>
+                        : <span className={`text-sm ${t.textMuted}`}>—</span>}
+                    </td>
                     <td className="px-6 py-4 text-blue-400 text-xs font-medium">{ministriesOf[member.id] || '—'}</td>
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{member.phone || '—'}</td>
                     <td className="px-6 py-4">
@@ -723,6 +733,16 @@ export default function MembersPage() {
                   placeholder="Used as their login name, if given"
                   className={inputStyle(t)}
                 />
+              </Field>
+
+              <Field label="Birthday (optional)" t={t}>
+                <input
+                  type="date" name="birth_date" value={form.birth_date}
+                  onChange={handleChange}
+                  max={new Date().toISOString().split('T')[0]}
+                  className={inputStyle(t)}
+                />
+                <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>Only the month and day are shown in the birthday widget.</p>
               </Field>
 
               <Field label="Status" t={t}>

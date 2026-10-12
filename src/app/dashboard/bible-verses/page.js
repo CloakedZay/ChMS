@@ -8,23 +8,24 @@ import { authFetch } from "@/app/lib/authFetch";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import { BookOpen, Upload, Trash2, Loader2, Plus, X, Sun, Moon, Sparkles, Clock } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
+import ScriptureLink from "@/app/components/ScriptureLink";
 
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-slate-100/90",
+    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
+    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
     cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
     textPrimary: dark ? "text-white"           : "text-slate-900",
     textSub:     dark ? "text-slate-500"       : "text-slate-600",
     textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     inputBorder: dark ? "border-slate-800"     : "border-slate-400",
     inputText:   dark ? "text-slate-200"       : "text-slate-800",
     divider:     dark ? "border-slate-800/40"  : "border-slate-300",
     emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
     rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
-    iconBtn:     dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    dropzone:    dark ? "border-slate-700 bg-[#1a1d2e]/40 hover:border-blue-500/50" : "border-slate-400 bg-slate-50 hover:border-blue-500/50",
+    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    dropzone:    dark ? "border-slate-700 bg-[#1b2420]/40 hover:border-blue-500/50" : "border-slate-400 bg-slate-50 hover:border-blue-500/50",
   };
 }
 
@@ -174,7 +175,7 @@ export default function BibleVersesPage() {
         ) : todaysVerse ? (
           <>
             <p className={`text-lg font-semibold leading-relaxed italic ${t.textPrimary}`}>&ldquo;{todaysVerse.verse_text}&rdquo;</p>
-            <p className="text-sm text-blue-400 font-bold mt-3">— {todaysVerse.reference}</p>
+            <p className="mt-3"><ScriptureLink prefix="— " reference={todaysVerse.reference} className="text-sm text-blue-400 font-bold" /></p>
           </>
         ) : (
           <p className={`text-sm ${t.textSub}`}>No verses yet — upload a PDF or add one below to get started.</p>
@@ -298,7 +299,7 @@ export default function BibleVersesPage() {
             {verses.map((v) => (
               <div key={v.id} className={`flex items-start justify-between gap-4 px-6 py-4 ${t.rowHover} transition-colors`}>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-blue-400">{v.reference}</p>
+                  <p><ScriptureLink reference={v.reference} className="text-xs font-bold text-blue-400" /></p>
                   <p className={`text-sm ${t.textPrimary} mt-1`}>{v.verse_text}</p>
                 </div>
                 {canEdit && (

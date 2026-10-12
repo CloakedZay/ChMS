@@ -7,6 +7,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { verseOfDayIndex, nextLocalMidnight } from '@/app/lib/verseOfDay';
 import { CalendarDays, HandCoins, BookOpen, Search } from 'lucide-react';
+import UpcomingBirthdays from '@/app/components/UpcomingBirthdays';
+import ScriptureLink from '@/app/components/ScriptureLink';
+import AnnouncementsBanner from '@/app/components/AnnouncementsBanner';
 
 const EVENT_BADGE = {
   approved: 'bg-emerald-500/15 text-emerald-400',
@@ -28,7 +31,6 @@ export default function MemberDashboard() {
   const [totalFunds, setTotalFunds]         = useState(null);
   const [totalIncome, setTotalIncome]       = useState(null);
   const [totalExpense, setTotalExpense]     = useState(null);
-  const [announcements, setAnnouncements]   = useState([]);
 
   // Verse of the day
   const [verseOfDay, setVerseOfDay] = useState(undefined); // undefined = loading, null = none yet
@@ -65,14 +67,8 @@ export default function MemberDashboard() {
           trans = data?.filter((t) => t.status !== 'Void');
         }
 
-        const { data: annList } = await supabase
-          .from('events').select('id, title, date, ministry, status')
-          .eq('status', 'approved')
-          .order('date', { ascending: false }).limit(4);
-
         setMemberCount(mCount || 0);
         setUpcomingEvents(evts || []);
-        setAnnouncements(annList || []);
 
         if (trans) {
           const inc = trans.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
@@ -166,6 +162,15 @@ export default function MemberDashboard() {
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
       <div className="max-w-5xl mx-auto">
 
+        {/* Announcements — always first */}
+        <div className="mb-6">
+          <AnnouncementsBanner />
+        </div>
+
+        {/* Top: search + verse on the left, birthday box in the top-right corner */}
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-6 lg:items-start mb-8">
+        <div className="min-w-0">
+
         {/* Search — very top */}
         <div className="relative mb-6">
           <Search className="absolute left-3 top-3 w-4 h-4 text-white/30" />
@@ -174,10 +179,10 @@ export default function MemberDashboard() {
             placeholder="Search members by name, role, or ministry..."
             value={memberSearch}
             onChange={(e) => setMemberSearch(e.target.value)}
-            className="w-full bg-[#1a1d2e] border border-white/10 rounded-2xl py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full bg-[#1b2420] border border-white/10 rounded-2xl py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors"
           />
           {memberSearch.trim() && (
-            <div className="absolute z-30 mt-2 w-full bg-[#1a1d2e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="absolute z-30 mt-2 w-full bg-[#1b2420] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
               <div className="max-h-80 overflow-y-auto divide-y divide-white/5">
                 {searching ? (
                   <p className="text-white/30 text-sm p-4">Searching...</p>
@@ -211,7 +216,7 @@ export default function MemberDashboard() {
         </div>
 
         {/* Verse of the Day */}
-        <div className="mb-8 bg-gradient-to-br from-blue-600/10 to-indigo-600/10 border border-blue-500/20 rounded-3xl p-6">
+        <div className="bg-gradient-to-br from-blue-600/10 to-indigo-600/10 border border-blue-500/20 rounded-3xl p-6">
           <div className="flex items-center gap-2 mb-3">
             <BookOpen className="w-4 h-4 text-blue-400" />
             <h2 className="text-xs uppercase tracking-widest font-bold text-blue-400">Verse of the Day</h2>
@@ -221,13 +226,29 @@ export default function MemberDashboard() {
           ) : verseOfDay ? (
             <>
               <p className="text-lg text-white font-semibold leading-relaxed italic">&ldquo;{verseOfDay.verse_text}&rdquo;</p>
-              <p className="text-sm text-blue-300 font-bold mt-3">— {verseOfDay.reference}</p>
+              <p className="mt-3"><ScriptureLink prefix="— " reference={verseOfDay.reference} className="text-sm text-blue-300 font-bold" /></p>
             </>
           ) : (
             <p className="text-white/30 text-sm">
               No verses uploaded yet. Once your church admin uploads the verses PDF, a new one will appear here every day.
             </p>
           )}
+        </div>
+
+        </div>
+
+        {/* Upcoming birthdays — compact box, top right */}
+        <div className="mt-6 lg:mt-0">
+          <UpcomingBirthdays
+            compact
+            cardClass="bg-[#1b2420] rounded-3xl p-4 border border-white/10"
+            titleClass="text-white"
+            textClass="text-white"
+            subClass="text-white/40"
+            rowClass="bg-white/[0.03] border border-white/5"
+            accentClass="text-blue-400"
+          />
+        </div>
         </div>
 
         <div className="space-y-6">
@@ -242,7 +263,7 @@ export default function MemberDashboard() {
               <Link
                 key={s.label}
                 href={s.href}
-                className="bg-[#1a1d2e] rounded-3xl p-5 border border-white/10 hover:border-blue-500/40 transition-colors block"
+                className="bg-[#1b2420] rounded-3xl p-5 border border-white/10 hover:border-blue-500/40 transition-colors block"
               >
                 <div className="text-2xl mb-2">{s.icon}</div>
                 <div className="text-2xl font-black">{s.value}</div>
@@ -254,7 +275,7 @@ export default function MemberDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             {/* Events — full width when the Finance card is hidden */}
-            <div className={`bg-[#1a1d2e] rounded-3xl p-6 border border-white/10 ${showFinance ? '' : 'lg:col-span-2'}`}>
+            <div className={`bg-[#1b2420] rounded-3xl p-6 border border-white/10 ${showFinance ? '' : 'lg:col-span-2'}`}>
               <h2 className="font-black text-base mb-4 flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-blue-400" /> Upcoming Events
               </h2>
@@ -281,7 +302,7 @@ export default function MemberDashboard() {
             {/* Finance */}
             {showFinance && <Link
               href="/member-dashboard/finances"
-              className="bg-[#1a1d2e] rounded-3xl p-6 border border-white/10 hover:border-blue-500/40 transition-colors block"
+              className="bg-[#1b2420] rounded-3xl p-6 border border-white/10 hover:border-blue-500/40 transition-colors block"
             >
               <h2 className="font-black text-base mb-4 flex items-center gap-2">
                 <HandCoins className="w-4 h-4 text-purple-400" /> Finances
@@ -300,23 +321,6 @@ export default function MemberDashboard() {
               </div>
             </Link>}
 
-            {/* Announcements */}
-            <div className="bg-[#1a1d2e] rounded-3xl p-6 border border-white/10 lg:col-span-2">
-              <h2 className="font-black text-base mb-4">📣 Announcements</h2>
-              {!dataLoading && announcements.length === 0
-                ? <p className="text-white/30 text-sm">No announcements at the moment.</p>
-                : <div className="space-y-3">
-                    {announcements.map((a) => (
-                      <div key={a.id} className="p-3 bg-white/[0.03] rounded-2xl border border-white/5">
-                        <p className="text-sm font-bold text-white">{a.title}</p>
-                        <p className="text-xs text-white/40 mt-1">
-                          {formatDate(a.date)}{a.ministry ? ` · ${a.ministry}` : ''}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-              }
-            </div>
           </div>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { ROLES, ROLE_LABELS, GLOBAL_ROLES } from "@/app/lib/permissions";
+import { levelBadge, levelDot } from "@/app/lib/roleColors";
 import { authFetch } from "@/app/lib/authFetch";
 import { Search, UserCog, Sun, Moon, Ban, CheckCircle2, KeyRound, Copy, Check } from "lucide-react";
 
@@ -15,15 +16,6 @@ import { Search, UserCog, Sun, Moon, Ban, CheckCircle2, KeyRound, Copy, Check } 
 // member record; the Admin resets forgotten passwords here.
 
 const PAGE_SIZE = 10;
-
-const LEVEL_COLORS = {
-  admin:     "bg-rose-500/10 text-rose-400 border-rose-500/20",
-  pastor:    "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  leader:    "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  finance:   "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  secretary: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  member:    "bg-slate-500/10 text-slate-400 border-slate-500/20",
-};
 
 function getInitials(name = "") {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
@@ -36,20 +28,20 @@ function displayName(u) {
 // ─── Theme token map — same pattern as the members page ─────────────────────
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-slate-100/90",
+    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
+    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
     cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
     textPrimary: dark ? "text-white"           : "text-slate-900",
     textSub:     dark ? "text-slate-500"       : "text-slate-600",
     textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     inputBorder: dark ? "border-slate-800"     : "border-slate-400",
     inputText:   dark ? "text-slate-200"       : "text-slate-800",
     divider:     dark ? "border-slate-800/40"  : "border-slate-300",
     emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
     tableHeadBg: dark ? "bg-slate-900/50"      : "bg-slate-200",
     rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
-    iconBtn:     dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
   };
 }
 
@@ -230,7 +222,9 @@ export default function UsersPage() {
               filterLevel === r ? "border-blue-500" : t.cardBorder
             }`}
           >
-            <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1`}>{ROLE_LABELS[r]}</p>
+            <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1 flex items-center gap-1.5`}>
+              <span className={`w-2 h-2 rounded-full ${levelDot(r)}`} />{ROLE_LABELS[r]}
+            </p>
             <p className={`text-2xl font-black ${t.textPrimary}`}>{countFor(r)}</p>
             {r === 'leader' && (
               <p className="text-[10px] font-bold text-violet-400">{users.filter((u) => u.is_elder).length} Elder{users.filter((u) => u.is_elder).length === 1 ? '' : 's'}</p>
@@ -321,11 +315,13 @@ export default function UsersPage() {
                         {isMe ? (
                           <span
                             title="You can't change your own level. Ask another admin."
-                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${LEVEL_COLORS[u.role] || LEVEL_COLORS.member}`}
+                            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${levelBadge(u.role, dark)}`}
                           >
                             {ROLE_LABELS[u.role] || u.role}
                           </span>
                         ) : (
+                          <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${levelDot(u.role)}`} title={ROLE_LABELS[u.role] || u.role} />
                           <select
                             value={u.role || 'member'}
                             disabled={saving}
@@ -334,6 +330,7 @@ export default function UsersPage() {
                           >
                             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                           </select>
+                          </div>
                         )}
                         {u.role === 'leader' && (
                           <label className={`mt-2 flex items-center gap-2 text-xs font-semibold ${u.is_elder ? 'text-violet-400' : t.textSub} cursor-pointer w-fit`}>
@@ -414,7 +411,7 @@ export default function UsersPage() {
       {/* ── New temporary password (shown once) ── */}
       {newPassword && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`${dark ? "bg-[#1a1d2e] border-slate-700" : "bg-slate-50 border-slate-300"} border rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
+          <div className={`${dark ? "bg-[#1b2420] border-slate-700" : "bg-slate-50 border-slate-300"} border rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
             <h2 className={`text-lg font-black ${t.textPrimary} mb-1`}>Password reset</h2>
             <p className={`text-xs ${t.textSub} mb-5`}>
               Give these to <span className="font-bold">{newPassword.name}</span>. The password won&apos;t be shown again —

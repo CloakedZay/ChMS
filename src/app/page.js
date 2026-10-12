@@ -3,9 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Users, CalendarDays, BarChart3, ShieldCheck, ArrowRight,
-  BookOpen, Church, HandCoins, ChevronDown, MapPin, Heart,
-  Sun, Moon
+  Users, CalendarDays, BarChart3, ArrowRight, BookOpen, Church,
+  HandCoins, MapPin, Heart, Sun, Moon, Check, Menu, X, ShieldCheck,
 } from "lucide-react";
 
 const FEATURES = [
@@ -54,17 +53,25 @@ const LOCATIONS = [
   { name: "Meycauayan",       role: "Satellite",   members: "20+ members",  primary: false },
 ];
 
+const NAV = [
+  { href: "#about",     label: "About" },
+  { href: "#modules",   label: "Modules" },
+  { href: "#locations", label: "Locations" },
+];
+
 // ── Theme hook (shared with login + dashboard via localStorage) ───────────────
 function useTheme() {
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(false);
   useEffect(() => {
-    const stored = localStorage.getItem("faithsync-theme");
-    if (stored) setDark(stored === "dark");
+    try {
+      const stored = localStorage.getItem("faithsync-theme");
+      if (stored) setDark(stored === "dark");
+    } catch {}
   }, []);
   function toggle() {
     setDark(prev => {
       const next = !prev;
-      localStorage.setItem("faithsync-theme", next ? "dark" : "light");
+      try { localStorage.setItem("faithsync-theme", next ? "dark" : "light"); } catch {}
       return next;
     });
   }
@@ -72,289 +79,343 @@ function useTheme() {
 }
 
 export default function HomePage() {
-  const [activeFeature, setActiveFeature] = useState("members");
   const { dark, toggle: toggleTheme } = useTheme();
-  const active = FEATURES.find((f) => f.id === activeFeature);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
 
-  // ── Theme tokens ────────────────────────────────────────────────────────────
-  const pageBg      = dark ? "bg-[#0c0e17]"        : "bg-slate-50";
-  const navBg       = dark ? "bg-[#0c0e17]/90"     : "bg-white/90";
-  const navBorder   = dark ? "border-white/5"       : "border-slate-200";
-  const textMain    = dark ? "text-white"           : "text-slate-900";
-  const textSub     = dark ? "text-slate-400"       : "text-slate-500";
-  const textMuted   = dark ? "text-slate-500"       : "text-slate-400";
-  const statsBg     = dark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200";
-  const cardBase    = dark ? "bg-white/[0.03] border-white/5" : "bg-white border-slate-200";
-  const featureCard = dark ? "bg-white/[0.03] border-white/5" : "bg-slate-100 border-slate-200";
-  const sectionBg   = dark ? "bg-white/[0.015] border-white/5" : "bg-white border-slate-200";
-  const iconBtnCls  = dark
-    ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white"
-    : "bg-white border-slate-200 text-slate-500 hover:text-slate-900";
-  const navLinkCls  = dark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-800";
-  const memberBtnCls = dark
-    ? "text-slate-300 hover:text-white border border-white/10 hover:border-white/20"
-    : "text-slate-600 hover:text-slate-900 border border-slate-300 hover:border-slate-400";
-  const heroBg2     = dark ? "bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/15" : "bg-slate-100 hover:bg-slate-200 border border-slate-300";
-  const locCard     = dark ? "bg-white/[0.03] border-white/5" : "bg-slate-100 border-slate-200";
-  const memberRoleCard = dark ? "bg-white/[0.03] border-white/5" : "bg-slate-100 border-slate-200";
-  const footerBorder = dark ? "border-white/5" : "border-slate-200";
-  const footerText   = dark ? "text-slate-600" : "text-slate-400";
-  const footerMuted  = dark ? "text-slate-700" : "text-slate-400";
-  const featureBtnActive   = "bg-blue-600/10 border-blue-500/40 text-white";
-  const featureBtnInactive = dark
-    ? "bg-white/[0.03] border-white/5 text-slate-400 hover:text-slate-200 hover:border-white/10"
-    : "bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300";
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // ── Theme tokens: ivory / white sections (light), deep green sections (dark)
+  const t = dark
+    ? {
+        page:     "bg-[#111815] text-slate-100",
+        sectionA: "bg-[#111815]",
+        sectionB: "bg-[#0e1411]",
+        nav:      scrolled ? "bg-[#111815]/90 border-white/10 backdrop-blur" : "bg-transparent border-transparent",
+        heading:  "text-white",
+        body:     "text-slate-400",
+        muted:    "text-slate-500",
+        card:     "bg-[#1b2420] border-white/10 hover:border-[#c5a66a]/40",
+        iconWrap: "bg-[#c5a66a]/10 text-[#c5a66a]",
+        ghostBtn: "border-white/15 text-slate-200 hover:bg-white/5",
+        link:     "text-slate-400 hover:text-white",
+        eyebrow:  "text-[#c5a66a]",
+        divider:  "border-white/10",
+        iconBtn:  "border-white/15 text-slate-300 hover:bg-white/5",
+        stat:     "text-white",
+        check:    "text-[#c5a66a]",
+      }
+    : {
+        page:     "bg-[#f8f7f2] text-[#252a28]",
+        sectionA: "bg-[#f8f7f2]",
+        sectionB: "bg-white",
+        nav:      scrolled ? "bg-[#f8f7f2]/90 border-[#e5e3d8] backdrop-blur" : "bg-transparent border-transparent",
+        heading:  "text-[#173f35]",
+        body:     "text-[#4c534f]",
+        muted:    "text-[#858b87]",
+        card:     "bg-white border-[#e5e3d8] hover:border-[#c5a66a]/60",
+        iconWrap: "bg-[#e8f0ea] text-[#173f35]",
+        ghostBtn: "border-[#d9d6c8] text-[#173f35] hover:bg-white",
+        link:     "text-[#4c534f] hover:text-[#173f35]",
+        eyebrow:  "text-[#9c7f45]",
+        divider:  "border-[#e5e3d8]",
+        iconBtn:  "border-[#d9d6c8] text-[#4c534f] hover:bg-white",
+        stat:     "text-[#173f35]",
+        check:    "text-[#173f35]",
+      };
+
+  const eyebrow = (text) => (
+    <p className={`text-xs font-semibold uppercase tracking-[0.18em] ${t.eyebrow} mb-3`}>{text}</p>
+  );
 
   return (
-    <div className={`min-h-screen ${pageBg} ${textMain} font-sans selection:bg-blue-600/30 transition-colors duration-200`}>
+    <div className={`min-h-screen overflow-x-hidden ${t.page} font-sans transition-colors duration-300`}>
 
-      {/* Nav */}
-      <nav className={`border-b ${navBorder} ${navBg} backdrop-blur-md sticky top-0 z-50 transition-colors duration-200`}>
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600/10 border border-blue-500/30 flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4 text-blue-400" />
-            </div>
-            <div>
-              <span className={`text-base font-black tracking-tight ${textMain} uppercase italic`}>FaithSync</span>
-              <span className={`hidden sm:inline text-xs ${textMuted} ml-2 font-normal not-italic normal-case`}>GGCF-GMI Pandi</span>
-            </div>
+      {/* ── Navbar ─────────────────────────────────────────────────────────── */}
+      <nav className={`fixed inset-x-0 top-0 z-50 border-b transition-all duration-300 ${t.nav}`}>
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5">
+            <span className="w-9 h-9 rounded-xl bg-[#173f35] flex items-center justify-center">
+              <Church className="w-[18px] h-[18px] text-[#c5a66a]" strokeWidth={1.75} />
+            </span>
+            <span className="leading-tight">
+              <span className={`block text-[15px] font-bold tracking-tight ${t.heading}`}>FaithSync</span>
+              <span className={`hidden sm:block text-[11px] ${t.muted}`}>GGCF-GMI Pandi</span>
+            </span>
+          </Link>
+
+          <div className="hidden md:flex items-center gap-8">
+            {NAV.map(n => (
+              <a key={n.href} href={n.href} className={`text-sm font-medium ${t.link}`}>{n.label}</a>
+            ))}
           </div>
 
-          <div className="flex items-center gap-3">
-            <a href="#modules"   className={`text-sm ${navLinkCls} transition-colors hidden sm:block`}>Modules</a>
-            <a href="#locations" className={`text-sm ${navLinkCls} transition-colors hidden sm:block`}>Locations</a>
-
-            {/* Theme toggle */}
+          <div className="flex items-center gap-2">
             <button
               onClick={toggleTheme}
-              className={`p-2 rounded-full border ${iconBtnCls} transition-colors`}
+              aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
               title={dark ? "Switch to light mode" : "Switch to dark mode"}
+              className={`w-9 h-9 rounded-full border flex items-center justify-center ${t.iconBtn}`}
             >
-              {dark ? <Sun size={15} /> : <Moon size={15} />}
+              {dark ? <Sun size={16} strokeWidth={1.75} /> : <Moon size={16} strokeWidth={1.75} />}
             </button>
-
-            {/* Single Sign In button */}
             <Link
               href="/login"
-              className="text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg transition-colors"
+              className="hidden sm:inline-flex items-center gap-1.5 bg-[#173f35] hover:bg-[#1f5144] text-white text-sm font-semibold px-5 h-9 rounded-full shadow-sm"
             >
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero */}
-      <header className="pt-24 pb-20 md:pt-32 md:pb-28 relative overflow-hidden">
-        {dark && (
-          <>
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-80 bg-blue-600/8 blur-[140px] pointer-events-none" />
-            <div className="absolute top-16 left-1/2 -translate-x-1/2 w-[400px] h-40 bg-indigo-600/4 blur-[100px] pointer-events-none" />
-          </>
-        )}
-
-        <div className="max-w-4xl mx-auto px-6 flex flex-col items-center text-center relative">
-          <div className="inline-flex items-center gap-2 border border-blue-500/30 bg-blue-500/5 px-4 py-2 mb-10 rounded-full">
-            <Church className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-xs font-bold tracking-widest text-blue-400 uppercase">
-              God's Grace Christian Fellowship · Global Ministry Inc.
-            </span>
-          </div>
-
-          <h1 className={`text-5xl lg:text-6xl font-black tracking-tight ${textMain} mb-6 leading-[1.08]`}>
-            Our Church,{" "}
-            <br className="hidden sm:block" />
-            <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-              One Platform.
-            </span>
-          </h1>
-
-          <p className={`max-w-xl text-base ${textSub} mb-3 leading-relaxed`}>
-            FaithSync is the official management system of{" "}
-            <span className={`${textMain} font-semibold`}>GGCF-GMI Pandi</span> — bringing together our members, ministries, events, and finances into a single, trusted home.
-          </p>
-          <p className={`max-w-md text-sm ${textMuted} mb-10 leading-relaxed`}>
-            From Pandi to Angat to Meycauayan — every member, every gathering, every tithe, accounted for.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-3 items-center">
-            {/* Single CTA — role detected after login */}
-            <Link
-              href="/login"
-              className="group flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-3.5 rounded-xl transition-all active:scale-95"
-            >
-              Sign In to FaithSync
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              Log in
             </Link>
             <button
-              onClick={() => document.querySelector("#modules")?.scrollIntoView({ behavior: "smooth" })}
-              className={`flex items-center gap-2 text-sm ${textMuted} hover:${dark ? "text-slate-300" : "text-slate-600"} transition-colors px-4 py-3.5`}
+              onClick={() => setMenuOpen(v => !v)}
+              aria-label="Toggle menu"
+              className={`md:hidden w-9 h-9 rounded-full border flex items-center justify-center ${t.iconBtn}`}
             >
-              Explore modules <ChevronDown className="w-4 h-4" />
+              {menuOpen ? <X size={16} /> : <Menu size={16} />}
             </button>
+          </div>
+        </div>
+
+        {menuOpen && (
+          <div className={`md:hidden border-t ${t.divider} ${dark ? "bg-[#111815]" : "bg-[#f8f7f2]"} px-5 py-4 space-y-1`}>
+            {NAV.map(n => (
+              <a key={n.href} href={n.href} onClick={() => setMenuOpen(false)}
+                 className={`block py-2.5 text-sm font-medium ${t.link}`}>{n.label}</a>
+            ))}
+            <Link href="/login" className="block mt-2 text-center bg-[#173f35] text-white text-sm font-semibold py-2.5 rounded-full">
+              Log in
+            </Link>
+          </div>
+        )}
+      </nav>
+
+      {/* ── Hero: editorial split ──────────────────────────────────────────── */}
+      <header className={`${t.sectionA} pt-28 sm:pt-32 pb-16 sm:pb-24 overflow-hidden`}>
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 grid lg:grid-cols-[1.1fr_0.9fr] gap-14 lg:gap-12 items-center">
+
+          <div className="rise">
+            <span className={`inline-flex items-center gap-2 text-xs font-semibold px-3.5 py-1.5 rounded-full border ${dark ? "border-[#c5a66a]/30 text-[#c5a66a] bg-[#c5a66a]/5" : "border-[#c5a66a]/50 text-[#7a6234] bg-[#c5a66a]/10"}`}>
+              <MapPin className="w-3.5 h-3.5" strokeWidth={1.75} /> GGCF-GMI Pandi · Bulacan, Philippines
+            </span>
+
+            <h1 className={`mt-6 text-4xl sm:text-5xl lg:text-[3.5rem] font-bold leading-[1.08] tracking-tight ${t.heading}`}>
+              One home for your<br />
+              <span className={dark ? "text-[#c5a66a]" : "text-[#9c7f45]"}>church family</span>,<br />
+              ministries &amp; giving.
+            </h1>
+
+            <p className={`mt-6 max-w-xl text-lg leading-relaxed ${t.body}`}>
+              FaithSync brings members, events, finances and discipleship into one trusted system,
+              so your leaders can spend less time on records and more time shepherding people.
+            </p>
+
+            <div className="mt-9 flex flex-col sm:flex-row gap-3">
+              <Link
+                href="/login"
+                className="group inline-flex items-center justify-center gap-2 bg-[#173f35] hover:bg-[#1f5144] text-white font-semibold px-7 h-12 rounded-full shadow-lg shadow-[#173f35]/20"
+              >
+                Sign in to FaithSync
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" strokeWidth={2} />
+              </Link>
+              <a
+                href="#modules"
+                className={`inline-flex items-center justify-center gap-2 border font-semibold px-7 h-12 rounded-full ${t.ghostBtn}`}
+              >
+                Explore modules
+              </a>
+            </div>
+
+            <ul className={`mt-10 flex flex-wrap gap-x-7 gap-y-2 text-sm ${t.body}`}>
+              {["Role-based access", "Per-branch records", "Transparent finances"].map(x => (
+                <li key={x} className="flex items-center gap-2">
+                  <Check className={`w-4 h-4 ${t.check}`} strokeWidth={2.25} /> {x}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Image composition */}
+          <div className="rise-2 relative mx-auto w-full max-w-md lg:max-w-none">
+            <div className="absolute -top-5 -right-5 w-full h-full rounded-t-[12rem] rounded-b-[2rem] border-2 border-[#c5a66a]/50" aria-hidden="true" />
+            <div className={`relative aspect-[4/5] overflow-hidden rounded-t-[12rem] rounded-b-[2rem] ${dark ? "bg-[#1b2420]" : "bg-[#e8f0ea]"} shadow-xl`}>
+              {!imgFailed ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src="/images/hero-sanctuary.jpg"
+                  alt="A bright church sanctuary with rows of seats facing the altar"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  onError={() => setImgFailed(true)}
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Church className="w-24 h-24 text-[#173f35]/30" strokeWidth={1} />
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#173f35]/35 via-transparent to-transparent" />
+            </div>
+
+            {/* Floating stat card */}
+            <div className={`absolute -bottom-6 -left-4 sm:-left-8 ${dark ? "bg-[#1b2420] border-white/10" : "bg-white border-[#e5e3d8]"} border rounded-2xl shadow-lg px-5 py-4 flex items-center gap-4`}>
+              <span className={`w-11 h-11 rounded-xl flex items-center justify-center ${t.iconWrap}`}>
+                <Users className="w-5 h-5" strokeWidth={1.75} />
+              </span>
+              <div>
+                <p className={`text-xl font-bold leading-none ${t.heading}`}>100+</p>
+                <p className={`text-xs mt-1 ${t.muted}`}>Members across 3 locations</p>
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Stats */}
-      <section className={`border-y ${statsBg} py-10 transition-colors duration-200`}>
-        <div className="max-w-3xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+      {/* ── Stats ─────────────────────────────────────────────────────────── */}
+      <section className={`${t.sectionB} border-y ${t.divider}`}>
+        <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           {STATS.map((s) => (
             <div key={s.label}>
-              <p className="text-3xl font-black text-blue-400">{s.value}</p>
-              <p className={`text-xs ${textMuted} mt-1 uppercase tracking-wider`}>{s.label}</p>
+              <p className={`text-4xl font-bold tracking-tight ${t.stat}`}>{s.value}</p>
+              <p className={`text-xs mt-2 uppercase tracking-[0.14em] ${t.muted}`}>{s.label}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Tagline */}
-      <section className="py-16 max-w-4xl mx-auto px-6 text-center">
-        <p className={`${textSub} text-lg leading-relaxed max-w-2xl mx-auto`}>
-          <span className={`${textMain} font-semibold`}>Serving the congregation since its founding</span> — GGCF-GMI Pandi needed a system that matched the scale and heart of its ministry. FaithSync is that system.
-        </p>
-        <div className={`mt-8 flex items-center justify-center gap-2 ${textMuted} text-xs uppercase tracking-widest`}>
-          <Heart className="w-3 h-3 text-blue-500/60" />
-          <span>Built with and for the GGCF-GMI Pandi congregation</span>
-          <Heart className="w-3 h-3 text-blue-500/60" />
+      {/* ── About ─────────────────────────────────────────────────────────── */}
+      <section id="about" className={`${t.sectionA} py-20 sm:py-28 scroll-mt-16`}>
+        <div className="max-w-3xl mx-auto px-5 sm:px-8 text-center">
+          {eyebrow("Our story")}
+          <h2 className={`text-3xl sm:text-4xl font-bold leading-tight ${t.heading}`}>
+            Built for the heart of this ministry
+          </h2>
+          <p className={`mt-6 text-lg leading-relaxed ${t.body}`}>
+            Serving the congregation since its founding, GGCF-GMI Pandi needed a system that matched the scale and
+            heart of its ministry. FaithSync is that system — from Pandi to Angat to Meycauayan, every member,
+            every gathering, every tithe, accounted for.
+          </p>
+          <div className={`mt-8 inline-flex items-center gap-2 text-xs uppercase tracking-[0.16em] ${t.muted}`}>
+            <Heart className="w-3.5 h-3.5 text-[#c5a66a]" strokeWidth={1.75} />
+            Built with and for the GGCF-GMI Pandi congregation
+          </div>
         </div>
       </section>
 
-      {/* Modules */}
-      <section id="modules" className="max-w-7xl mx-auto px-6 pb-24">
-        <div className="text-center mb-12">
-          <p className="text-xs text-blue-400/80 uppercase tracking-widest font-bold mb-3">Church Modules</p>
-          <h2 className={`text-3xl font-black ${textMain} tracking-tight mb-3`}>Everything We Need, In One Place</h2>
-          <p className={`${textMuted} text-sm max-w-md mx-auto`}>Six modules covering every aspect of church life — select one to learn more.</p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-          <div className="lg:col-span-2 flex flex-col gap-2">
-            {FEATURES.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setActiveFeature(f.id)}
-                className={`w-full text-left flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all ${
-                  activeFeature === f.id ? featureBtnActive : featureBtnInactive
-                }`}
-              >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                  activeFeature === f.id ? "bg-blue-600" : dark ? "bg-white/5" : "bg-slate-200"
-                }`}>
-                  <f.Icon className={`w-4 h-4 ${activeFeature === f.id ? "text-blue-100" : dark ? "text-slate-600" : "text-slate-500"}`} />
-                </div>
-                <span className="text-sm font-semibold leading-tight">{f.title}</span>
-              </button>
-            ))}
+      {/* ── Features ──────────────────────────────────────────────────────── */}
+      <section id="modules" className={`${t.sectionB} py-20 sm:py-28 scroll-mt-16`}>
+        <div className="max-w-7xl mx-auto px-5 sm:px-8">
+          <div className="max-w-2xl mb-14">
+            {eyebrow("What's inside")}
+            <h2 className={`text-3xl sm:text-4xl font-bold leading-tight ${t.heading}`}>
+              Everything the church needs, in one place
+            </h2>
+            <p className={`mt-4 text-lg ${t.body}`}>
+              Six connected modules that replace scattered notebooks and spreadsheets.
+            </p>
           </div>
 
-          <div className={`lg:col-span-3 ${featureCard} border rounded-2xl p-8 min-h-[300px] transition-colors duration-200`}>
-            {active && (
-              <>
-                <div className="w-11 h-11 bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center mb-5">
-                  <active.Icon className="w-5 h-5 text-blue-400" />
-                </div>
-                <h3 className={`text-xl font-black ${textMain} mb-3`}>{active.title}</h3>
-                <p className={`${textSub} text-sm leading-relaxed mb-6`}>{active.desc}</p>
-                <ul className="space-y-2.5">
-                  {active.bullets.map((b) => (
-                    <li key={b} className={`flex items-center gap-2.5 text-sm ${dark ? "text-slate-300" : "text-slate-600"}`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                      {b}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {FEATURES.map(({ id, Icon, title, desc, bullets }) => (
+              <article
+                key={id}
+                className={`group border rounded-3xl p-7 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${t.card}`}
+              >
+                <span className={`w-12 h-12 rounded-2xl flex items-center justify-center ${t.iconWrap}`}>
+                  <Icon className="w-6 h-6" strokeWidth={1.75} />
+                </span>
+                <h3 className={`mt-6 text-lg font-bold ${t.heading}`}>{title}</h3>
+                <p className={`mt-2 text-sm leading-relaxed ${t.body}`}>{desc}</p>
+                <ul className="mt-5 space-y-2">
+                  {bullets.slice(0, 3).map(b => (
+                    <li key={b} className={`flex items-center gap-2 text-sm ${t.body}`}>
+                      <Check className={`w-4 h-4 shrink-0 ${t.check}`} strokeWidth={2.25} /> {b}
                     </li>
                   ))}
                 </ul>
-              </>
-            )}
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Locations */}
-      <section id="locations" className={`border-t ${sectionBg} py-20 transition-colors duration-200`}>
-        <div className="max-w-4xl mx-auto px-6">
-          <div className="text-center mb-12">
-            <p className="text-xs text-blue-400/80 uppercase tracking-widest font-bold mb-3">Our Reach</p>
-            <h2 className={`text-3xl font-black ${textMain} tracking-tight mb-3`}>Three Locations, One Church</h2>
-            <p className={`${textMuted} text-sm max-w-md mx-auto`}>
-              GGCF-GMI Pandi spans across Bulacan — FaithSync keeps all three satellites connected under one roof.
-            </p>
+      {/* ── Locations ─────────────────────────────────────────────────────── */}
+      <section id="locations" className={`${t.sectionA} py-20 sm:py-28 scroll-mt-16`}>
+        <div className="max-w-7xl mx-auto px-5 sm:px-8">
+          <div className="max-w-2xl mb-14">
+            {eyebrow("Where we gather")}
+            <h2 className={`text-3xl sm:text-4xl font-bold leading-tight ${t.heading}`}>One church, three locations</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {LOCATIONS.map((loc) => (
+
+          <div className="grid md:grid-cols-3 gap-5">
+            {LOCATIONS.map(loc => (
               <div
                 key={loc.name}
-                className={`rounded-2xl p-6 border transition-all ${
-                  loc.primary ? "bg-blue-600/10 border-blue-500/40" : locCard
+                className={`rounded-3xl border p-7 ${
+                  loc.primary
+                    ? "bg-[#173f35] border-[#173f35] text-white shadow-lg"
+                    : dark ? "bg-[#1b2420] border-white/10" : "bg-white border-[#e5e3d8]"
                 }`}
               >
-                <div className="flex items-start gap-3 mb-3">
-                  <MapPin className={`w-4 h-4 mt-0.5 shrink-0 ${loc.primary ? "text-blue-400" : textMuted}`} />
-                  <div>
-                    <p className={`text-sm font-bold ${loc.primary ? "text-blue-300" : dark ? "text-slate-300" : "text-slate-700"}`}>{loc.name}</p>
-                    <p className={`text-xs ${textMuted} mt-0.5`}>{loc.role}</p>
-                  </div>
-                </div>
-                <p className={`text-2xl font-black ${loc.primary ? "text-white" : textSub}`}>{loc.members}</p>
+                <span className={`w-11 h-11 rounded-xl flex items-center justify-center ${loc.primary ? "bg-white/10 text-[#c5a66a]" : t.iconWrap}`}>
+                  <MapPin className="w-5 h-5" strokeWidth={1.75} />
+                </span>
+                <h3 className={`mt-5 text-lg font-bold ${loc.primary ? "text-white" : t.heading}`}>{loc.name}</h3>
+                <p className={`text-sm mt-1 ${loc.primary ? "text-white/70" : t.muted}`}>{loc.role}</p>
+                <p className={`mt-5 pt-5 border-t text-sm font-semibold ${loc.primary ? "border-white/15 text-[#c5a66a]" : `${t.divider} ${t.heading}`}`}>
+                  {loc.members}
+                </p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Who logs in — simplified to single Sign In */}
-      <section className="py-20 max-w-4xl mx-auto px-6">
-        <div className="text-center mb-12">
-          <p className="text-xs text-blue-400/80 uppercase tracking-widest font-bold mb-3">Access</p>
-          <h2 className={`text-3xl font-black ${textMain} tracking-tight`}>Your Role, Your View</h2>
-          <p className={`${textMuted} text-sm mt-3`}>One login — your dashboard is set by your role.</p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div className="bg-blue-600/10 border border-blue-500/20 rounded-2xl p-7">
-            <div className="w-10 h-10 bg-blue-600/15 border border-blue-500/25 rounded-xl flex items-center justify-center mb-5">
-              <ShieldCheck className="w-5 h-5 text-blue-400" />
-            </div>
-            <h3 className={`text-lg font-black ${textMain} mb-2`}>Staff & Leadership</h3>
-            <p className={`text-sm ${textSub} leading-relaxed mb-6`}>
-              Pastors, ministry heads, and administrators — manage the full scope of church operations, finances, and member records.
-            </p>
+      {/* ── Call to action ────────────────────────────────────────────────── */}
+      <section className="bg-[#173f35] relative overflow-hidden">
+        <div className="absolute -right-24 -top-24 w-80 h-80 rounded-full border border-[#c5a66a]/20" aria-hidden="true" />
+        <div className="absolute -right-10 -top-10 w-52 h-52 rounded-full border border-[#c5a66a]/20" aria-hidden="true" />
+        <div className="relative max-w-3xl mx-auto px-5 sm:px-8 py-20 sm:py-24 text-center">
+          <span className="block mx-auto mb-6 h-0.5 w-12 bg-[#c5a66a]" />
+          <h2 className="text-3xl sm:text-4xl font-bold text-white leading-tight">Ready to serve with clarity?</h2>
+          <p className="mt-4 text-lg text-white/70 max-w-xl mx-auto">
+            Sign in with your church account. Your access level is set by your administrator.
+          </p>
+          <div className="mt-9 flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/login"
-              className="inline-flex items-center gap-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-lg transition-colors"
+              className="group inline-flex items-center justify-center gap-2 bg-[#c5a66a] hover:bg-[#d3b87f] text-[#173f35] font-semibold px-8 h-12 rounded-full"
             >
-              Sign In <ArrowRight className="w-3.5 h-3.5" />
+              Sign in to FaithSync
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" strokeWidth={2} />
             </Link>
-          </div>
-
-          <div className={`${memberRoleCard} border rounded-2xl p-7 transition-colors duration-200`}>
-            <div className={`w-10 h-10 ${dark ? "bg-white/5 border-white/10" : "bg-slate-200 border-slate-300"} border rounded-xl flex items-center justify-center mb-5`}>
-              <Users className={`w-5 h-5 ${dark ? "text-slate-400" : "text-slate-500"}`} />
-            </div>
-            <h3 className={`text-lg font-black ${textMain} mb-2`}>Church Members</h3>
-            <p className={`text-sm ${textSub} leading-relaxed mb-6`}>
-              View your profile, check upcoming events, track your attendance, and stay connected with your ministry.
-            </p>
             <Link
               href="/login"
-              className={`inline-flex items-center gap-2 text-sm font-bold ${textMain} ${dark ? "bg-white/8 hover:bg-white/12 border border-white/10" : "bg-slate-200 hover:bg-slate-300 border border-slate-300"} px-5 py-2.5 rounded-lg transition-colors`}
+              className="inline-flex items-center justify-center gap-2 border border-white/25 hover:bg-white/10 text-white font-semibold px-8 h-12 rounded-full"
             >
-              Sign In <ArrowRight className="w-3.5 h-3.5" />
+              <ShieldCheck className="w-4 h-4" strokeWidth={1.75} /> Member login
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className={`border-t ${footerBorder} py-10 text-center transition-colors duration-200`}>
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <div className="w-6 h-6 rounded-md bg-blue-600/10 border border-blue-500/20 flex items-center justify-center">
-            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+      {/* ── Footer ────────────────────────────────────────────────────────── */}
+      <footer className={`${t.sectionA} border-t ${t.divider}`}>
+        <div className="max-w-7xl mx-auto px-5 sm:px-8 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-lg bg-[#173f35] flex items-center justify-center">
+              <Church className="w-4 h-4 text-[#c5a66a]" strokeWidth={1.75} />
+            </span>
+            <span className={`text-sm font-bold ${t.heading}`}>FaithSync</span>
           </div>
-          <span className={`text-sm font-black ${textMain} uppercase italic tracking-tight`}>FaithSync</span>
+          <div className={`flex gap-6 text-sm ${t.muted}`}>
+            {NAV.map(n => <a key={n.href} href={n.href} className={t.link}>{n.label}</a>)}
+            <Link href="/login" className={t.link}>Log in</Link>
+          </div>
+          <p className={`text-xs ${t.muted}`}>© {new Date().getFullYear()} GGCF-GMI Pandi · Church Management System</p>
         </div>
-        <p className={`${footerText} text-xs`}>God's Grace Christian Fellowship Global Ministry Inc. · Pandi, Bulacan</p>
-        <p className={`${footerMuted} text-xs mt-1`}>Church Management System · Capstone Project</p>
       </footer>
     </div>
   );

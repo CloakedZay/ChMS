@@ -169,7 +169,7 @@ export default function DiscipleshipPage() {
 
       <div className="space-y-4">
         {/* Progress header */}
-        <div className="bg-[#1a1d2e] border border-white/10 rounded-3xl p-6 flex items-center justify-between gap-4">
+        <div className="bg-[#1b2420] border border-white/10 rounded-3xl p-6 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs text-white/40 uppercase tracking-widest mb-1">Your Progress</p>
             <h2 className="text-2xl font-black text-white">
@@ -181,9 +181,9 @@ export default function DiscipleshipPage() {
           </div>
           <div className="relative w-16 h-16 shrink-0">
             <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#1e293b" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#2b332f" strokeWidth="3" />
               <circle
-                cx="18" cy="18" r="15.9" fill="none" stroke="#3b82f6" strokeWidth="3"
+                cx="18" cy="18" r="15.9" fill="none" stroke="#173f35" strokeWidth="3"
                 strokeDasharray={`${modules.length > 0 ? (completedCount / modules.length) * 100 : 0} 100`}
                 strokeLinecap="round"
               />
@@ -217,8 +217,8 @@ export default function DiscipleshipPage() {
             <div
               className={`rounded-3xl border overflow-hidden transition-all ${
                 complete  ? 'bg-emerald-500/5 border-emerald-500/20' :
-                !unlocked ? 'bg-[#1a1d2e]/40 border-white/5 opacity-60' :
-                            'bg-[#1a1d2e] border-white/10'
+                !unlocked ? 'bg-[#1b2420]/40 border-white/5 opacity-60' :
+                            'bg-[#1b2420] border-white/10'
               }`}
             >
               <button
@@ -318,7 +318,7 @@ export default function DiscipleshipPage() {
                               placeholder="Write your answer here..."
                               value={answers[q.id] || ''}
                               onChange={(e) => setAnswers(p => ({ ...p, [q.id]: e.target.value }))}
-                              className="w-full bg-[#0f111a] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 resize-none transition-colors"
+                              className="w-full bg-[#111815] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 resize-none transition-colors"
                             />
                           </div>
                         )}

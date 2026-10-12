@@ -41,9 +41,11 @@ export const PERMISSIONS = {
   // excluded, as Admin has no finance); screen time for Admin and Pastor.
   changeLog:          { admin: 'view' },
   screenTime:         { admin: 'view', pastor: 'view' },
-  members:            { admin: 'view', pastor: 'view', leader: 'view', finance: 'names', secretary: 'edit', member: 'own' },
+  members:            { pastor: 'view', leader: 'view', finance: 'names', secretary: 'edit', member: 'own' },
   memberImport:       { secretary: 'edit' },
   memberArchive:      { pastor: 'edit', secretary: 'edit' },
+  // Inactive-member follow-up (db/032): own branch; Pastor every branch.
+  followUp:           { pastor: 'edit', leader: 'edit', secretary: 'edit' },
   ministryEnrollment: { pastor: 'edit', leader: 'edit', secretary: 'view' },
 
   // Discipleship and AI assistant
@@ -53,10 +55,18 @@ export const PERMISSIONS = {
   aiDocuments:        { admin: 'view', pastor: 'edit', leader: 'edit' },
   aiAssistant:        { admin: 'view', pastor: 'view', leader: 'view', finance: 'view', secretary: 'view', member: 'view' },
 
+  // Messages — one-to-one chat; everyone can write to the people the database
+  // lists for them (own church, plus every Admin and Pastor). db/029.
+  messages:           { admin: 'edit', pastor: 'edit', leader: 'edit', finance: 'edit', secretary: 'edit', member: 'edit' },
+
   // Events and announcements
   events:             { admin: 'view', pastor: 'approve', leader: 'submit', finance: 'view', secretary: 'view', member: 'view' },
   announcements:      { admin: 'view', pastor: 'edit', leader: 'edit', finance: 'view', secretary: 'view', member: 'view' },
   bibleVerses:        { admin: 'view', pastor: 'edit', leader: 'edit', member: 'view' },
+
+  // Devotional journal — private to each person: everyone writes their own,
+  // nobody (Admin and Pastor included) reads anyone else's. db/027 enforces it.
+  journal:            { admin: 'own', pastor: 'own', leader: 'own', finance: 'own', secretary: 'own', member: 'own' },
 
   // Finance — no Admin, no Secretary. Members' own giving history is still
   // an open question in the doc, so members have no access for now.
@@ -97,14 +107,19 @@ export function can(role, feature, access = 'view') {
 export const PAGE_FEATURES = {
   '/dashboard':                  null,
   '/dashboard/members':          ['members'],
+  '/dashboard/follow-up':        ['followUp'],
   '/dashboard/events':           ['events'],
   '/dashboard/finance':          ['finance'],
   '/dashboard/ministry':         ['ministryEnrollment', 'modules'],
   '/dashboard/training':         ['modules', 'moduleProgress', 'answerReview'],
   '/dashboard/bible-verses':     ['bibleVerses'],
+  '/dashboard/announcements':    ['announcements'],
+  '/dashboard/journal':          ['journal'],
+  '/dashboard/messages':         ['messages'],
   '/dashboard/chatbot':          ['aiAssistant'],
   '/dashboard/reports':          ['reports'],
   '/dashboard/users':            ['users'],
+  '/dashboard/profile':          null,
   '/dashboard/activity':         ['changeLog', 'screenTime'],
 
   '/member-dashboard':              null,
@@ -114,6 +129,8 @@ export const PAGE_FEATURES = {
   '/member-dashboard/finances':     ['finance'],
   '/member-dashboard/discipleship': ['moduleProgress'],
   '/member-dashboard/chatbot':      ['aiAssistant'],
+  '/member-dashboard/journal':      ['journal'],
+  '/member-dashboard/messages':     ['messages'],
   '/member-dashboard/profile':      null,
 }
 

@@ -77,7 +77,7 @@ export default function MemberFinancesPage() {
         <StatCard label="Total Expenses" amount={totalExpense} icon={TrendingDown} color="text-rose-400" />
       </div>
 
-      <div className="bg-[#1a1d2e] border border-white/10 rounded-3xl p-6 mb-6">
+      <div className="bg-[#1b2420] border border-white/10 rounded-3xl p-6 mb-6">
         <h3 className="text-[10px] uppercase font-bold tracking-widest text-white/40 mb-5 border-b border-white/10 pb-3">Fund Breakdown</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {FUNDS.map((fund) => (
@@ -100,7 +100,7 @@ export default function MemberFinancesPage() {
             placeholder="Search by category or fund..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#1a1d2e] border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full bg-[#1b2420] border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
         <div className="flex gap-2">
@@ -108,7 +108,7 @@ export default function MemberFinancesPage() {
             <button
               key={tp}
               onClick={() => setFilterType(tp)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${filterType === tp ? 'bg-blue-600 text-white' : 'bg-[#1a1d2e] border border-white/10 text-white/40 hover:text-white'}`}
+              className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${filterType === tp ? 'bg-blue-600 text-white' : 'bg-[#1b2420] border border-white/10 text-white/40 hover:text-white'}`}
             >
               {tp}
             </button>
@@ -116,7 +116,7 @@ export default function MemberFinancesPage() {
         </div>
       </div>
 
-      <div className="bg-[#1a1d2e] border border-white/10 rounded-3xl overflow-hidden">
+      <div className="bg-[#1b2420] border border-white/10 rounded-3xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -161,7 +161,7 @@ export default function MemberFinancesPage() {
 
 function StatCard({ label, amount, icon: Icon, color }) {
   return (
-    <div className="bg-[#1a1d2e] border border-white/10 p-6 rounded-3xl">
+    <div className="bg-[#1b2420] border border-white/10 p-6 rounded-3xl">
       <div className={`p-2.5 rounded-xl bg-white/[0.03] w-fit mb-4 ${color}`}><Icon size={20} /></div>
       <p className="text-[10px] uppercase font-bold tracking-widest text-white/40 mb-1">{label}</p>
       <h3 className="text-2xl font-black text-white font-mono">{'₱' + (amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</h3>

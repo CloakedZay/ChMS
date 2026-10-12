@@ -1,35 +1,209 @@
 @import "tailwindcss";
 
+/* ============================================================
+   FaithSync design system
+   Palette: forest #173F35 · ivory #F8F7F2 · gold #C5A66A
+            charcoal #252A28 · muted gray #858B87 · soft green #E8F0EA
+   The pages are written with Tailwind's slate / blue / emerald classes, so
+   the theme below re-points those scales at the church palette. That keeps
+   every page, form and modal consistent without touching their logic.
+   ============================================================ */
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-manrope), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Neutrals: warm ivory (light) to deep green-charcoal (dark) */
+  --color-slate-50:  #ffffff;
+  --color-slate-100: #fbfaf6;
+  --color-slate-200: #f8f7f2;
+  --color-slate-300: #e5e3d8;
+  --color-slate-400: #b6bab6;
+  --color-slate-500: #858b87;
+  --color-slate-600: #646b67;
+  --color-slate-700: #434a46;
+  --color-slate-800: #2b332f;
+  --color-slate-900: #1b2420;
+  --color-slate-950: #111815;
+
+  /* Primary: forest green (was blue / indigo) */
+  --color-blue-50:  #e8f0ea;
+  --color-blue-100: #d6e5db;
+  --color-blue-200: #b6cfbf;
+  --color-blue-300: #8fb59f;
+  --color-blue-400: #6aa183;
+  --color-blue-500: #2f6b57;
+  --color-blue-600: #173f35;
+  --color-blue-700: #12332b;
+  --color-blue-800: #0e2822;
+  --color-blue-900: #0a1c18;
+  --color-blue-950: #06110e;
+  --color-indigo-50:  #e8f0ea;
+  --color-indigo-100: #d6e5db;
+  --color-indigo-200: #b6cfbf;
+  --color-indigo-300: #8fb59f;
+  --color-indigo-400: #6aa183;
+  --color-indigo-500: #2f6b57;
+  --color-indigo-600: #173f35;
+  --color-indigo-700: #12332b;
+  --color-indigo-800: #0e2822;
+  --color-indigo-900: #0a1c18;
+
+  /* Secondary accent: muted gold (was purple / violet / yellow / orange) */
+  --color-violet-50:  #faf6ec;
+  --color-violet-100: #f3ead4;
+  --color-violet-200: #e8d8b0;
+  --color-violet-300: #dcc88f;
+  --color-violet-400: #cfb47a;
+  --color-violet-500: #c5a66a;
+  --color-violet-600: #9c7f45;
+  --color-violet-700: #7a6234;
+  --color-violet-800: #5a4826;
+  --color-violet-900: #3d3019;
+  --color-purple-50:  #faf6ec;
+  --color-purple-100: #f3ead4;
+  --color-purple-200: #e8d8b0;
+  --color-purple-300: #dcc88f;
+  --color-purple-400: #cfb47a;
+  --color-purple-500: #c5a66a;
+  --color-purple-600: #9c7f45;
+  --color-purple-700: #7a6234;
+  --color-purple-800: #5a4826;
+  --color-purple-900: #3d3019;
+  --color-yellow-50:  #faf6ec;
+  --color-yellow-100: #f3ead4;
+  --color-yellow-200: #e8d8b0;
+  --color-yellow-300: #dcc88f;
+  --color-yellow-400: #cfb47a;
+  --color-yellow-500: #c5a66a;
+  --color-yellow-600: #9c7f45;
+  --color-yellow-700: #7a6234;
+  --color-yellow-800: #5a4826;
+  --color-yellow-900: #3d3019;
+  --color-pink-400: #cfb47a;
+  --color-pink-500: #c5a66a;
+  --color-pink-600: #9c7f45;
+  --color-orange-400: #d1a35a;
+  --color-orange-500: #c08a35;
+  --color-orange-600: #9a6b22;
+
+  /* Success: a softer green than default emerald */
+  --color-emerald-50:  #edf6ef;
+  --color-emerald-100: #d7ebdc;
+  --color-emerald-300: #8fcaa0;
+  --color-emerald-400: #5fb57a;
+  --color-emerald-500: #3f9a5c;
+  --color-emerald-600: #2e7d48;
+  --color-emerald-700: #25643a;
+
+  /* Danger: a muted brick red */
+  --color-rose-400: #e07a7a;
+  --color-rose-500: #cc5656;
+  --color-rose-600: #b03c3c;
+  --color-red-400: #e07a7a;
+  --color-red-500: #cc5656;
+  --color-red-600: #b03c3c;
+
+  /* One radius scale, used everywhere */
+  --radius-lg:  0.625rem;
+  --radius-xl:  0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.25rem;
+
+  /* Calm type: no ultra-heavy weights */
+  --font-weight-black: 700;
+  --font-weight-extrabold: 700;
+
+  --shadow-lg: 0 10px 30px -12px rgb(23 63 53 / 0.18), 0 2px 6px -2px rgb(23 63 53 / 0.08);
+  --shadow-xl: 0 20px 45px -18px rgb(23 63 53 / 0.25), 0 4px 10px -4px rgb(23 63 53 / 0.1);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8f7f2;
+  --foreground: #252a28;
+  --forest: #173f35;
+  --gold: #c5a66a;
+}
+:root[data-theme="dark"] {
+  --background: #111815;
+  --foreground: #e9ece9;
 }
 
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+html { scroll-behavior: smooth; }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+::selection { background: rgb(197 166 106 / 0.35); }
+
+/* Visible keyboard focus, in the brand gold */
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offset: 0; }
+
+/* Interactions: every button / link / field eases, buttons press in a hair */
+button, a, input, select, textarea {
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+button:not(:disabled):active { transform: translateY(0.5px); }
+button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+
+/* Form fields share one height and a softer focus ring */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+select { min-height: 2.5rem; }
+input:focus, textarea:focus, select:focus {
+  box-shadow: 0 0 0 3px rgb(197 166 106 / 0.2);
+}
+
+/* Tables: comfortable rows, quiet headers */
+table { border-collapse: collapse; }
+thead th { font-weight: 600; letter-spacing: 0.06em; }
+tbody tr { transition: background-color 120ms ease; }
+
+/* Skeleton loader: <div className="skeleton h-4 w-32" /> */
+.skeleton {
+  border-radius: 0.5rem;
+  background: linear-gradient(90deg, rgb(133 139 135 / 0.14) 25%, rgb(133 139 135 / 0.26) 37%, rgb(133 139 135 / 0.14) 63%);
+  background-size: 400% 100%;
+  animation: skeleton 1.4s ease infinite;
+}
+@keyframes skeleton { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+/* Gentle entrance for page content */
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise 420ms ease both; }
+.rise-2 { animation: rise 420ms 90ms ease both; }
+.rise-3 { animation: rise 420ms 180ms ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
 }
 
 /* Scrollbars that match the app theme (ThemeContext sets data-theme on
-   <html>). Dark is the default. */
+   <html>). Light is the default. */
 :root {
-  --scroll-track: #0f111a;
-  --scroll-thumb: #2a3048;
-  --scroll-thumb-hover: #3b4466;
+  --scroll-track: #f1efe7;
+  --scroll-thumb: #cfcdc2;
+  --scroll-thumb-hover: #b3b0a2;
 }
-:root[data-theme="light"] {
-  --scroll-track: #e2e8f0;
-  --scroll-thumb: #94a3b8;
-  --scroll-thumb-hover: #64748b;
+:root[data-theme="dark"] {
+  --scroll-track: #111815;
+  --scroll-thumb: #2b3731;
+  --scroll-thumb-hover: #3d4c44;
 }
 
 /* Chrome, Edge, Brave, Safari */
@@ -59,3 +233,56 @@ body {
     scrollbar-color: var(--scroll-thumb) var(--scroll-track);
   }
 }
+
+/* Member dashboard light theme. The member pages are written with dark
+   classes; when the layout adds .member-light these remap them to the ivory
+   theme, so the pages themselves don't need a theme switch. Text that sits on
+   a green button stays white. */
+.member-light { background: #f8f7f2; color: #252a28; }
+.member-light.bg-\[\#111815\],
+.member-light .bg-\[\#111815\] { background-color: #f8f7f2; }
+.member-light .bg-\[\#0e1411\] { background-color: #ffffff; }
+.member-light .bg-\[\#1b2420\] { background-color: #ffffff; box-shadow: 0 1px 2px rgb(23 63 53 / 0.05); }
+.member-light .bg-\[\#1b2420\]\/40 { background-color: rgb(255 255 255 / 0.6); }
+.member-light .bg-slate-900\/60 { background-color: #f1efe7; }
+
+.member-light .text-white:not([class*="bg-blue-"]):not([class*="bg-indigo-"]) { color: #252a28; }
+.member-light .text-white\/90 { color: rgb(37 42 40 / 0.9); }
+.member-light .text-white\/80 { color: rgb(37 42 40 / 0.8); }
+.member-light .text-white\/70 { color: rgb(37 42 40 / 0.7); }
+.member-light .text-white\/60 { color: rgb(37 42 40 / 0.68); }
+.member-light .text-white\/50 { color: rgb(37 42 40 / 0.62); }
+.member-light .text-white\/40 { color: rgb(37 42 40 / 0.56); }
+.member-light .text-white\/30 { color: rgb(37 42 40 / 0.46); }
+.member-light .text-white\/20 { color: rgb(37 42 40 / 0.4); }
+.member-light .placeholder\:text-white\/30::placeholder,
+.member-light .placeholder\:text-white\/20::placeholder { color: rgb(37 42 40 / 0.42); }
+.member-light .hover\:text-white:hover { color: #252a28; }
+
+.member-light .text-slate-200 { color: #2b332f; }
+.member-light .text-slate-400 { color: #646b67; }
+.member-light .text-slate-500 { color: #646b67; }
+.member-light .text-slate-600 { color: #858b87; }
+.member-light .text-slate-700 { color: #858b87; }
+.member-light .group:hover .group-hover\:text-slate-300 { color: #2b332f; }
+
+.member-light .border-white\/10,
+.member-light .border-white\/5,
+.member-light .border-slate-800 { border-color: #e5e3d8; }
+.member-light .divide-white\/5 > :not(:last-child) { border-color: #efede4; }
+.member-light .bg-white\/5,
+.member-light .bg-white\/\[0\.02\],
+.member-light .bg-white\/\[0\.03\],
+.member-light .hover\:bg-white\/5:hover,
+.member-light .hover\:bg-white\/\[0\.03\]:hover,
+.member-light .hover\:bg-white\/\[0\.06\]:hover { background-color: rgb(23 63 53 / 0.05); }
+.member-light .bg-slate-700\/50 { background-color: #f1efe7; }
+
+/* Dark theme: the forest green primary is too close to the dark surfaces, so
+   solid green buttons and active chips lift to a lighter green there. */
+:root[data-theme="dark"] .bg-blue-600 { background-color: #2f6b57; }
+:root[data-theme="dark"] .hover\:bg-blue-500:hover { background-color: #3a7d67; }
+:root[data-theme="dark"] .active\:bg-blue-700:active { background-color: #26594a; }
+:root[data-theme="dark"] .bg-blue-600\/10,
+:root[data-theme="dark"] .bg-blue-600\/15,
+:root[data-theme="dark"] .bg-blue-600\/20 { background-color: rgb(106 161 131 / 0.14); }

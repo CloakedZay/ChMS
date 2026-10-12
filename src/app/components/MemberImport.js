@@ -30,6 +30,7 @@ const HEADER_ALIASES = {
   phone: ['phone', 'phone number', 'mobile', 'mobile number', 'contact', 'contact number', 'cellphone'],
   email: ['email', 'e-mail', 'email address'],
   status: ['status'],
+  birth_date: ['birthday', 'birth date', 'birthdate', 'date of birth', 'dob', 'kaarawan'],
 };
 
 const norm = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
@@ -41,6 +42,44 @@ async function readRows(file) {
   }
   const { readSheet } = await import('read-excel-file/browser');
   return readSheet(file);   // the first sheet — "Members" in the template
+}
+
+const pad = (n) => String(n).padStart(2, '0');
+
+// A birthday cell can be a real Excel date, an Excel date serial number, or
+// typed text (2024-05-14, 5/14/1990, May 14 1990). Returns 'YYYY-MM-DD',
+// '' when the cell is blank, or null when it can't be understood.
+function parseBirthday(cell) {
+  if (cell === null || cell === undefined || String(cell).trim() === '') return '';
+  let y, m, d;
+  if (cell instanceof Date) {
+    if (Number.isNaN(cell.getTime())) return null;
+    // Excel dates arrive as UTC midnight; anything else is a local time.
+    const utc = cell.getUTCHours() === 0 && cell.getUTCMinutes() === 0;
+    [y, m, d] = utc
+      ? [cell.getUTCFullYear(), cell.getUTCMonth() + 1, cell.getUTCDate()]
+      : [cell.getFullYear(), cell.getMonth() + 1, cell.getDate()];
+  } else if (typeof cell === 'number') {
+    const dt = new Date(Math.round((cell - 25569) * 86400 * 1000));
+    [y, m, d] = [dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()];
+  } else {
+    const s = String(cell).trim();
+    let mt;
+    if ((mt = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/))) {
+      [y, m, d] = [+mt[1], +mt[2], +mt[3]];
+    } else if ((mt = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/))) {
+      [y, m, d] = [+mt[3], +mt[1], +mt[2]];            // month first, as is usual here
+      if (m > 12 && d <= 12) [m, d] = [d, m];          // 25/12/1990 → day first
+    } else {
+      const dt = new Date(s + ' UTC');
+      if (Number.isNaN(dt.getTime())) return null;
+      [y, m, d] = [dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()];
+    }
+  }
+  const check = new Date(Date.UTC(y, m - 1, d));
+  const real = check.getUTCFullYear() === y && check.getUTCMonth() === m - 1 && check.getUTCDate() === d;
+  if (!real || y < 1900 || check.getTime() > Date.now()) return null;
+  return `${y}-${pad(m)}-${pad(d)}`;
 }
 
 // Excel stores 09171234567 as the number 9171234567; put the 0 back.
@@ -75,12 +114,18 @@ function checkRows(rows, existingNames) {
       phone: col.phone === undefined ? '' : fixPhone(cells[col.phone]),
       email: get('email').toLowerCase(),
       status: get('status').toLowerCase() || 'active',
+      birth_date: '',
       errors: [],
       warnings: [],
     };
 
     if (nameKey(r.full_name) === EXAMPLE_NAME && r.email === EXAMPLE_EMAIL) {
       r.errors.push("This is the template's example row");
+    }
+    if (col.birth_date !== undefined) {
+      const b = parseBirthday(cells[col.birth_date]);
+      if (b === null) r.errors.push(`Birthday "${norm(cells[col.birth_date])}" — use YYYY-MM-DD, e.g. 1990-05-14`);
+      else r.birth_date = b;
     }
     if (!r.full_name) r.errors.push('Full name is missing');
     if (r.role && !ROLES.includes(r.role)) r.errors.push(`Role "${get('role')}" — use ${ROLES.join(', ')}`);
@@ -138,6 +183,9 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
     setImporting(true);
     const failed = [];
     let added = 0;
+    // Only send birth_date when the file has any, so importing still works
+    // for a file without the column (or before db/026 is run).
+    const withBirthdays = toImport.some((r) => r.birth_date);
     for (let i = 0; i < toImport.length; i += BATCH) {
       const chunk = toImport.slice(i, i + BATCH);
       const { data, error: insertError } = await supabase
@@ -148,6 +196,7 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
           phone: r.phone || null,
           email: r.email || null,
           status: r.status,
+          ...(withBirthdays ? { birth_date: r.birth_date || null } : {}),
         })))
         .select('id');
       if (insertError) chunk.forEach((r) => failed.push({ line: r.line, reason: insertError.message }));
@@ -196,8 +245,9 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
           <div className={`text-xs ${t.textSub} leading-relaxed space-y-1`}>
             <p>1. Download the Excel template and fill in the <span className="font-bold">Members</span> sheet, one person per row. Only <span className="font-bold">Full name</span> is required. The <span className="font-bold">Choices</span> sheet lists the words to use.</p>
             <p>2. <span className="font-bold">Role:</span> {ROLES.join(', ')}. <span className="font-bold">Status:</span> {STATUSES.join(', ')} (blank = active).</p>
-            <p>3. Ministries aren&apos;t imported — the Pastor or each ministry&apos;s head adds members on the Ministries page.</p>
-            <p>4. Save it, then choose the file here. You&apos;ll see a preview before anything is added.</p>
+            <p>3. <span className="font-bold">Birthday</span> (optional): write it as YYYY-MM-DD, like 1990-05-14. A normal Excel date works too.</p>
+            <p>4. Ministries aren&apos;t imported — the Pastor or each ministry&apos;s head adds members on the Ministries page.</p>
+            <p>5. Save it, then choose the file here. You&apos;ll see a preview before anything is added.</p>
           </div>
         )}
 
@@ -215,7 +265,7 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
                   <tr>
                     <th className="px-3 py-2">Row</th><th className="px-3 py-2">Full name</th><th className="px-3 py-2">Role</th>
                     <th className="px-3 py-2">Phone</th><th className="px-3 py-2">Email</th>
-                    <th className="px-3 py-2">Status</th><th className="px-3 py-2">Check</th>
+                    <th className="px-3 py-2">Birthday</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Check</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${t.divider}`}>
@@ -226,6 +276,7 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
                       <td className="px-3 py-2 capitalize">{r.role || '—'}</td>
                       <td className="px-3 py-2">{r.phone || '—'}</td>
                       <td className="px-3 py-2">{r.email || '—'}</td>
+                      <td className="px-3 py-2">{r.birth_date || '—'}</td>
                       <td className="px-3 py-2 capitalize">{r.status}</td>
                       <td className="px-3 py-2">{badge(r)}</td>
                     </tr>

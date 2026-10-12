@@ -77,7 +77,7 @@ export default function MemberChatbotPage() {
       </div>
 
       {/* Fixed to the window height so the question box stays in view. */}
-      <div className="flex flex-col bg-[#1a1d2e] border border-white/10 rounded-3xl overflow-hidden h-[calc(100dvh-13rem)] min-h-[24rem]">
+      <div className="flex flex-col bg-[#1b2420] border border-white/10 rounded-3xl overflow-hidden h-[calc(100dvh-13rem)] min-h-[24rem]">
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
@@ -130,7 +130,7 @@ export default function MemberChatbotPage() {
             onChange={(e) => setInput(e.target.value)}
             placeholder={!churchId && !loadingChurch ? 'No church linked to this account...' : 'Ask a question...'}
             disabled={disabled}
-            className="flex-1 min-w-0 bg-[#0f111a] border border-white/10 rounded-full py-2.5 px-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-60"
+            className="flex-1 min-w-0 bg-[#111815] border border-white/10 rounded-full py-2.5 px-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-60"
           />
           <button
             type="submit"

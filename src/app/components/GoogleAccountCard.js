@@ -60,7 +60,7 @@ export default function GoogleAccountCard({ dark = true }) {
     setBusy(false);
   }
 
-  const card  = dark ? 'bg-[#1a1d2e] border-white/10' : 'bg-white border-slate-200';
+  const card  = dark ? 'bg-[#1b2420] border-white/10' : 'bg-white border-slate-200';
   const title = dark ? 'text-white/40' : 'text-slate-500';
   const main  = dark ? 'text-white' : 'text-slate-900';
   const sub   = dark ? 'text-white/40' : 'text-slate-500';
