@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
+import { recordModuleView } from '@/app/lib/moduleViews';
 import {
   BookOpen, ChevronRight, ChevronUp, CheckCircle, Clock, Lock,
   Send, FileText, Download,
 } from 'lucide-react';
+import BranchLabel from '@/app/components/BranchLabel';
 
 const ANSWER_STATUS = {
   approved: { label: 'Approved',       cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
@@ -25,14 +27,24 @@ export default function DiscipleshipPage() {
   const [submitting, setSubmitting]         = useState(false);
   const [submitMsg, setSubmitMsg]           = useState({});
   const [handouts, setHandouts]             = useState({});
+  const [myMinistries, setMyMinistries]     = useState([]);   // { id, name }
 
   useEffect(() => {
     if (!user) return;
     async function fetchTraining() {
-      const { data: mods } = await supabase
+      const { data: allMods } = await supabase
         .from('discipleship_modules')
         .select('*').eq('is_active', true)
         .order('order_index', { ascending: true });
+      // The general path plus the modules of this member's ministries (M3).
+      const [{ data: assigned }, { data: mins }] = await Promise.all([
+        supabase.from('ministry_assignments').select('ministry_id'),
+        supabase.from('ministries').select('id, name').eq('is_active', true),
+      ]);
+      const mineIds = new Set((assigned || []).map((a) => a.ministry_id));
+      const mine = (mins || []).filter((m) => mineIds.has(m.id)).sort((a, b) => a.name.localeCompare(b.name));
+      setMyMinistries(mine);
+      const mods = (allMods || []).filter((m) => !m.ministry_id || mineIds.has(m.ministry_id));
 
       const { data: qs } = await supabase
         .from('discipleship_questions')
@@ -63,6 +75,7 @@ export default function DiscipleshipPage() {
       setExpandedModule(null);
     } else {
       setExpandedModule(moduleId);
+      recordModuleView(moduleId);
       if (!handouts[moduleId]) fetchHandouts(moduleId);
     }
   }
@@ -72,6 +85,7 @@ export default function DiscipleshipPage() {
       .from('handouts')
       .createSignedUrl(handout.file_path, 60);
     if (error) { alert('Could not generate download link.'); return; }
+    recordModuleView(handout.module_id, 'handout');
     window.open(data.signedUrl, '_blank');
   }
 
@@ -81,11 +95,22 @@ export default function DiscipleshipPage() {
     const qs = moduleQuestions(moduleId);
     return qs.length > 0 && qs.every(q => getProgress(q.id)?.status === 'approved');
   };
+  // Each group (general path, each ministry) has its own order: a module
+  // opens once the previous one in the same group is complete.
+  const byOrder = (a, b) => (a.order_index || 0) - (b.order_index || 0);
+  const groupOf = (mod) => modules.filter(m => (m.ministry_id || null) === (mod.ministry_id || null)).sort(byOrder);
   const isModuleUnlocked = (mod) => {
-    if (mod.order_index <= 1) return true;
-    const prev = modules.find(m => m.order_index === mod.order_index - 1);
-    return prev ? isModuleComplete(prev.id) : false;
+    const group = groupOf(mod);
+    const i = group.findIndex(m => m.id === mod.id);
+    return i <= 0 || isModuleComplete(group[i - 1].id);
   };
+  const orderedModules = [
+    ...modules.filter(m => !m.ministry_id).sort(byOrder),
+    ...myMinistries.flatMap(mi => modules.filter(m => m.ministry_id === mi.id).sort(byOrder)),
+  ];
+  const groupLabel = (mod) => mod.ministry_id
+    ? (myMinistries.find(mi => mi.id === mod.ministry_id)?.name || 'Ministry') + ' modules'
+    : 'Discipleship path';
   const isModuleSubmitted = (moduleId) =>
     moduleQuestions(moduleId).some(q => getProgress(q.id));
 
@@ -137,14 +162,14 @@ export default function DiscipleshipPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
       <div className="mb-6">
-        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Discipleship</h1>
         <p className="text-slate-500 text-sm mt-0.5">Grow through each module at your own pace</p>
       </div>
 
       <div className="space-y-4">
         {/* Progress header */}
-        <div className="bg-[#1a1d2e] border border-white/10 rounded-3xl p-6 flex items-center justify-between gap-4">
+        <div className="bg-[#1b2420] border border-white/10 rounded-3xl p-6 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs text-white/40 uppercase tracking-widest mb-1">Your Progress</p>
             <h2 className="text-2xl font-black text-white">
@@ -156,9 +181,9 @@ export default function DiscipleshipPage() {
           </div>
           <div className="relative w-16 h-16 shrink-0">
             <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#1e293b" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15.9" fill="none" stroke="#2b332f" strokeWidth="3" />
               <circle
-                cx="18" cy="18" r="15.9" fill="none" stroke="#3b82f6" strokeWidth="3"
+                cx="18" cy="18" r="15.9" fill="none" stroke="#173f35" strokeWidth="3"
                 strokeDasharray={`${modules.length > 0 ? (completedCount / modules.length) * 100 : 0} 100`}
                 strokeLinecap="round"
               />
@@ -176,7 +201,8 @@ export default function DiscipleshipPage() {
             <p className="text-slate-600 text-sm">No modules have been set up yet.</p>
             <p className="text-slate-700 text-xs mt-1">Your pastor will add them soon.</p>
           </div>
-        ) : modules.map((mod) => {
+        ) : orderedModules.map((mod, idx) => {
+          const newGroup  = idx === 0 || (orderedModules[idx - 1].ministry_id || null) !== (mod.ministry_id || null);
           const unlocked  = isModuleUnlocked(mod);
           const complete  = isModuleComplete(mod.id);
           const submitted = isModuleSubmitted(mod.id);
@@ -184,12 +210,15 @@ export default function DiscipleshipPage() {
           const isOpen    = expandedModule === mod.id;
 
           return (
+            <Fragment key={mod.id}>
+            {newGroup && (
+              <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold pt-2">{groupLabel(mod)}</p>
+            )}
             <div
-              key={mod.id}
               className={`rounded-3xl border overflow-hidden transition-all ${
                 complete  ? 'bg-emerald-500/5 border-emerald-500/20' :
-                !unlocked ? 'bg-[#1a1d2e]/40 border-white/5 opacity-60' :
-                            'bg-[#1a1d2e] border-white/10'
+                !unlocked ? 'bg-[#1b2420]/40 border-white/5 opacity-60' :
+                            'bg-[#1b2420] border-white/10'
               }`}
             >
               <button
@@ -289,7 +318,7 @@ export default function DiscipleshipPage() {
                               placeholder="Write your answer here..."
                               value={answers[q.id] || ''}
                               onChange={(e) => setAnswers(p => ({ ...p, [q.id]: e.target.value }))}
-                              className="w-full bg-[#0f111a] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 resize-none transition-colors"
+                              className="w-full bg-[#111815] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 resize-none transition-colors"
                             />
                           </div>
                         )}
@@ -352,6 +381,7 @@ export default function DiscipleshipPage() {
                 </div>
               )}
             </div>
+            </Fragment>
           );
         })}
       </div>

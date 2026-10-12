@@ -3,11 +3,14 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import {
   BookOpen, ChevronRight, ChevronDown, Upload, FileText, Trash2, Download,
   Loader2, Plus, X, Sun, Moon, CheckCircle, XCircle, Clock, MessageSquare,
-  Eye, EyeOff, HelpCircle, Users,
+  Eye, EyeOff, HelpCircle, Users, Search,
 } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 function formatBytes(bytes) {
   if (!bytes) return "—";
@@ -20,13 +23,13 @@ function formatBytes(bytes) {
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-slate-100/90",
+    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
+    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
     cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
     textPrimary: dark ? "text-white"           : "text-slate-900",
     textSub:     dark ? "text-slate-500"       : "text-slate-600",
     textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#0f111a]"        : "bg-slate-50",
+    inputBg:     dark ? "bg-[#111815]"        : "bg-slate-50",
     inputBorder: dark ? "border-slate-800"     : "border-slate-400",
     divider:     dark ? "border-slate-800/60"  : "border-slate-300",
     innerDivider:dark ? "border-slate-800/40"  : "border-slate-300",
@@ -38,13 +41,13 @@ function T(dark) {
     hoverRow2:   dark ? "hover:bg-slate-800/30" : "hover:bg-slate-200",
     emptyIcon:   dark ? "text-slate-800"       : "text-slate-400",
     dashed:      dark ? "border-slate-800"     : "border-slate-400",
-    modalBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    modalBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     modalBorder: dark ? "border-slate-800"     : "border-slate-300",
     cancelBtn:   dark ? "border-slate-700 text-slate-400 hover:text-white hover:border-slate-500" : "border-slate-400 text-slate-600 hover:text-slate-900 hover:border-slate-500",
     uploadBorder:  dark ? "border-slate-700 hover:border-blue-500/50 text-slate-500 hover:text-blue-400" : "border-slate-400 hover:border-blue-500/50 text-slate-600 hover:text-blue-600",
     uploadBorderDisabled: dark ? "border-slate-700 text-slate-600" : "border-slate-400 text-slate-500",
-    iconBtn:     dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    tabBar:      dark ? "bg-[#1a1d2e]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
+    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    tabBar:      dark ? "bg-[#1b2420]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
     tabInactive: dark ? "text-slate-500 hover:text-slate-200" : "text-slate-500 hover:text-slate-800",
   };
 }
@@ -62,9 +65,22 @@ function A(dark, color) {
 export default function TrainingPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
+  const { user, role } = useAuth();
+  const canEdit   = can(role, 'modules', 'edit');
+  const canReview = can(role, 'answerReview', 'approve');
 
   const [activeTab, setActiveTab] = useState("modules");
   const [loading, setLoading]     = useState(true);
+
+  // ── Ministries (step M3, db/025): a module is general (no ministry) or
+  // belongs to one ministry. Pastor edits any module; a Leader edits general
+  // modules and those of ministries they head. ─────────────────────────────
+  const [ministries, setMinistries] = useState([]);
+  const headedIds = new Set(ministries.filter((m) => m.leader_id && m.leader_id === user?.id).map((m) => m.id));
+  const canEditGroup = (ministryId) =>
+    role === "pastor" || (role === "leader" && (!ministryId || headedIds.has(ministryId)));
+  const canEditModule = (mod) => canEditGroup(mod.ministry_id);
+  const ministryName = (id) => ministries.find((m) => m.id === id)?.name || "Ministry";
 
   // ── Modules & questions ───────────────────────────────────────────────────
   const [modules, setModules]     = useState([]);
@@ -74,6 +90,7 @@ export default function TrainingPage() {
   const [showAddModule, setShowAddModule]   = useState(false);
   const [newModuleTitle, setNewModuleTitle] = useState("");
   const [newModuleDesc, setNewModuleDesc]   = useState("");
+  const [newModuleGroup, setNewModuleGroup] = useState("");   // "" = general, else ministry id
   const [addingModule, setAddingModule]     = useState(false);
 
   const [newQuestionText, setNewQuestionText] = useState({});
@@ -99,12 +116,14 @@ export default function TrainingPage() {
   useEffect(() => {
     async function fetchAll() {
       setLoading(true);
-      const [{ data: mods }, { data: qs }, { data: subs }] = await Promise.all([
+      const [{ data: mods }, { data: qs }, { data: subs }, { data: mins }] = await Promise.all([
         supabase.from("discipleship_modules").select("*").order("order_index", { ascending: true }),
         supabase.from("discipleship_questions").select("*").order("order_index", { ascending: true }),
         supabase.from("discipleship_progress").select("*, discipleship_questions(question, order_index, module_id)").order("created_at", { ascending: false }),
+        supabase.from("ministries").select("id, name, leader_id, church_id, is_active").order("name"),
       ]);
       setModules(mods || []);
+      setMinistries(mins || []);
       setQuestions(qs || []);
       setSubmissions(subs || []);
       if (subs && subs.length > 0) {
@@ -133,12 +152,16 @@ export default function TrainingPage() {
   async function handleAddModule() {
     if (!newModuleTitle.trim()) return;
     setAddingModule(true);
-    const maxOrder = modules.reduce((a, m) => Math.max(a, m.order_index || 0), 0);
+    const group = newModuleGroup || null;
+    const maxOrder = modules
+      .filter((m) => (m.ministry_id || null) === group)
+      .reduce((a, m) => Math.max(a, m.order_index || 0), 0);
     const { error } = await supabase.from("discipleship_modules").insert({
       title:       newModuleTitle.trim(),
       description: newModuleDesc.trim() || null,
       order_index: maxOrder + 1,
       is_active:   true,
+      ministry_id: group,
     });
     if (!error) {
       await refetchModules();
@@ -255,9 +278,21 @@ export default function TrainingPage() {
   async function handleReview(progressId, status) {
     setReviewing((p) => ({ ...p, [progressId]: true }));
     const note = reviewNotes[progressId]?.trim() || null;
-    await supabase.from("discipleship_progress").update({ status, notes: note, reviewed_at: new Date().toISOString(), reviewed_by: "Pastor" }).eq("id", progressId);
-    setSubmissions((prev) => prev.map((s) => (s.id === progressId ? { ...s, status, notes: note } : s)));
+    // The database records who reviewed it and when (db/008).
+    // .select() returns the saved row, so a review the database refused
+    // (e.g. another branch, or your own answer) shows up instead of
+    // looking saved.
+    const { data, error } = await supabase
+      .from("discipleship_progress")
+      .update({ status, notes: note })
+      .eq("id", progressId)
+      .select("id");
     setReviewing((p) => ({ ...p, [progressId]: false }));
+    if (error || !data?.length) {
+      alert("Could not save the review: " + (error?.message || "you don't have permission to review this answer."));
+      return;
+    }
+    setSubmissions((prev) => prev.map((s) => (s.id === progressId ? { ...s, status, notes: note } : s)));
   }
 
   // ── Computed ──────────────────────────────────────────────────────────────
@@ -274,13 +309,26 @@ export default function TrainingPage() {
 
   const card = `${t.cardBg} border ${t.cardBorder} rounded-3xl backdrop-blur-sm`;
 
+  const byOrder = (a, b) => (a.order_index || 0) - (b.order_index || 0);
+  const moduleGroups = [
+    { key: "general", label: "General discipleship path", modules: modules.filter((m) => !m.ministry_id).sort(byOrder) },
+    ...[...new Set(modules.filter((m) => m.ministry_id).map((m) => m.ministry_id))]
+      .map((id) => ({ key: id, label: ministryName(id), modules: modules.filter((m) => m.ministry_id === id).sort(byOrder) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  ].filter((g) => g.modules.length);
+  // Where the signed-in person may add a module.
+  const addableGroups = [
+    ...(canEditGroup(null) ? [{ id: "", name: "General discipleship path" }] : []),
+    ...ministries.filter((m) => m.is_active && canEditGroup(m.id)).map((m) => ({ id: m.id, name: m.name })),
+  ];
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Training</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Manage discipleship modules, questions, handouts, and review member submissions</p>
         </div>
@@ -313,6 +361,7 @@ export default function TrainingPage() {
         {[
           { key: "modules",     label: "Modules & Content" },
           { key: "submissions", label: "Submissions Review" },
+          { key: "progress",    label: "Member Progress" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -326,16 +375,23 @@ export default function TrainingPage() {
         ))}
       </div>
 
+      {/* ── MEMBER PROGRESS ── */}
+      {activeTab === "progress" && (
+        <ProgressPanel t={t} dark={dark} card={card} modules={modules} questions={questions} submissions={submissions} loadingBase={loading} />
+      )}
+
       {/* ── MODULES & CONTENT ── */}
       {activeTab === "modules" && (
         <div className="space-y-4">
           <div className="flex justify-end">
+            {canEdit && addableGroups.length > 0 && (
             <button
-              onClick={() => setShowAddModule(true)}
+              onClick={() => { setNewModuleGroup(addableGroups[0].id); setShowAddModule(true); }}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-95"
             >
               <Plus size={14} /> Add Module
             </button>
+            )}
           </div>
 
           {loading ? (
@@ -349,8 +405,14 @@ export default function TrainingPage() {
               <p className={`${t.textMuted} text-xs mt-1 opacity-60`}>Add one to start building your discipleship curriculum.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {modules.map((mod) => {
+            <div className="space-y-6">
+              {moduleGroups.map((g) => (
+              <div key={g.key} className="space-y-3">
+                <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>
+                  {g.label} <span className={t.textMuted}>· {g.modules.length} module{g.modules.length === 1 ? "" : "s"}</span>
+                </p>
+              {g.modules.map((mod) => {
+                const canEditMod = canEditModule(mod);
                 const isOpen    = expandedModule === mod.id;
                 const modQs     = questions.filter((q) => q.module_id === mod.id);
                 const modFiles  = handouts[mod.id] || [];
@@ -372,11 +434,14 @@ export default function TrainingPage() {
                         <span className={`text-[10px] ${t.textMuted}`}>{modQs.length} question{modQs.length !== 1 ? "s" : ""}</span>
                         <button
                           onClick={() => handleToggleActive(mod)}
-                          title={mod.is_active ? "Visible to members — click to hide" : "Hidden from members — click to activate"}
-                          className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-colors ${
+                          disabled={!canEditMod}
+                          title={!canEditMod
+                            ? (mod.is_active ? "Visible to members" : "Hidden from members")
+                            : mod.is_active ? "Visible to members — click to hide" : "Hidden from members — click to activate"}
+                          className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border transition-colors disabled:cursor-default ${
                             mod.is_active
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
-                              : "bg-slate-500/10 text-slate-500 border-slate-500/20 hover:bg-slate-500/20"
+                              ? `bg-emerald-500/10 text-emerald-400 border-emerald-500/20 ${canEditMod ? "hover:bg-emerald-500/20" : ""}`
+                              : `bg-slate-500/10 text-slate-500 border-slate-500/20 ${canEditMod ? "hover:bg-slate-500/20" : ""}`
                           }`}
                         >
                           {mod.is_active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -404,16 +469,19 @@ export default function TrainingPage() {
                                 <div key={q.id} className={`flex items-center gap-3 p-3 ${t.deepCard} rounded-xl border ${t.innerDivider}`}>
                                   <span className="text-xs font-black text-blue-400 shrink-0">Q{qi + 1}</span>
                                   <p className={`flex-1 text-xs ${t.textPrimary}`}>{q.question}</p>
+                                  {canEditMod && (
                                   <button
                                     onClick={() => handleDeleteQuestion(q)}
                                     className={`${t.textMuted} hover:text-rose-400 hover:bg-rose-500/10 p-1 rounded-lg transition-colors shrink-0`}
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
                           )}
+                          {canEditMod && (
                           <div className="flex gap-2">
                             <input
                               type="text"
@@ -432,6 +500,7 @@ export default function TrainingPage() {
                               Add
                             </button>
                           </div>
+                          )}
                         </div>
 
                         {/* Handouts */}
@@ -460,15 +529,18 @@ export default function TrainingPage() {
                                     <button onClick={() => handleDownload(hf)} title="Download" className={`p-1.5 ${t.textSub} hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors`}>
                                       <Download className="w-3.5 h-3.5" />
                                     </button>
+                                    {canEditMod && (
                                     <button onClick={() => handleDeleteHandout(hf, mod.id)} title="Delete" className={`p-1.5 ${t.textSub} hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors`}>
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
+                                    )}
                                   </div>
                                 </div>
                               ))}
                             </div>
                           )}
 
+                          {canEditMod && (
                           <div className="space-y-2">
                             <input
                               type="text"
@@ -497,12 +569,15 @@ export default function TrainingPage() {
                               <p className={`text-xs ${dark ? "text-rose-400" : "text-rose-600"}`}>{uploadError[mod.id]}</p>
                             )}
                           </div>
+                          )}
                         </div>
                       </div>
                     )}
                   </div>
                 );
               })}
+              </div>
+              ))}
             </div>
           )}
         </div>
@@ -595,7 +670,7 @@ export default function TrainingPage() {
                                           <span className="text-blue-400 mr-1">Q{qi + 1}.</span>
                                           {sub.discipleship_questions?.question || "—"}
                                         </p>
-                                        <div className={`${dark ? "bg-[#0f111a]" : "bg-slate-200"} border ${t.innerDivider} rounded-xl px-4 py-3`}>
+                                        <div className={`${dark ? "bg-[#111815]" : "bg-slate-200"} border ${t.innerDivider} rounded-xl px-4 py-3`}>
                                           <p className={`text-sm ${t.textPrimary} leading-relaxed`}>{sub.answer}</p>
                                           <p className={`text-[10px] ${t.textMuted} mt-2`}>
                                             Submitted {sub.created_at ? new Date(sub.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
@@ -613,17 +688,21 @@ export default function TrainingPage() {
                                               <XCircle className="w-3.5 h-3.5" /> Rejected
                                               {sub.notes && <span className={`${t.textSub} font-normal ml-1`}>· Note: {sub.notes}</span>}
                                             </div>
+                                            {canReview && (
                                             <div className="flex gap-2 pt-1">
                                               <button onClick={() => handleReview(sub.id, "approved")} disabled={isReviewing} className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
                                                 <CheckCircle className="w-3 h-3" /> Approve
                                               </button>
                                             </div>
+                                            )}
                                           </div>
                                         ) : (
                                           <div className="space-y-2 pt-1">
                                             <div className={`flex items-center gap-1.5 text-xs ${A(dark, "yellow")} font-bold mb-2`}>
                                               <Clock className="w-3.5 h-3.5" /> Awaiting Review
                                             </div>
+                                            {canReview && (
+                                              <>
                                             <div className="flex items-center gap-2">
                                               <MessageSquare className={`w-3.5 h-3.5 ${t.textMuted} shrink-0`} />
                                               <input
@@ -631,7 +710,7 @@ export default function TrainingPage() {
                                                 placeholder="Add note (optional, shown to member if rejected)"
                                                 value={reviewNotes[sub.id] || ""}
                                                 onChange={(e) => setReviewNotes((p) => ({ ...p, [sub.id]: e.target.value }))}
-                                                className={`flex-1 ${dark ? "bg-[#0f111a]" : "bg-slate-50"} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
+                                                className={`flex-1 ${dark ? "bg-[#111815]" : "bg-slate-50"} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
                                               />
                                             </div>
                                             <div className="flex gap-2">
@@ -642,6 +721,8 @@ export default function TrainingPage() {
                                                 <XCircle className="w-3.5 h-3.5" /> {isReviewing ? "Saving..." : "Reject"}
                                               </button>
                                             </div>
+                                              </>
+                                            )}
                                           </div>
                                         )}
                                       </div>
@@ -676,6 +757,21 @@ export default function TrainingPage() {
             </div>
 
             <div className="space-y-3">
+              <div>
+                <label className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
+                  For
+                </label>
+                <select
+                  value={newModuleGroup}
+                  onChange={(e) => setNewModuleGroup(e.target.value)}
+                  className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-4 py-2.5 text-sm ${t.textPrimary} focus:outline-none focus:border-blue-500 transition-colors`}
+                >
+                  {addableGroups.map((g) => <option key={g.id || "general"} value={g.id}>{g.name}</option>)}
+                </select>
+                <p className={`text-[10px] ${t.textMuted} mt-1`}>
+                  General modules are for everyone, in order. Ministry modules are only for that ministry&apos;s members, in their own order.
+                </p>
+              </div>
               <div>
                 <label className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
                   Module Title <span className="text-rose-400">*</span>
@@ -718,6 +814,212 @@ export default function TrainingPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Member Progress tab ─────────────────────────────────────────────────────
+// Per member: which modules they opened (module_views, db/012) and how far
+// their answers got (discipleship_progress). A module is finished when every
+// one of its questions has an approved answer. Only active modules count
+// toward the progress %. What each viewer sees is limited by the database:
+// leaders their own church, pastor and admin everyone.
+
+const MODULE_STATUS = {
+  finished:   { label: "Finished",    cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+  inProgress: { label: "In progress", cls: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+  opened:     { label: "Opened",      cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
+  notStarted: { label: "Not started", cls: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
+};
+
+function shortDate(ts) {
+  return ts ? new Date(ts).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—";
+}
+
+function ProgressPanel({ t, dark, card, modules, questions, submissions, loadingBase }) {
+  const [members, setMembers]   = useState([]);
+  const [views, setViews]       = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [search, setSearch]     = useState("");
+  const [expanded, setExpanded] = useState(null);
+  // login id → ministry ids, via the member record linked to that login.
+  const [ministriesOfLogin, setMinistriesOfLogin] = useState({});
+
+  useEffect(() => {
+    async function load() {
+      const [{ data: profiles }, { data: mv }, { data: records }, { data: assigned }] = await Promise.all([
+        supabase.from("profiles").select("id, email, full_name, role").eq("role", "member"),
+        supabase.from("module_views").select("member_id, module_id, kind, created_at"),
+        supabase.from("members").select("id, profile_id").not("profile_id", "is", null),
+        supabase.from("ministry_assignments").select("member_id, ministry_id"),
+      ]);
+      const loginOf = {};
+      (records || []).forEach((r) => { loginOf[r.id] = r.profile_id; });
+      const map = {};
+      (assigned || []).forEach((a) => {
+        const login = loginOf[a.member_id];
+        if (login) (map[login] ||= new Set()).add(a.ministry_id);
+      });
+      setMinistriesOfLogin(map);
+      setMembers(profiles || []);
+      setViews(mv || []);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const activeModules = modules.filter((m) => m.is_active);
+  const questionsOf = (moduleId) => questions.filter((q) => q.module_id === moduleId);
+  const generalModules = activeModules.filter((m) => !m.ministry_id);
+  const generalQuestions = generalModules.reduce((n, m) => n + questionsOf(m.id).length, 0);
+  // A member's modules: the general path plus their own ministries' (M3).
+  const modulesFor = (memberId) => {
+    const mine = ministriesOfLogin[memberId];
+    return activeModules.filter((m) => !m.ministry_id || mine?.has(m.ministry_id));
+  };
+
+  function summarize(memberId) {
+    const subs   = submissions.filter((s) => s.member_id === memberId);
+    const myView = views.filter((v) => v.member_id === memberId);
+    const myModules = modulesFor(memberId);
+    const totalQuestions = myModules.reduce((n, m) => n + questionsOf(m.id).length, 0);
+    const perModule = myModules.map((m) => {
+      const qIds     = new Set(questionsOf(m.id).map((q) => q.id));
+      const mySubs   = subs.filter((s) => qIds.has(s.question_id));
+      const approved = mySubs.filter((s) => s.status === "approved").length;
+      const opens    = myView.filter((v) => v.module_id === m.id && v.kind === "opened");
+      const handouts = myView.filter((v) => v.module_id === m.id && v.kind === "handout").length;
+      const status =
+        qIds.size > 0 && approved === qIds.size ? "finished" :
+        mySubs.length > 0 ? "inProgress" :
+        opens.length > 0  ? "opened" : "notStarted";
+      return {
+        module: m, status, approved, answered: mySubs.length, total: qIds.size,
+        opens: opens.length, handouts,
+        lastOpened: opens.reduce((a, v) => (v.created_at > a ? v.created_at : a), null),
+      };
+    });
+    const approvedTotal = perModule.reduce((n, x) => n + x.approved, 0);
+    const lastActivity = [...myView.map((v) => v.created_at), ...subs.map((s) => s.updated_at || s.created_at)]
+      .filter(Boolean)
+      .sort()
+      .pop() || null;
+    return {
+      perModule,
+      pct: totalQuestions > 0 ? Math.round((approvedTotal / totalQuestions) * 100) : 0,
+      finished: perModule.filter((x) => x.status === "finished").length,
+      opened: perModule.filter((x) => x.opens > 0).length,
+      lastActivity,
+    };
+  }
+
+  // Members with a login, plus anyone else who has answers or views here.
+  const memberIds = new Set([
+    ...members.map((m) => m.id),
+    ...submissions.map((s) => s.member_id),
+    ...views.map((v) => v.member_id),
+  ]);
+  const profileOf = (id) => members.find((m) => m.id === id);
+  const nameOf = (id) => {
+    const p = profileOf(id);
+    return p?.full_name || p?.email?.split("@")[0] || `Member ...${String(id).slice(-6)}`;
+  };
+
+  const q = search.toLowerCase();
+  const rows = [...memberIds]
+    .map((id) => ({ id, name: nameOf(id), email: profileOf(id)?.email || "", ...summarize(id) }))
+    .filter((r) => !q || r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q))
+    .sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name));
+
+  if (loading || loadingBase) {
+    return (
+      <div className={`flex items-center justify-center gap-2 py-14 ${t.textMuted} text-sm`}>
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading member progress...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative flex-1">
+          <Search className={`absolute left-3 top-2.5 w-4 h-4 ${t.textSub}`} />
+          <input
+            type="text"
+            placeholder="Search members..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 pl-9 pr-4 text-sm ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
+          />
+        </div>
+        <p className={`text-xs ${t.textMuted}`}>
+          {generalModules.length} general module{generalModules.length === 1 ? "" : "s"} ({generalQuestions} question{generalQuestions === 1 ? "" : "s"}) plus each member&apos;s ministry modules · members with a login only
+        </p>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className={`py-16 text-center border border-dashed ${t.dashed} rounded-3xl`}>
+          <Users className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-3`} />
+          <p className={`${t.textMuted} text-sm`}>No members found.</p>
+        </div>
+      ) : (
+        <div className={`${card} overflow-hidden divide-y ${t.innerDivider}`}>
+          {rows.map((r) => {
+            const isOpen = expanded === r.id;
+            return (
+              <div key={r.id}>
+                <button
+                  onClick={() => setExpanded(isOpen ? null : r.id)}
+                  className={`w-full text-left px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-5 ${t.hoverRow} transition-colors`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{r.name}</p>
+                    {r.email && <p className={`text-xs ${t.textSub} truncate`}>{r.email}</p>}
+                  </div>
+                  <div className="sm:w-48">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={t.textSub}>Progress</span>
+                      <span className={`font-black ${A(dark, "blue")}`}>{r.pct}%</span>
+                    </div>
+                    <div className={`w-full h-1.5 ${t.deepCard} rounded-full overflow-hidden`}>
+                      <div className="h-full bg-blue-500 rounded-full transition-all duration-700" style={{ width: `${r.pct}%` }} />
+                    </div>
+                  </div>
+                  <span className={`text-xs ${t.textSub} sm:w-28`}>
+                    <span className={`font-black ${A(dark, "emerald")}`}>{r.finished}</span> finished · {r.opened} opened
+                  </span>
+                  <span className={`text-xs ${t.textMuted} sm:w-32`}>Last active {shortDate(r.lastActivity)}</span>
+                  <span className={`${t.textMuted} hidden sm:block`}>
+                    {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="px-5 pb-4">
+                    <div className={`${t.deepCard} rounded-2xl border ${t.innerDivider} divide-y ${t.innerDivider}`}>
+                      {r.perModule.length === 0 ? (
+                        <p className={`px-4 py-3 text-xs ${t.textMuted}`}>No active modules.</p>
+                      ) : r.perModule.map((x) => (
+                        <div key={x.module.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 px-4 py-3 text-xs">
+                          <span className={`flex-1 min-w-0 font-bold ${t.textPrimary} truncate`}>{x.module.title}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border w-fit ${MODULE_STATUS[x.status].cls}`}>
+                            {MODULE_STATUS[x.status].label}
+                          </span>
+                          <span className={`${t.textSub} sm:w-36`}>{x.approved}/{x.total} approved · {x.answered} answered</span>
+                          <span className={`${t.textSub} sm:w-40`}>
+                            Opened {x.opens}× {x.lastOpened ? `(last ${shortDate(x.lastOpened)})` : ""}
+                          </span>
+                          <span className={`${t.textSub} sm:w-24`}>{x.handouts} download{x.handouts === 1 ? "" : "s"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

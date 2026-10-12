@@ -2,11 +2,15 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { authFetch } from "@/app/lib/authFetch";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import {
   Send, Bot, User, Sparkles, Loader2, Sun, Moon,
   Upload, FileText, Trash2, Eye, EyeOff, File as FileIcon
 } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 const DOC_TYPES = ["Policy", "Handbook", "FAQ", "Announcement", "Other"];
 const GLOBAL_ROLES = ["admin", "pastor"];
@@ -16,13 +20,13 @@ const GLOBAL_ROLES = ["admin", "pastor"];
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-slate-100/90",
+    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
+    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
     cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
     textPrimary: dark ? "text-white"           : "text-slate-900",
     textSub:     dark ? "text-slate-500"       : "text-slate-600",
     textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     inputBorder: dark ? "border-slate-800"     : "border-slate-400",
     inputText:   dark ? "text-slate-200"       : "text-slate-800",
     divider:     dark ? "border-slate-800"     : "border-slate-300",
@@ -31,9 +35,9 @@ function T(dark) {
     bubbleBot:   dark ? "bg-slate-900/60 text-slate-200" : "bg-slate-200 text-slate-800",
     avatarBot:   dark ? "bg-slate-500/10 border-slate-500/20" : "bg-slate-300/60 border-slate-400/40",
     emptyIcon:   dark ? "text-slate-800"       : "text-slate-400",
-    iconBtn:     dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
     errorText:   dark ? "text-rose-400"        : "text-rose-600",
-    tabBar:      dark ? "bg-[#1a1d2e]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
+    tabBar:      dark ? "bg-[#1b2420]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
     tabInactive: dark ? "text-slate-500 hover:text-slate-200" : "text-slate-500 hover:text-slate-800",
     uploadBorder: dark ? "border-slate-700 hover:border-blue-500/50 text-slate-500 hover:text-blue-400" : "border-slate-400 hover:border-blue-500/50 text-slate-600 hover:text-blue-600",
     uploadBorderDisabled: dark ? "border-slate-700 text-slate-600" : "border-slate-400 text-slate-500",
@@ -43,6 +47,10 @@ function T(dark) {
 export default function ChatbotPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
+  const { role } = useAuth();
+  // Admin sees the documents read-only; Finance and Secretary only chat.
+  const canSeeDocs  = can(role, 'aiDocuments');
+  const canEditDocs = can(role, 'aiDocuments', 'edit');
 
   const [activeTab, setActiveTab] = useState("chat");
 
@@ -78,7 +86,7 @@ export default function ChatbotPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Church Assistant</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Ask questions answered from your church's reference documents</p>
         </div>
@@ -105,7 +113,7 @@ export default function ChatbotPage() {
       )}
 
       {/* Tabs */}
-      <div className={`flex gap-1 ${t.tabBar} border rounded-xl p-1 w-fit mb-6`}>
+      {canSeeDocs && <div className={`flex gap-1 ${t.tabBar} border rounded-xl p-1 w-fit mb-6`}>
         {[
           { key: "chat", label: "Chat" },
           { key: "documents", label: "Documents" },
@@ -120,12 +128,12 @@ export default function ChatbotPage() {
             {tab.label}
           </button>
         ))}
-      </div>
+      </div>}
 
-      {activeTab === "chat" ? (
+      {activeTab === "chat" || !canSeeDocs ? (
         <ChatPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} />
       ) : (
-        <DocumentsPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} />
+        <DocumentsPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} canEdit={canEditDocs} />
       )}
     </div>
   );
@@ -153,7 +161,7 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
     setSending(true);
 
     try {
-      const res = await fetch("/api/chatbot", {
+      const res = await authFetch("/api/chatbot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, church_id: churchId }),
@@ -176,10 +184,12 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
   const disabled = sending || loadingChurch || !churchId;
 
   return (
-    <div className={`flex-1 flex flex-col ${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm min-h-0`}>
+    // Fixed to the window height so the question box stays in view; long
+    // answers scroll inside the card instead of pushing it down.
+    <div className={`flex flex-col ${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm h-[calc(100dvh-20rem)] min-h-[24rem]`}>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-[50vh]">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center py-16">
             <Sparkles className={`w-8 h-8 ${t.emptyIcon} mb-3`} />
@@ -245,7 +255,7 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
 
 // ─── Documents tab ───────────────────────────────────────────────────────────
 
-function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
+function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
   const [documents, setDocuments] = useState([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [title, setTitle] = useState("");
@@ -260,7 +270,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
     if (!churchId) { setDocuments([]); setLoadingDocs(false); return; }
     setLoadingDocs(true);
     try {
-      const res = await fetch(`/api/chatbot/documents?church_id=${encodeURIComponent(churchId)}`);
+      const res = await authFetch(`/api/chatbot/documents?church_id=${encodeURIComponent(churchId)}`);
       const data = await res.json();
       setDocuments(data.documents || []);
     } catch {
@@ -297,7 +307,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
       formData.append("doc_type", docType);
       formData.append("church_id", churchId);
 
-      const res = await fetch("/api/chatbot/documents", { method: "POST", body: formData });
+      const res = await authFetch("/api/chatbot/documents", { method: "POST", body: formData });
       const data = await res.json();
 
       if (!res.ok) {
@@ -320,7 +330,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
   async function toggleActive(doc) {
     setBusyId(doc.id);
     try {
-      await fetch("/api/chatbot/documents", {
+      await authFetch("/api/chatbot/documents", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: doc.id, is_active: !doc.is_active }),
@@ -335,7 +345,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
     if (!confirm(`Delete "${doc.title}"? This can't be undone.`)) return;
     setBusyId(doc.id);
     try {
-      await fetch(`/api/chatbot/documents?id=${encodeURIComponent(doc.id)}`, { method: "DELETE" });
+      await authFetch(`/api/chatbot/documents?id=${encodeURIComponent(doc.id)}`, { method: "DELETE" });
       setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     } finally {
       setBusyId(null);
@@ -359,6 +369,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
     <div className="space-y-6">
 
       {/* Upload */}
+      {canEdit && (
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 backdrop-blur-sm`}>
         <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-4`}>Upload a Document</h3>
         <form onSubmit={handleUpload} className="space-y-3">
@@ -413,6 +424,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
           </button>
         </form>
       </div>
+      )}
 
       {/* List */}
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm`}>
@@ -424,7 +436,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
         ) : documents.length === 0 ? (
           <div className="py-14 text-center">
             <FileText className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
-            <p className={`${t.textMuted} text-sm`}>No documents yet. Upload one above.</p>
+            <p className={`${t.textMuted} text-sm`}>{canEdit ? "No documents yet. Upload one above." : "No documents yet."}</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-800/20">
@@ -441,6 +453,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
                     {!doc.is_active ? ' · Inactive' : ''}
                   </p>
                 </div>
+                {canEdit && (
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={() => toggleActive(doc)}
@@ -459,6 +472,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch }) {
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
+                )}
               </div>
             ))}
           </div>

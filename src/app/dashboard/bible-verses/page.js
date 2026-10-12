@@ -2,25 +2,30 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
+import { authFetch } from "@/app/lib/authFetch";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import { BookOpen, Upload, Trash2, Loader2, Plus, X, Sun, Moon, Sparkles, Clock } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
+import ScriptureLink from "@/app/components/ScriptureLink";
 
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-slate-100/90",
+    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
+    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
     cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
     textPrimary: dark ? "text-white"           : "text-slate-900",
     textSub:     dark ? "text-slate-500"       : "text-slate-600",
     textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     inputBorder: dark ? "border-slate-800"     : "border-slate-400",
     inputText:   dark ? "text-slate-200"       : "text-slate-800",
     divider:     dark ? "border-slate-800/40"  : "border-slate-300",
     emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
     rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
-    iconBtn:     dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    dropzone:    dark ? "border-slate-700 bg-[#1a1d2e]/40 hover:border-blue-500/50" : "border-slate-400 bg-slate-50 hover:border-blue-500/50",
+    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    dropzone:    dark ? "border-slate-700 bg-[#1b2420]/40 hover:border-blue-500/50" : "border-slate-400 bg-slate-50 hover:border-blue-500/50",
   };
 }
 
@@ -32,6 +37,8 @@ export default function BibleVersesPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
   const fileInputRef = useRef(null);
+  const { role } = useAuth();
+  const canEdit = can(role, 'bibleVerses', 'edit');
 
   const [verses, setVerses]       = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -47,7 +54,7 @@ export default function BibleVersesPage() {
   async function fetchVerses() {
     setLoading(true);
     try {
-      const res = await fetch('/api/bible-verses');
+      const res = await authFetch('/api/bible-verses');
       const json = await res.json();
       setVerses(json.verses || []);
     } catch {
@@ -66,7 +73,7 @@ export default function BibleVersesPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('/api/bible-verses', { method: 'POST', body: formData });
+      const res = await authFetch('/api/bible-verses', { method: 'POST', body: formData });
       const json = await res.json();
       if (!res.ok) {
         setMessage({ type: 'error', text: json.error || 'Upload failed.' });
@@ -87,7 +94,7 @@ export default function BibleVersesPage() {
     if (!manualRef.trim() || !manualText.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch('/api/bible-verses', {
+      const res = await authFetch('/api/bible-verses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reference: manualRef, verse_text: manualText }),
@@ -113,7 +120,7 @@ export default function BibleVersesPage() {
     if (!confirmed) return;
     setDeletingId(id);
     try {
-      await fetch(`/api/bible-verses?id=${id}`, { method: 'DELETE' });
+      await authFetch(`/api/bible-verses?id=${id}`, { method: 'DELETE' });
       await fetchVerses();
     } finally {
       setDeletingId(null);
@@ -125,7 +132,7 @@ export default function BibleVersesPage() {
     if (!confirmed) return;
     setClearing(true);
     try {
-      await fetch('/api/bible-verses?all=true', { method: 'DELETE' });
+      await authFetch('/api/bible-verses?all=true', { method: 'DELETE' });
       await fetchVerses();
     } finally {
       setClearing(false);
@@ -144,7 +151,7 @@ export default function BibleVersesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Bible Verses</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Upload a PDF of verses — one is shown on the member dashboard each day, rotating automatically at midnight.</p>
         </div>
@@ -168,7 +175,7 @@ export default function BibleVersesPage() {
         ) : todaysVerse ? (
           <>
             <p className={`text-lg font-semibold leading-relaxed italic ${t.textPrimary}`}>&ldquo;{todaysVerse.verse_text}&rdquo;</p>
-            <p className="text-sm text-blue-400 font-bold mt-3">— {todaysVerse.reference}</p>
+            <p className="mt-3"><ScriptureLink prefix="— " reference={todaysVerse.reference} className="text-sm text-blue-400 font-bold" /></p>
           </>
         ) : (
           <p className={`text-sm ${t.textSub}`}>No verses yet — upload a PDF or add one below to get started.</p>
@@ -182,6 +189,8 @@ export default function BibleVersesPage() {
         </div>
       </div>
 
+      {canEdit && (
+        <>
       {/* Upload */}
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 mb-6 backdrop-blur-sm`}>
         <h2 className={`text-sm font-black ${t.textPrimary} mb-3 flex items-center gap-2`}>
@@ -259,6 +268,8 @@ export default function BibleVersesPage() {
           </form>
         )}
       </div>
+        </>
+      )}
 
       {/* List */}
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm`}>
@@ -266,7 +277,7 @@ export default function BibleVersesPage() {
           <h2 className={`text-sm font-black ${t.textPrimary} flex items-center gap-2`}>
             <BookOpen className="w-4 h-4 text-blue-400" /> {loading ? 'Loading...' : `${verses.length} Verse${verses.length === 1 ? '' : 's'}`}
           </h2>
-          {verses.length > 0 && (
+          {canEdit && verses.length > 0 && (
             <button
               onClick={handleClearAll}
               disabled={clearing}
@@ -288,16 +299,18 @@ export default function BibleVersesPage() {
             {verses.map((v) => (
               <div key={v.id} className={`flex items-start justify-between gap-4 px-6 py-4 ${t.rowHover} transition-colors`}>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-blue-400">{v.reference}</p>
+                  <p><ScriptureLink reference={v.reference} className="text-xs font-bold text-blue-400" /></p>
                   <p className={`text-sm ${t.textPrimary} mt-1`}>{v.verse_text}</p>
                 </div>
-                <button
-                  onClick={() => handleDelete(v.id)}
-                  disabled={deletingId === v.id}
-                  className="text-slate-600 hover:text-rose-400 disabled:opacity-50 transition-colors shrink-0 p-1"
-                >
-                  <Trash2 size={15} />
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => handleDelete(v.id)}
+                    disabled={deletingId === v.id}
+                    className="text-slate-600 hover:text-rose-400 disabled:opacity-50 transition-colors shrink-0 p-1"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

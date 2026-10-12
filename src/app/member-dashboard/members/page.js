@@ -3,8 +3,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { Search, Users } from 'lucide-react';
+import BranchLabel from '@/app/components/BranchLabel';
+import { useTheme } from '@/app/context/ThemeContext';
+import { levelBadge } from '@/app/lib/roleColors';
 
 export default function MemberDirectoryPage() {
+  const { dark } = useTheme();
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch]   = useState('');
@@ -13,7 +17,7 @@ export default function MemberDirectoryPage() {
     async function fetchMembers() {
       setLoading(true);
       const { data } = await supabase
-        .from('members')
+        .from('member_directory')
         .select('full_name, role, ministry, status')
         .order('full_name', { ascending: true });
       setMembers(data || []);
@@ -34,7 +38,7 @@ export default function MemberDirectoryPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
       <div className="mb-8">
-        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Church Members</h1>
         <p className="text-slate-500 text-sm mt-0.5">
           {loading ? 'Loading...' : `${members.length} member${members.length === 1 ? '' : 's'} in the congregation`}
@@ -48,7 +52,7 @@ export default function MemberDirectoryPage() {
           placeholder="Search by name, role, or ministry..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-[#1a1d2e] border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors"
+          className="w-full bg-[#1b2420] border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors"
         />
       </div>
 
@@ -62,7 +66,7 @@ export default function MemberDirectoryPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((m, i) => (
-            <div key={i} className="bg-[#1a1d2e] rounded-3xl p-5 border border-white/10 flex items-center gap-3">
+            <div key={i} className="bg-[#1b2420] rounded-3xl p-5 border border-white/10 flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/20 flex items-center justify-center shrink-0">
                 <span className="text-xs font-black text-blue-400">
                   {m.full_name?.split(' ').map(w => w[0]).slice(0, 2).join('')}
@@ -70,7 +74,10 @@ export default function MemberDirectoryPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-white truncate">{m.full_name}</p>
-                <p className="text-xs text-white/40 truncate capitalize">{m.role || 'Member'} · {m.ministry || 'Unassigned'}</p>
+                <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold border capitalize ${levelBadge(m.role || 'member', dark)}`}>{m.role || 'Member'}</span>
+                  <span className="text-xs text-white/40 truncate">{m.ministry || 'Unassigned'}</span>
+                </div>
               </div>
               <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'active' ? 'bg-emerald-500' : 'bg-slate-600'}`} />
             </div>

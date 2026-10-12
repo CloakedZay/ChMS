@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/app/lib/supabase";
+import { getCaller, resolveChurchId } from "@/app/lib/apiAuth";
 
 const STOPWORDS = new Set([
   "the", "a", "an", "is", "are", "was", "were", "what", "how", "when",
@@ -77,7 +77,11 @@ function findHeadingChunk(chunks: string[], roman: string): string | null {
 
 export async function POST(req: NextRequest) {
   try {
-    const { question, church_id } = await req.json();
+    const caller = await getCaller(req);
+    if (caller instanceof NextResponse) return caller;
+
+    const { question, church_id: requestedChurch } = await req.json();
+    const church_id = resolveChurchId(caller, requestedChurch);
 
     if (!question || !church_id) {
       return NextResponse.json(
@@ -91,7 +95,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ answer: greeting });
     }
 
-    const { data: docs, error } = await supabase
+    const { data: docs, error } = await caller.db
       .from("chatbot_documents")
       .select("title, content, doc_type")
       .eq("church_id", church_id)

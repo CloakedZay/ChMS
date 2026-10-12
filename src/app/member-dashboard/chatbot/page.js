@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
+import { authFetch } from '@/app/lib/authFetch';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
+import BranchLabel from '@/app/components/BranchLabel';
 
 export default function MemberChatbotPage() {
   const { user } = useAuth();
@@ -44,7 +46,7 @@ export default function MemberChatbotPage() {
     setSending(true);
 
     try {
-      const res = await fetch('/api/chatbot', {
+      const res = await authFetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question, church_id: churchId }),
@@ -69,15 +71,16 @@ export default function MemberChatbotPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen flex flex-col">
       <div className="mb-6">
-        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1">GGCF-GMI · Pandi, Bulacan</p>
+        <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Church Assistant</h1>
         <p className="text-slate-500 text-sm mt-0.5">Ask questions answered from your church&apos;s reference documents</p>
       </div>
 
-      <div className="flex-1 flex flex-col bg-[#1a1d2e] border border-white/10 rounded-3xl overflow-hidden min-h-0">
+      {/* Fixed to the window height so the question box stays in view. */}
+      <div className="flex flex-col bg-[#1b2420] border border-white/10 rounded-3xl overflow-hidden h-[calc(100dvh-13rem)] min-h-[24rem]">
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-[50vh]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-16">
               <Sparkles className="w-8 h-8 text-slate-700 mb-3" />
@@ -127,7 +130,7 @@ export default function MemberChatbotPage() {
             onChange={(e) => setInput(e.target.value)}
             placeholder={!churchId && !loadingChurch ? 'No church linked to this account...' : 'Ask a question...'}
             disabled={disabled}
-            className="flex-1 min-w-0 bg-[#0f111a] border border-white/10 rounded-full py-2.5 px-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-60"
+            className="flex-1 min-w-0 bg-[#111815] border border-white/10 rounded-full py-2.5 px-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-60"
           />
           <button
             type="submit"

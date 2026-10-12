@@ -10,7 +10,16 @@ import {
 } from "lucide-react";
 
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
+import BranchLabel from "@/app/components/BranchLabel";
+import UpcomingBirthdays from "@/app/components/UpcomingBirthdays";
+import ScriptureLink from "@/app/components/ScriptureLink";
+import AnnouncementsBanner from "@/app/components/AnnouncementsBanner";
+import FollowUpReminder from "@/app/components/FollowUpReminder";
+import { useFollowUpReminder, REMINDER_DAYS } from "@/app/lib/useFollowUpReminder";
+import Link from "next/link";
 
 // ─── Theme token maps ──────────────────────────────────────────────────────────
 
@@ -19,9 +28,9 @@ import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 function T(dark) {
   return {
     // Page bg
-    pageBg:       dark ? "bg-[#0f111a]"        : "bg-slate-200",
+    pageBg:       dark ? "bg-[#111815]"        : "bg-slate-200",
     // Card bg
-    cardBg:       dark ? "bg-[#1a1d2e]/50"     : "bg-slate-100/90",
+    cardBg:       dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
     cardBorder:   dark ? "border-slate-800/60"  : "border-slate-300",
     // Inner card (nested)
     innerCard:    dark ? "bg-slate-900/50"      : "bg-slate-200",
@@ -31,7 +40,7 @@ function T(dark) {
     textSub:      dark ? "text-slate-500"       : "text-slate-600",
     textMuted:    dark ? "text-slate-600"       : "text-slate-500",
     // Input
-    inputBg:      dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    inputBg:      dark ? "bg-[#1b2420]"        : "bg-slate-50",
     inputBorder:  dark ? "border-slate-800"     : "border-slate-400",
     inputText:    dark ? "text-slate-200"       : "text-slate-800",
     // Header divider
@@ -39,12 +48,12 @@ function T(dark) {
     // Hover row
     hoverRow:     dark ? "hover:bg-slate-800/50" : "hover:bg-slate-200",
     // Notif panel
-    notifBg:      dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    notifBg:      dark ? "bg-[#1b2420]"        : "bg-slate-50",
     // Tab bar
-    tabBar:       dark ? "bg-[#1a1d2e]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
+    tabBar:       dark ? "bg-[#1b2420]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
     tabInactive:  dark ? "text-slate-500 hover:text-slate-200" : "text-slate-500 hover:text-slate-800",
     // Icon button
-    iconBtn:      dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-300 text-slate-600 hover:text-slate-900",
+    iconBtn:      dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-300 text-slate-600 hover:text-slate-900",
     // Dashed empty state
     dashed:       dark ? "border-slate-800"     : "border-slate-400",
     emptyIcon:    dark ? "text-slate-800"       : "text-slate-400",
@@ -96,6 +105,9 @@ const NOTIF_STYLE = {
 
 export default function DashboardPage() {
   const { dark, toggle: toggleTheme } = useTheme();
+  const { role, user } = useAuth();
+  // Follow-up reminder — staff who follow up members only, never members.
+  const followUp = useFollowUpReminder(user?.id, can(role, 'followUp'));
   const t = T(dark);
 
   const [loading, setLoading]           = useState(true);
@@ -118,10 +130,11 @@ export default function DashboardPage() {
     async function fetchLiveStats() {
       setLoading(true);
       try {
-        const { count: mCount } = await supabase.from('members').select('*', { count: 'exact', head: true });
-        const { count: aCount } = await supabase.from('members').select('*', { count: 'exact', head: true }).eq('status', 'active');
-        const { data: latestMembers } = await supabase.from('members').select('full_name, status, ministry').order('id', { ascending: false }).limit(3);
-        const { data: trans } = await supabase.from('transactions').select('amount, type, fund, category, member, date').order('date', { ascending: false });
+        const { count: mCount } = await supabase.from('member_directory').select('*', { count: 'exact', head: true });
+        const { count: aCount } = await supabase.from('member_directory').select('*', { count: 'exact', head: true }).eq('status', 'active');
+        const { data: latestMembers } = await supabase.from('member_directory').select('full_name, status, ministry').order('id', { ascending: false }).limit(3);
+        const { data: allTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status').order('date', { ascending: false });
+        const trans = allTrans?.filter((t) => t.status !== 'Void');
         const { data: evts } = await supabase.from('events').select('*').gte('date', new Date().toISOString().split('T')[0]).order('date', { ascending: true }).limit(4);
 
         setMemberCount(mCount || 0);
@@ -226,6 +239,8 @@ export default function DashboardPage() {
 
   // ── Computed ──────────────────────────────────────────────────────────────
   const unreadCount    = notifications.filter(n => !n.is_read).length;
+  const showReminder   = followUp.count > 0 && !followUp.snoozed;
+  const bellCount      = unreadCount + (showReminder ? 1 : 0);
   const attendanceRate = memberCount > 0 ? Math.round((activeMembers / memberCount) * 100) : 0;
   const q              = search.toLowerCase().trim();
 
@@ -258,7 +273,10 @@ export default function DashboardPage() {
   const STATS = [
     { label: "Active Members",    value: loading ? "..." : memberCount.toString(),             sub: `${activeMembers} active`,     icon: Users,      color: A(dark, "blue"),   trend: "up"                        },
     { label: "Attendance Rate",   value: loading ? "..." : `${attendanceRate}%`,               sub: "Based on active members",     icon: UserCheck,  color: A(dark, "indigo"), trend: "up"                        },
+    // Hidden for levels without finance access (Admin, Secretary) — they'd only see ₱0.
+    ...(can(role, 'finance') ? [
     { label: "Total Church Funds",value: loading ? "..." : `₱${totalFunds.toLocaleString()}`,  sub: "Live balance",                icon: HandCoins,  color: A(dark, "purple"), trend: totalFunds >= 0 ? "up" : "down" },
+    ] : []),
     { label: "Upcoming Events",   value: loading ? "..." : upcomingEvents.length.toString(),   sub: "From today onward",           icon: CalendarDays,color: A(dark, "pink"),  trend: "neutral"                   },
   ];
 
@@ -271,7 +289,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8 lg:mb-10">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h2 className={`text-2xl font-black ${t.textPrimary}`}>Dashboard Overview</h2>
           <p className={`${t.textSub} text-sm mt-0.5`}>
             {loading ? "Syncing with Supabase..." : "Live data from all church modules."}
@@ -312,9 +330,9 @@ export default function DashboardPage() {
               className={`relative p-2 rounded-full border ${t.iconBtn} transition-colors`}
             >
               <Bell size={18} />
-              {unreadCount > 0 && (
-                <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-blue-600 rounded-full ring-2 ${dark ? "ring-[#0f111a]" : "ring-slate-200"} text-[10px] font-black text-white flex items-center justify-center`}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
+              {bellCount > 0 && (
+                <span className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-blue-600 rounded-full ring-2 ${dark ? "ring-[#111815]" : "ring-slate-200"} text-[10px] font-black text-white flex items-center justify-center`}>
+                  {bellCount > 9 ? "9+" : bellCount}
                 </span>
               )}
             </button>
@@ -326,8 +344,8 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-2">
                     <Zap className="w-3.5 h-3.5 text-blue-400" />
                     <span className={`text-xs font-black ${t.textPrimary} uppercase tracking-wider`}>Notifications</span>
-                    {unreadCount > 0 && (
-                      <span className="text-[10px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded-full">{unreadCount}</span>
+                    {bellCount > 0 && (
+                      <span className="text-[10px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded-full">{bellCount}</span>
                     )}
                   </div>
                   {unreadCount > 0 && (
@@ -338,7 +356,29 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="max-h-80 overflow-y-auto">
-                  {notifications.length === 0 ? (
+                  {showReminder && (
+                    <Link
+                      href="/dashboard/follow-up"
+                      onClick={() => setShowNotifs(false)}
+                      className={`flex items-start gap-3 px-4 py-3 border-b ${t.divider} bg-rose-500/10 hover:bg-rose-500/15 transition-colors`}
+                    >
+                      <div className="mt-0.5 w-7 h-7 rounded-xl flex items-center justify-center shrink-0 bg-rose-500/20 text-rose-500">
+                        <Users className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className={`text-xs font-bold truncate ${t.textPrimary}`}>
+                            {followUp.count} member{followUp.count === 1 ? '' : 's'} need{followUp.count === 1 ? 's' : ''} a follow-up
+                          </p>
+                          <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-rose-500" />
+                        </div>
+                        <p className={`text-[10px] ${t.textSub} mt-0.5 leading-relaxed line-clamp-2`}>
+                          Not active for {REMINDER_DAYS}+ days or marked inactive. Tap to review.
+                        </p>
+                      </div>
+                    </Link>
+                  )}
+                  {notifications.length === 0 ? (!showReminder &&
                     <div className="py-10 text-center">
                       <Bell className={`w-6 h-6 ${t.emptyIcon} mx-auto mb-2`} />
                       <p className={`text-xs ${t.textMuted}`}>No notifications yet.</p>
@@ -399,6 +439,12 @@ export default function DashboardPage() {
 
       {/* ── OVERVIEW ── */}
       <div className="space-y-8">
+        {/* Announcements — always first */}
+        <AnnouncementsBanner manageHref="/dashboard/announcements" />
+
+        {/* Follow-up reminder (Pastor, Leader, Secretary) */}
+        <FollowUpReminder due={followUp.due} snoozed={followUp.snoozed} onSnooze={followUp.snooze} />
+
         <div className={`${card} p-6 flex items-start gap-4`}>
           <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
             <Quote className="w-4 h-4 text-blue-400" />
@@ -410,7 +456,7 @@ export default function DashboardPage() {
             ) : verseOfDay ? (
               <>
                 <p className={`text-sm ${t.textPrimary} leading-relaxed italic`}>&ldquo;{verseOfDay.verse_text}&rdquo;</p>
-                <p className={`text-xs ${t.textMuted} mt-2 font-semibold`}>— {verseOfDay.reference}</p>
+                <p className="mt-2"><ScriptureLink prefix="— " reference={verseOfDay.reference} className={`text-xs ${t.textMuted} font-semibold`} /></p>
               </>
             ) : (
               <p className={`text-sm ${t.textMuted}`}>No verses uploaded yet. Upload the verses PDF to start showing a daily verse.</p>
@@ -435,6 +481,16 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Upcoming birthdays */}
+          <UpcomingBirthdays
+            cardClass={`${card} p-6 lg:col-span-2`}
+            titleClass={t.textPrimary}
+            textClass={t.textPrimary}
+            subClass={t.textMuted}
+            rowClass={`${t.innerCard} border ${t.innerBorder}`}
+            accentClass={A(dark, "purple")}
+          />
+
           {/* Next Schedule */}
           <div className={`${card} p-6`}>
             <div className={`flex items-center justify-between mb-5 border-b ${t.divider} pb-3`}>

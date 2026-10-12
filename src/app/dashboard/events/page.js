@@ -3,10 +3,13 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
+import { useAuth } from "@/app/context/AuthContext";
+import { can } from "@/app/lib/permissions";
 import {
   Calendar, Plus, Search, MoreHorizontal,
   CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon
 } from "lucide-react";
+import BranchLabel from "@/app/components/BranchLabel";
 
 const EMPTY_FORM = {
   title: '',
@@ -18,13 +21,7 @@ const EMPTY_FORM = {
   church_id: '',
 };
 
-const MINISTRIES = [
-  "Program & Music Ministry",
-  "Mission & Evangelism",
-  "Training & Life Ministry",
-  "Building & Equipment",
-  "Finance Ministry",
-];
+// The ministry list comes from each branch's real ministries (db/022).
 
 const STATUS_COLORS = {
   approved: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -35,30 +32,32 @@ const STATUS_COLORS = {
 
 const FILTERS = ["all", "planning", "pending", "approved", "done"];
 const GLOBAL_ROLES = ["admin", "pastor"];
+// Statuses a leader may give an event; approving is the Pastor's job.
+const LEADER_STATUSES = ["planning", "pending"];
 
 // ─── Theme token map — same pattern as DashboardPage.js ────────────────────
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#0f111a]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1a1d2e]/50"     : "bg-slate-100/90",
+    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
+    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
     cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
     textPrimary: dark ? "text-white"           : "text-slate-900",
     textSub:     dark ? "text-slate-500"       : "text-slate-600",
     textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     inputBorder: dark ? "border-slate-800"     : "border-slate-400",
     inputText:   dark ? "text-slate-200"       : "text-slate-800",
     divider:     dark ? "border-slate-800/50"  : "border-slate-300",
-    filterInactive: dark ? "bg-[#1a1d2e] border-slate-800 text-slate-500 hover:text-slate-200" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    modalBg:     dark ? "bg-[#1a1d2e]"        : "bg-slate-50",
+    filterInactive: dark ? "bg-[#1b2420] border-slate-800 text-slate-500 hover:text-slate-200" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    modalBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
     modalBorder: dark ? "border-slate-700"     : "border-slate-300",
     cancelBtn:   dark ? "bg-slate-800 hover:bg-slate-700 text-white" : "bg-slate-300 hover:bg-slate-400 text-slate-900",
     emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
-    menuBg:      dark ? "bg-[#1a1d2e] border-slate-700" : "bg-slate-50 border-slate-300",
+    menuBg:      dark ? "bg-[#1b2420] border-slate-700" : "bg-slate-50 border-slate-300",
     menuHover:   dark ? "hover:bg-slate-800"    : "hover:bg-slate-200",
-    iconBtn:     dark ? "bg-[#1a1d2e] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
   };
 }
 
@@ -76,6 +75,7 @@ function A(dark, color) {
 export default function EventsPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
+  const { user, role } = useAuth();
 
   const [events, setEvents]         = useState([]);
   const [churches, setChurches]     = useState([]);
@@ -87,8 +87,17 @@ export default function EventsPage() {
   const [search, setSearch]         = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [form, setForm]             = useState(EMPTY_FORM);
+  const [ministries, setMinistries] = useState([]);
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
+
+  // Pastor manages every event; a leader adds events and edits their own
+  // until they're approved. Everyone else only views (same as db/007).
+  const canManageAll = can(role, 'events', 'approve');
+  const canSubmit    = can(role, 'events', 'submit');
+  const canEditEvent = (ev) =>
+    canManageAll ||
+    (canSubmit && ev.created_by === user?.id && LEADER_STATUSES.includes(ev.status));
 
   async function fetchProfile() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -107,6 +116,8 @@ export default function EventsPage() {
     const { data, error } = await supabase.from('churches').select('id, name').order('name', { ascending: true });
     if (error) { console.error('Error fetching churches:', error.message); return; }
     if (data) setChurches(data);
+    const { data: list } = await supabase.from('ministries').select('name, church_id').eq('is_active', true).order('name');
+    setMinistries(list || []);
   }
 
   async function fetchEvents() {
@@ -186,6 +197,10 @@ export default function EventsPage() {
     return matchSearch && matchFilter;
   });
 
+  // Ministries of the branch the event belongs to.
+  const eventChurch = isGlobal ? form.church_id : profile?.church_id;
+  const branchMinistries = ministries.filter((m) => m.church_id === eventChurch).map((m) => m.name);
+
   const counts = {
     total:    events.length,
     approved: events.filter((e) => e.status === "approved").length,
@@ -198,7 +213,7 @@ export default function EventsPage() {
 
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}>GGCF-GMI · Pandi, Bulacan</p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textMuted} mb-1`}><BranchLabel /></p>
           <h1 className={`text-2xl font-black ${t.textPrimary}`}>Events & Services</h1>
           <p className={`${t.textSub} text-sm mt-0.5`}>Schedule and track church activities and ministry projects</p>
         </div>
@@ -210,12 +225,14 @@ export default function EventsPage() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button
-            onClick={openAdd}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20 shrink-0"
-          >
-            <Plus size={16} /> Add Event
-          </button>
+          {(canManageAll || canSubmit) && (
+            <button
+              onClick={openAdd}
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20 shrink-0"
+            >
+              <Plus size={16} /> Add Event
+            </button>
+          )}
         </div>
       </div>
 
@@ -262,7 +279,7 @@ export default function EventsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filtered.map((event) => (
-            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={openEdit} onDelete={handleDeleteLocal} t={t} dark={dark} />
+            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={canEditEvent(event) ? openEdit : null} onDelete={canManageAll ? handleDeleteLocal : null} t={t} dark={dark} />
           ))}
         </div>
       )}
@@ -291,8 +308,10 @@ export default function EventsPage() {
 
               <Field label="Ministry" t={t}>
                 <select name="ministry" value={form.ministry} onChange={handleChange} className={inputStyle(t)}>
-                  <option value="">Select a ministry</option>
-                  {MINISTRIES.map((m) => <option key={m} value={m}>{m}</option>)}
+                  <option value="">{eventChurch ? 'Select a ministry' : 'Choose the branch first'}</option>
+                  {branchMinistries.map((name) => <option key={name} value={name}>{name}</option>)}
+                  {/* An older event may name a ministry that isn't in the list. */}
+                  {form.ministry && !branchMinistries.includes(form.ministry) && <option value={form.ministry}>{form.ministry}</option>}
                 </select>
               </Field>
 
@@ -308,8 +327,8 @@ export default function EventsPage() {
                 <select name="status" value={form.status} onChange={handleChange} className={inputStyle(t)}>
                   <option value="planning">Planning</option>
                   <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="done">Done</option>
+                  {canManageAll && <option value="approved">Approved</option>}
+                  {canManageAll && <option value="done">Done</option>}
                 </select>
               </Field>
 
@@ -359,18 +378,18 @@ function EventCard({ event, branchName, onEdit, onDelete, t, dark }) {
     <div className={`${t.cardBg} border ${t.cardBorder} p-6 rounded-3xl backdrop-blur-sm hover:border-blue-500/40 transition-all group relative`}>
       <div className="flex justify-between items-start mb-4">
         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[phase] || STATUS_COLORS.planning}`}>{phase}</span>
-        <div className="relative">
+        {(onEdit || onDelete) && <div className="relative">
           <button onClick={() => setMenuOpen(!menuOpen)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${t.menuHover}`}><MoreHorizontal size={16} /></button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
               <div className={`absolute right-0 top-8 z-20 ${t.menuBg} border rounded-xl shadow-xl w-36 overflow-hidden`}>
-                <button onClick={() => { setMenuOpen(false); onEdit(event); }} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}><Pencil size={13} /> Edit</button>
-                <button onClick={() => { setMenuOpen(false); handleDelete(); }} disabled={deleting} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"><Trash2 size={13} /> {deleting ? 'Deleting...' : 'Delete'}</button>
+                {onEdit && <button onClick={() => { setMenuOpen(false); onEdit(event); }} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}><Pencil size={13} /> Edit</button>}
+                {onDelete && <button onClick={() => { setMenuOpen(false); handleDelete(); }} disabled={deleting} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"><Trash2 size={13} /> {deleting ? 'Deleting...' : 'Delete'}</button>}
               </div>
             </>
           )}
-        </div>
+        </div>}
       </div>
 
       <h3 className={`text-base font-black ${t.textPrimary} mb-1 group-hover:text-blue-400 transition-colors leading-snug`}>{event.title}</h3>

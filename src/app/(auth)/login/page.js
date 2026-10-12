@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
-import { Eye, EyeOff, Sun, Moon } from 'lucide-react';
+import { homePathFor } from '@/app/lib/permissions';
+import { DISABLED_MESSAGE, DISABLED_FLAG } from '@/app/lib/disabledLogin';
+import { Eye, EyeOff, Sun, Moon, Church } from 'lucide-react';
 
 function useTheme() {
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(false);
   useEffect(() => {
     const stored = localStorage.getItem('faithsync-theme');
     if (stored) setDark(stored === 'dark');
@@ -34,22 +36,55 @@ export default function LoginPage() {
   // Already logged in? Skip straight through
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) redirectByRole(session.user.id);
+      if (session) {
+        redirectByRole(session.user.id);
+        return;
+      }
+      // Back from Google with an error (e.g. not set up yet)?
+      const back = new URLSearchParams(window.location.hash.slice(1)).get('error_description')
+        || new URLSearchParams(window.location.search).get('error_description');
+      if (back) setError(`Google sign-in didn't work: ${back}`);
+
+      // Signed out because the account was disabled? Say so.
+      try {
+        if (sessionStorage.getItem(DISABLED_FLAG)) {
+          sessionStorage.removeItem(DISABLED_FLAG);
+          setError(DISABLED_MESSAGE);
+        }
+      } catch {}
     });
   }, []);
 
   async function redirectByRole(userId) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, disabled')
       .eq('id', userId)
       .single();
 
-    const role = profile?.role;
-    if (role === 'admin' || role === 'pastor' || role === 'leader' || role === 'staff') {
-      router.replace('/dashboard');
-    } else {
-      router.replace('/member-dashboard');
+    if (profile?.disabled) {
+      await supabase.auth.signOut();
+      setError(DISABLED_MESSAGE);
+      setLoading(false);
+      return;
+    }
+
+    router.replace(homePathFor(profile?.role));
+  }
+
+  // Sign in with Google (step E2). Google sends the person back here and the
+  // effect above takes them to their dashboard. Someone whose Google account
+  // isn't linked to a login gets a new Member login with no branch yet.
+  async function handleGoogle() {
+    setError('');
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/login` },
+    });
+    if (oauthError) {
+      setError(/not enabled|unsupported provider/i.test(oauthError.message)
+        ? 'Google sign-in is not set up yet. Please use your username and password.'
+        : oauthError.message);
     }
   }
 
@@ -77,8 +112,8 @@ export default function LoginPage() {
   }
 
   // Theme tokens
-  const pageBg    = dark ? 'bg-[#0f111a]'    : 'bg-slate-100';
-  const cardBg    = dark ? 'bg-[#1a1d2e]'    : 'bg-white';
+  const pageBg    = dark ? 'bg-[#111815]'    : 'bg-[#f8f7f2]';
+  const cardBg    = dark ? 'bg-[#1b2420]'    : 'bg-white';
   const cardBord  = dark ? 'border-white/10'  : 'border-slate-200';
   const inputBg   = dark ? 'bg-white/5'       : 'bg-slate-50';
   const inputBord = dark ? 'border-white/10'  : 'border-slate-300';
@@ -92,18 +127,12 @@ export default function LoginPage() {
     : 'bg-white border-slate-200 text-slate-500 hover:text-slate-900';
 
   return (
-    <div className={`min-h-screen ${pageBg} flex items-center justify-center p-4 relative transition-colors duration-200`}>
+    <div className={`min-h-screen ${pageBg} flex items-center justify-center p-4 relative overflow-hidden transition-colors duration-200`}>
 
-      {/* Grid bg — dark only */}
-      {dark && (
-        <div
-          className="absolute inset-0 opacity-[0.03] pointer-events-none"
-          style={{
-            backgroundImage: 'linear-gradient(#4f6fff 1px, transparent 1px), linear-gradient(90deg, #4f6fff 1px, transparent 1px)',
-            backgroundSize: '48px 48px',
-          }}
-        />
-      )}
+      {/* Soft decorative rings */}
+      <div className="absolute -top-32 -left-32 w-[28rem] h-[28rem] rounded-full border border-[#c5a66a]/25 pointer-events-none" aria-hidden="true" />
+      <div className="absolute -top-16 -left-16 w-72 h-72 rounded-full border border-[#c5a66a]/20 pointer-events-none" aria-hidden="true" />
+      <div className={`absolute -bottom-40 -right-40 w-[30rem] h-[30rem] rounded-full pointer-events-none ${dark ? 'bg-[#173f35]/30' : 'bg-[#e8f0ea]'}`} aria-hidden="true" />
 
       {/* Theme toggle */}
       <button
@@ -118,17 +147,15 @@ export default function LoginPage() {
 
         {/* Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600/15 border border-blue-500/25 mb-4">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="w-6 h-6 text-blue-400">
-              <path d="M12 2v20M2 12h20" />
-            </svg>
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#173f35] shadow-lg shadow-[#173f35]/20 mb-4">
+            <Church className="w-6 h-6 text-[#c5a66a]" strokeWidth={1.75} />
           </div>
-          <h1 className={`text-2xl font-black ${textMain} tracking-tight`}>FaithSync</h1>
-          <p className={`${textSub} text-xs mt-1 tracking-widest uppercase`}>GGCF-GMI · Pandi, Bulacan</p>
+          <h1 className={`text-2xl font-bold ${textMain} tracking-tight`}>FaithSync</h1>
+          <p className={`${textSub} text-xs mt-1 tracking-widest uppercase`}>GGCF-GMI</p>
         </div>
 
         {/* Card */}
-        <div className={`${cardBg} border ${cardBord} rounded-3xl p-8 shadow-2xl shadow-black/20`}>
+        <div className={`${cardBg} border ${cardBord} rounded-3xl p-8 shadow-xl`}>
           <h2 className={`text-base font-bold ${textMain} mb-1`}>Welcome back</h2>
           <p className={`${textSub} text-xs mb-7`}>Sign in — you'll be taken to your dashboard automatically.</p>
 
@@ -136,7 +163,7 @@ export default function LoginPage() {
 
             {/* Email */}
             <div>
-              <label className={`block text-[10px] uppercase tracking-widest ${labelCls} font-bold mb-2`}>Email</label>
+              <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Email</label>
               <input
                 type="email"
                 value={email}
@@ -149,7 +176,7 @@ export default function LoginPage() {
 
             {/* Password */}
             <div>
-              <label className={`block text-[10px] uppercase tracking-widest ${labelCls} font-bold mb-2`}>Password</label>
+              <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Password</label>
               <div className="relative">
                 <input
                   type={showPass ? 'text' : 'password'}
@@ -195,11 +222,34 @@ export default function LoginPage() {
                 'Sign In'
               )}
             </button>
+
+            {/* Or Google */}
+            <div className="flex items-center gap-3 pt-1">
+              <div className={`flex-1 h-px ${dark ? 'bg-white/10' : 'bg-slate-200'}`} />
+              <span className={`text-[10px] uppercase tracking-widest ${textSub}`}>or</span>
+              <div className={`flex-1 h-px ${dark ? 'bg-white/10' : 'bg-slate-200'}`} />
+            </div>
+            <button
+              type="button"
+              onClick={handleGoogle}
+              className={`w-full flex items-center justify-center gap-2 border rounded-xl py-3 text-sm font-bold transition-colors ${
+                dark ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18A11 11 0 0 0 1 12c0 1.78.43 3.45 1.18 4.94l3.66-2.84z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+              </svg>
+              Sign in with Google
+            </button>
           </div>
 
           <p className={`mt-6 text-center text-[10px] ${dark ? 'text-white/20' : 'text-slate-400'} leading-relaxed`}>
             Your access level is set by the administrator.<br />
-            Contact your pastor if you can't log in.
+            Contact your pastor if you can't log in.<br />
+            Page visits and time spent are recorded for church records.
           </p>
         </div>
 
