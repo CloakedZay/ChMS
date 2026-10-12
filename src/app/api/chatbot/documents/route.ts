@@ -1,41 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripPageMarkers } from "@/app/lib/pdfText";
+import { extractText } from "@/app/lib/extractText";
+import { indexDocument } from "@/app/lib/knowledge";
 import { getCaller, resolveChurchId, CONTENT_ROLES, AI_DOCUMENT_VIEWERS } from "@/app/lib/apiAuth";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-
-async function extractText(file: File): Promise<string> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const name = file.name.toLowerCase();
-
-  if (name.endsWith(".pdf") || file.type === "application/pdf") {
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: new Uint8Array(buffer) });
-    try {
-      const result = await parser.getText();
-      return stripPageMarkers(result.text);
-    } finally {
-      await parser.destroy();
-    }
-  }
-
-  if (
-    name.endsWith(".docx") ||
-    file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-  ) {
-    const mammoth = await import("mammoth");
-    const result = await mammoth.extractRawText({ buffer });
-    return result.value;
-  }
-
-  if (name.endsWith(".txt") || file.type === "text/plain") {
-    return buffer.toString("utf-8");
-  }
-
-  throw new Error("Unsupported file type. Please upload a PDF, DOCX, or TXT file.");
-}
 
 // List documents for a church
 export async function GET(req: NextRequest) {
@@ -85,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     let content: string;
     try {
-      content = (await extractText(file)).trim();
+      content = (await extractText(Buffer.from(await file.arrayBuffer()), file.name, file.type)).trim();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not read file.";
       return NextResponse.json({ error: message }, { status: 400 });
@@ -98,20 +69,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { error } = await caller.db.from("chatbot_documents").insert({
+    const { data: saved, error } = await caller.db.from("chatbot_documents").insert({
       title,
       content,
       doc_type: docType,
       church_id: churchId,
       is_active: true,
       created_by: caller.userId,
-    });
+    }).select("id, title, doc_type, church_id, content, is_active").single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    // Add it to the assistant's search index. The upload still counts if
+    // this fails; "Rebuild search index" can retry later.
+    let indexed: { chunks: number; semantic: boolean } | null = null;
+    let indexWarning: string | null = null;
+    try {
+      indexed = await indexDocument(caller.db, saved);
+    } catch (err) {
+      indexWarning = err instanceof Error ? err.message : "Could not add it to the search index.";
+      console.error("Indexing document failed:", err);
+    }
+
+    return NextResponse.json({ success: true, indexed, indexWarning });
   } catch (err) {
     console.error("Chatbot document upload error:", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });

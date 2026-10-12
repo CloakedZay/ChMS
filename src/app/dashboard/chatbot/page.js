@@ -8,7 +8,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import {
   Send, Bot, User, Sparkles, Loader2, Sun, Moon,
-  Upload, FileText, Trash2, Eye, EyeOff, File as FileIcon
+  Upload, FileText, Trash2, Eye, EyeOff, File as FileIcon, RefreshCw
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 
@@ -199,7 +199,7 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
                 ? "Loading your profile..."
                 : !churchId
                 ? "No church is linked to your account yet — contact your admin."
-                : "Answers are based only on documents your church admin has uploaded."}
+                : "Answers come only from the church's documents and discipleship handouts — in English or Tagalog."}
             </p>
           </div>
         ) : (
@@ -315,6 +315,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
         return;
       }
 
+      if (data.indexWarning) setUploadError(`Uploaded, but not yet searchable: ${data.indexWarning}. Use “Rebuild search index” to retry.`);
       setTitle("");
       setDocType(DOC_TYPES[0]);
       setFile(null);
@@ -367,6 +368,9 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
 
   return (
     <div className="space-y-6">
+
+      {/* Search index status + rebuild */}
+      <SearchIndexCard t={t} churchId={churchId} canEdit={canEdit} refreshKey={documents.length} />
 
       {/* Upload */}
       {canEdit && (
@@ -478,6 +482,97 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Search index ──────────────────────────────────────────────────────────────
+// How much the assistant can search (db/035), and a button to rebuild it
+// from every document and discipleship handout — needed once after setup,
+// and whenever something was added while indexing failed.
+function SearchIndexCard({ t, churchId, canEdit, refreshKey }) {
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState(null);
+  const [error, setError] = useState("");
+
+  async function loadStatus() {
+    try {
+      const res = await authFetch("/api/knowledge/reindex");
+      setStatus(await res.json());
+    } catch {
+      setStatus(null);
+    }
+  }
+  useEffect(() => { loadStatus(); }, [refreshKey]);
+
+  async function rebuild() {
+    if (!window.confirm("Rebuild the assistant's search index from all documents and discipleship handouts? This can take a minute.")) return;
+    setBusy(true);
+    setError("");
+    setReport(null);
+    try {
+      const res = await authFetch("/api/knowledge/reindex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ church_id: churchId }),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error || "Rebuild failed.");
+      else setReport(data);
+      loadStatus();
+    } catch {
+      setError("Rebuild failed. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const notSetUp = status && status.ready === false;
+
+  return (
+    <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 backdrop-blur-sm`}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-1`}>Assistant search index</h3>
+          {notSetUp ? (
+            <p className={`text-sm ${t.textPrimary}`}>Not set up yet — run <span className="font-mono text-xs">db/035_knowledge_search.sql</span> in Supabase.</p>
+          ) : status?.ready ? (
+            <p className={`text-sm ${t.textPrimary}`}>
+              <span className="font-bold">{status.passages}</span> searchable passages from documents and handouts
+              {status.passages > 0 && (
+                <span className={t.textMuted}> · {status.withMeaning === status.passages ? "meaning search on" : `${status.withMeaning} with meaning search`}</span>
+              )}
+            </p>
+          ) : (
+            <p className={`text-sm ${t.textMuted}`}>Checking…</p>
+          )}
+          <p className={`text-xs mt-1 ${t.textMuted}`}>
+            New documents and handouts are added automatically. Rebuild after first setup, or if something isn&apos;t being found.
+          </p>
+        </div>
+        {canEdit && !notSetUp && (
+          <button onClick={rebuild} disabled={busy}
+            className="shrink-0 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-semibold px-4 h-10 rounded-xl">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {busy ? "Rebuilding…" : "Rebuild search index"}
+          </button>
+        )}
+      </div>
+
+      {error && <p className={`mt-4 text-xs ${t.errorText}`}>{error}</p>}
+      {report && (
+        <div className={`mt-4 text-xs ${t.textSub} space-y-1`}>
+          <p>
+            Indexed <span className="font-bold">{report.documents}</span> document{report.documents === 1 ? "" : "s"} and{" "}
+            <span className="font-bold">{report.handouts}</span> handout{report.handouts === 1 ? "" : "s"} into{" "}
+            <span className="font-bold">{report.chunks}</span> passages.
+            {!report.semantic && " Meaning search is unavailable on this server, so keyword search is used."}
+          </p>
+          {report.skipped?.length > 0 && <p className={t.textMuted}>Skipped: {report.skipped.join("; ")}</p>}
+          {report.failed?.length > 0 && <p className={t.errorText}>Failed: {report.failed.join("; ")}</p>}
+        </div>
+      )}
     </div>
   );
 }

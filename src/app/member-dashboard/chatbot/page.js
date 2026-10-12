@@ -90,7 +90,7 @@ export default function MemberChatbotPage() {
                   ? 'Loading your profile...'
                   : !churchId
                   ? 'No church is linked to your account yet — contact your admin.'
-                  : 'Answers are based only on documents your church admin has uploaded.'}
+                  : "Answers come only from the church's documents and discipleship handouts — in English or Tagalog."}
               </p>
             </div>
           ) : (

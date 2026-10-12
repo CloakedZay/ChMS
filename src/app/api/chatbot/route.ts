@@ -1,78 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCaller, resolveChurchId } from "@/app/lib/apiAuth";
+import { analyzeQuestion, detectIntent, pickAnswer, coverage, exactCoverage, splitSentences, tokenize, type Analysis } from "@/app/lib/nlp";
+import { embedQuery, embedPassages, toVector } from "@/app/lib/embeddings";
+import { correctQuestion } from "@/app/lib/spelling";
 
-const STOPWORDS = new Set([
-  "the", "a", "an", "is", "are", "was", "were", "what", "how", "when",
-  "where", "why", "who", "which", "do", "does", "did", "can", "could",
-  "i", "you", "we", "our", "your", "my", "for", "of", "to", "in", "on",
-  "and", "or", "about", "please", "tell", "me", "us", "there", "any",
-  "own", "words", "word", "explain", "summarize", "summarise", "describe",
-  "discuss", "mean", "meaning", "means", "understand",
-]);
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
-function keywords(text: string): string[] {
-  const words = text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
-  return words.filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+// The church assistant. No outside AI service: it understands the question
+// with lib/nlp (English + Tagalog), finds passages with the hybrid search in
+// the database (db/035: keywords + meaning + typo-tolerant), and answers
+// with the most relevant sentences, naming the document or handout they
+// came from. It never makes text up — if nothing fits, it says so.
+
+type Source = { title: string; subtitle: string | null; type: "document" | "handout"; excerpt: string };
+type Hit = {
+  id: number; source_type: "document" | "handout"; source_id: string; title: string; subtitle: string | null;
+  content: string; text_rank: number; similarity: number | null; fuzzy: number; score: number;
+};
+
+const looksTagalog = (q: string) =>
+  /\b(po|ang|ng|mga|sa|ano|paano|saan|kailan|bakit|sino|ba|naman|kumusta|kamusta|salamat)\b/i.test(q);
+
+function reply(answer: string, extra: Record<string, unknown> = {}) {
+  return NextResponse.json({ answer, sources: [], ...extra });
 }
 
-function greetingReply(question: string): string | null {
-  const q = question.trim().toLowerCase().replace(/[.,!?]+$/g, "");
-  if (/^(hi|hello|hey|yo|good day)$/.test(q)) {
-    return "Hello! Ask me anything about the church's reference documents and I'll try to find an answer.";
-  }
-  if (/^good (morning|afternoon|evening)$/.test(q)) {
-    return "Good day! What would you like to know from the church's documents?";
-  }
-  if (/^how are you$/.test(q)) {
-    return "I'm doing well, thanks for asking! How can I help you today?";
-  }
-  if (/^thanks?( you)?( so much| a lot)?$/.test(q)) {
-    return "You're welcome!";
-  }
-  return null;
-}
-
-function scoreText(text: string, words: string[]): number {
-  const lower = text.toLowerCase();
-  let score = 0;
-  for (const w of words) {
-    score += lower.split(w).length - 1;
-  }
-  return score;
-}
-
-function chunkContent(content: string): string[] {
-  const chunks = content
-    .split(/\n\s*\n+|--\s*\d+\s*of\s*\d+\s*--/)
-    .map((c) => c.trim())
-    .filter((c) => c.length > 0 && !/table of contents/i.test(c));
-  return chunks.length > 0 ? chunks : [content];
-}
-
+// ── Chapter / article requests ("what is in article 3") ─────────────────────
 function toRoman(num: number): string {
   const table: [number, string][] = [
-    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"],
-    [100, "C"], [90, "XC"], [50, "L"], [40, "XL"],
-    [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
+    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"],
+    [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
   ];
   let result = "";
-  for (const [value, symbol] of table) {
-    while (num >= value) {
-      result += symbol;
-      num -= value;
-    }
-  }
+  for (const [value, symbol] of table) while (num >= value) { result += symbol; num -= value; }
   return result;
 }
 
-function findRequestedChapter(question: string): number | null {
-  const m = question.match(/\b(?:chapter|article|section)\s+(\d{1,3})\b/i);
-  return m ? parseInt(m[1], 10) : null;
+function chunkByParagraph(content: string): string[] {
+  const chunks = content.split(/\n\s*\n+/).map((c) => c.trim()).filter((c) => c && !/table of contents/i.test(c));
+  return chunks.length ? chunks : [content];
 }
 
-function findHeadingChunk(chunks: string[], roman: string): string | null {
-  const re = new RegExp(`^${roman}\\.\\s`, "m");
-  return chunks.find((c) => re.test(c)) ?? null;
+function findHeadingChunk(content: string, n: number): string | null {
+  const roman = toRoman(n);
+  const re = new RegExp(`^(?:(?:article|chapter|section)\\s+)?(?:${roman}|${n})[.:)]\\s`, "im");
+  return chunkByParagraph(content).find((c) => re.test(c)) ?? null;
+}
+
+// ── Before db/035 is run: the old word-count search ──────────────────────────
+function legacySearch(docs: { title: string; doc_type: string; content: string }[], analysis: Analysis): Source[] {
+  const words = analysis.searchTerms;
+  if (!words.length) return [];
+  const score = (text: string) => {
+    const lower = text.toLowerCase();
+    return words.reduce((s, w) => s + (lower.split(w).length - 1), 0);
+  };
+  return docs
+    .flatMap((d) => chunkByParagraph(d.content).map((text) => ({ d, text, s: score(text) + (score(d.title) > 0 ? 5 : 0) })))
+    .filter((c) => c.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 3)
+    .map(({ d, text }) => ({ title: d.title, subtitle: d.doc_type, type: "document" as const, excerpt: text }));
 }
 
 export async function POST(req: NextRequest) {
@@ -80,88 +69,156 @@ export async function POST(req: NextRequest) {
     const caller = await getCaller(req);
     if (caller instanceof NextResponse) return caller;
 
-    const { question, church_id: requestedChurch } = await req.json();
+    const { question: raw, church_id: requestedChurch } = await req.json();
+    const question = String(raw || "").trim().slice(0, 500);
     const church_id = resolveChurchId(caller, requestedChurch);
+    if (!question) return NextResponse.json({ error: "Missing question" }, { status: 400 });
 
-    if (!question || !church_id) {
-      return NextResponse.json(
-        { error: "Missing question or church_id" },
-        { status: 400 }
+    const tl = looksTagalog(question);
+    const intent = detectIntent(question);
+
+    // ── Small talk ──────────────────────────────────────────────────────────
+    if (intent.kind === "greeting") {
+      return reply(tl
+        ? "Kumusta po! Magtanong lang po tungkol sa simbahan — hahanapin ko ang sagot sa mga dokumento at handouts ng church."
+        : "Hello! Ask me anything about the church — I'll look for the answer in the church's documents and discipleship handouts.");
+    }
+    if (intent.kind === "thanks") return reply(tl ? "Walang anuman po! May iba pa po ba kayong tanong?" : "You're welcome! Anything else you'd like to know?");
+    if (intent.kind === "goodbye") return reply(tl ? "Paalam po, God bless!" : "Goodbye, God bless!");
+    if (intent.kind === "help" || intent.kind === "empty") {
+      return reply(
+        "I answer questions from the church's own materials: the documents uploaded in Assistant → Documents and the discipleship handouts in Training.\n\n" +
+        "Try things like:\n• What time is the Sunday service?\n• How do I join a ministry?\n• Ano ang ikapu?\n• What is in Article 3?\n\n" +
+        "I quote the material and show where it came from. If something isn't written down there, I'll tell you so you can ask a pastor."
       );
     }
 
-    const greeting = greetingReply(question);
-    if (greeting) {
-      return NextResponse.json({ answer: greeting });
-    }
-
-    const { data: docs, error } = await caller.db
-      .from("chatbot_documents")
-      .select("title, content, doc_type")
-      .eq("church_id", church_id)
-      .eq("is_active", true);
-
-    if (error) throw error;
-
-    if (!docs || docs.length === 0) {
-      return NextResponse.json({
-        answer: "No reference documents have been uploaded yet. Ask an admin to add some in the Documents tab.",
-      });
-    }
-
-    type Match = { title: string; doc_type: string; text: string };
-    let matches: Match[] = [];
-
-    const chapterNum = findRequestedChapter(question);
-    if (chapterNum !== null) {
-      const roman = toRoman(chapterNum);
-      matches = docs
-        .map((d): Match | null => {
-          const chunk = findHeadingChunk(chunkContent(d.content), roman);
-          return chunk ? { title: d.title, doc_type: d.doc_type, text: chunk } : null;
-        })
-        .filter((m): m is Match => m !== null);
-    }
-
-    if (matches.length === 0) {
-      const words = keywords(question);
-      if (words.length === 0) {
+    // ── "What is in chapter / article N" ───────────────────────────────────
+    if (intent.kind === "chapter" && church_id) {
+      const { data: docs } = await caller.db.from("chatbot_documents")
+        .select("title, content, doc_type").eq("church_id", church_id).eq("is_active", true);
+      const found = (docs || [])
+        .map((d) => ({ d, text: findHeadingChunk(d.content, intent.number) }))
+        .filter((x): x is { d: typeof x.d; text: string } => !!x.text);
+      if (found.length) {
         return NextResponse.json({
-          answer: "Try asking about something specific from the church's reference documents.",
+          answer: found[0].text,
+          sources: found.slice(0, 3).map(({ d, text }) => ({ title: d.title, subtitle: d.doc_type, type: "document", excerpt: text })),
+          confidence: "high",
         });
       }
-
-      matches = docs
-        .flatMap((d) =>
-          chunkContent(d.content).map((chunk) => ({
-            title: d.title,
-            doc_type: d.doc_type,
-            text: chunk,
-            score: scoreText(chunk, words) + (scoreText(d.title, words) > 0 ? 5 : 0),
-          }))
-        )
-        .filter((c) => c.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 3)
-        .map(({ title, doc_type, text }): Match => ({ title, doc_type, text }));
+      // otherwise fall through to a normal search
     }
 
-    if (matches.length === 0) {
-      return NextResponse.json({
-        answer: "I couldn't find anything about that in the uploaded documents. Try rephrasing, or ask a pastor directly.",
-      });
+    // Fix typos against the church's own vocabulary ("chech" → "check").
+    const { text: fixedQuestion } = await correctQuestion(caller.db, question);
+    const analysis = analyzeQuestion(fixedQuestion);
+    if (!analysis.words.length) {
+      return reply(tl
+        ? "Pakisabi po nang mas tiyak ang tanong — halimbawa: “Anong oras ang pagsamba sa Linggo?”"
+        : "Could you ask a bit more specifically? For example: “What time is the Sunday service?”");
     }
 
-    const answer = matches
-      .map((m) => `**${m.title}** (${m.doc_type})\n${m.text}`)
-      .join("\n\n");
+    // ── Hybrid search ──────────────────────────────────────────────────────
+    const vector = await embedQuery(fixedQuestion);
+    const { data: hits, error } = await caller.db.rpc("search_knowledge", {
+      q_terms: analysis.searchTerms,
+      q_embedding: vector ? toVector(vector) : null,
+      p_church: church_id,
+      match_count: 6,
+    });
 
-    return NextResponse.json({ answer });
+    if (error) {
+      // Search index not set up yet (db/035) → old keyword search on documents.
+      if (!/search_knowledge|does not exist|schema cache/i.test(error.message)) throw error;
+      const { data: docs } = await caller.db.from("chatbot_documents")
+        .select("title, content, doc_type").eq("church_id", church_id).eq("is_active", true);
+      const sources = legacySearch(docs || [], analysis);
+      if (!sources.length) {
+        return reply("I couldn't find anything about that in the uploaded documents. Try rephrasing, or ask a pastor directly.");
+      }
+      return NextResponse.json({ answer: pickAnswer(sources[0].excerpt, analysis), sources, confidence: "medium", mode: "keyword" });
+    }
+
+    // Re-rank the database's candidates: meaning first, then how many of the
+    // question's OWN words a passage has (so "prayer meeting" beats a lesson
+    // that only matches the synonyms of "prayer"), then synonym coverage.
+    const results = ((hits || []) as Hit[])
+      .map((h) => {
+        const text = `${h.title} ${h.content}`;
+        const exact = exactCoverage(text, analysis);
+        const cov = coverage(text, analysis);
+        const rank = h.similarity != null
+          ? h.similarity + 0.15 * exact + 0.05 * cov + (h.text_rank > 0 ? 0.02 : 0)
+          : exact + 0.5 * cov + Math.min(h.text_rank, 1) + 0.3 * h.fuzzy;
+        return { ...h, exact, cov, rank };
+      })
+      .sort((a, b) => b.rank - a.rank);
+    const best = results[0];
+    const bestCoverage = best ? best.cov : 0;
+    const sim = best?.similarity ?? 0;
+
+    // Is the best passage actually about the question? Tuned on real tests:
+    // related questions score ≥ 0.81 in meaning AND share their key words with
+    // the passage; off-topic ones ("how do I add in finance", "what's inside
+    // reports", "bake bread") score 0.76–0.82 with few or chance word matches.
+    //   * meaning ≥ 0.81 and at least half the question's words (synonyms count), or
+    //   * meaning ≥ 0.79 and all its words (2+ words), or ≥ 0.84 for one word, or
+    //   * meaning ≥ 0.88 alone (e.g. Tagalog question, English passage)
+    //   * no model available: a keyword hit covering 2/3 of the words
+    const exact = best?.exact ?? 0;
+    const manyWords = analysis.words.length >= 2;
+    const relevant = !!best && (vector
+      ? (sim >= 0.81 && Math.max(exact, bestCoverage) >= 0.5)
+        || (exact >= 0.99 && sim >= (manyWords ? 0.79 : 0.84))
+        || sim >= 0.88
+      : best.text_rank > 0 && Math.max(exact, bestCoverage) >= 0.67);
+    if (!relevant) {
+      const nothingIndexed = results.length === 0;
+      return reply(
+        nothingIndexed && !vector
+          ? "I couldn't find anything about that. If documents or handouts were added recently, ask a pastor or leader to press “Rebuild search index” in Assistant → Documents."
+          : tl
+            ? "Pasensya na po, wala akong nakitang sagot diyan sa mga dokumento at handouts ng simbahan. Subukang itanong sa ibang paraan, o magtanong po sa pastor."
+            : "Sorry, I couldn't find that in the church's documents or handouts. Try asking another way, or ask a pastor directly.",
+        { confidence: "none" }
+      );
+    }
+
+    const confidence = (sim >= 0.84 && exact >= 0.5) || (sim >= 0.8 && exact >= 0.99) || sim >= 0.9 ? "high" : "medium";
+
+    // Up to 3 sources, one passage each, best first; drop weak extras.
+    const seen = new Set<string>();
+    const seenText = new Set<string>();
+    const sources: Source[] = [];
+    for (const h of results) {
+      const key = `${h.source_type}:${h.source_id}`;
+      // The same file uploaded twice gives identical passages — show it once.
+      const textKey = tokenize(h.content).slice(0, 40).join(" ");
+      if (seen.has(key) || seenText.has(textKey)) continue;
+      const hSim = h.similarity ?? 0;
+      const strongEnough = h === best || hSim >= Math.max(0.8, sim - 0.03) || (h.text_rank > 0 && h.cov >= 0.5);
+      if (!strongEnough) continue;
+      seen.add(key);
+      seenText.add(textKey);
+      sources.push({ title: h.title, subtitle: h.subtitle, type: h.source_type, excerpt: h.content.slice(0, 1500) });
+      if (sources.length === 3) break;
+    }
+
+    // Choose the answer sentences by meaning too, when the model is available.
+    let sentenceSims: number[] | null = null;
+    if (vector) {
+      const sv = await embedPassages(splitSentences(best.content));
+      if (sv) sentenceSims = sv.map((v) => v.reduce((s, x, i) => s + x * vector[i], 0));
+    }
+    let answer = pickAnswer(best.content, analysis, 3, sentenceSims);
+    // A very short extract (a heading) reads badly; use more of the passage.
+    if (tokenize(answer).length < 8) answer = best.content.slice(0, 600);
+    if (confidence === "medium") answer = (tl ? "Ito po ang pinakamalapit na nakita ko:\n\n" : "Here's the closest thing I found:\n\n") + answer;
+
+    return NextResponse.json({ answer, sources, confidence, mode: vector ? "meaning+keyword" : "keyword" });
   } catch (err) {
     console.error("Chatbot API error:", err);
-    return NextResponse.json(
-      { error: "Something went wrong" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

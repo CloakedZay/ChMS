@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { authFetch } from "@/app/lib/authFetch";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
@@ -240,15 +241,29 @@ export default function TrainingPage() {
         .upload(filePath, file, { contentType: file.type, upsert: false });
       if (storageErr) throw storageErr;
 
-      const { error: dbErr } = await supabase.from("module_handouts").insert({
+      const { data: savedHandout, error: dbErr } = await supabase.from("module_handouts").insert({
         module_id:   moduleId,
         file_name:   file.name,
         file_path:   filePath,
         file_size:   file.size,
         description: uploadDesc[moduleId]?.trim() || null,
         uploaded_by: "Staff",
-      });
+      }).select("id").single();
       if (dbErr) throw dbErr;
+
+      // Make it searchable by the assistant (db/035). The upload still
+      // counts if this fails; "Rebuild search index" can retry later.
+      try {
+        const res = await authFetch("/api/knowledge/handout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ handout_id: savedHandout.id }),
+        });
+        const result = await res.json();
+        if (!res.ok || result.skipped) {
+          setUploadError((p) => ({ ...p, [moduleId]: `Uploaded. The assistant can't search it: ${result.skipped || result.error || "indexing failed"}.` }));
+        }
+      } catch { /* searchable after the next rebuild */ }
 
       await fetchHandouts(moduleId);
       setUploadDesc((p) => ({ ...p, [moduleId]: "" }));

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
+    "@huggingface/transformers": "^3.8.1",
     "@supabase/supabase-js": "^2.101.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
