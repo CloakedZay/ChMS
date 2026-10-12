@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { authFetch } from "@/app/lib/authFetch";
+import RelatedReading from "@/app/components/RelatedReading";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
@@ -691,6 +692,13 @@ export default function TrainingPage() {
                                             Submitted {sub.created_at ? new Date(sub.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                                           </p>
                                         </div>
+
+                                        {/* The handout passage this question is about, to check the answer against */}
+                                        <RelatedReading
+                                          moduleId={sub.module_id || sub.discipleship_questions?.module_id}
+                                          text={sub.discipleship_questions?.question}
+                                          label="What the handout says"
+                                        />
 
                                         {sub.status === "approved" ? (
                                           <div className={`flex items-center gap-2 text-xs ${A(dark, "emerald")} font-bold`}>

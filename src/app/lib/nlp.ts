@@ -34,7 +34,7 @@ const SYNONYM_GROUPS: string[][] = [
   ['tithe', 'tithes', 'tithing', 'ikapu', 'ikapo', 'ikasampu'],
   ['offering', 'offerings', 'handog', 'alay', 'abuloy', 'donation', 'donate', 'give', 'giving', 'ibigay', 'magbigay'],
   ['love gift', 'lovegift', 'love', 'gift', 'regalo'],
-  ['pray', 'prayer', 'prayers', 'praying', 'panalangin', 'manalangin', 'dasal', 'magdasal', 'dalangin'],
+  ['pray', 'prayer', 'prayers', 'praying', 'prayed', 'panalangin', 'manalangin', 'nananalangin', 'nanalangin', 'ipanalangin', 'idalangin', 'dalangin', 'dasal', 'magdasal', 'nagdasal', 'nagdarasal', 'ipagdasal'],
   ['worship', 'service', 'pagsamba', 'sumamba', 'serbisyo', 'mass'],
   ['church', 'simbahan', 'iglesia', 'congregation', 'kongregasyon'],
   ['god', 'diyos', 'dios', 'lord', 'panginoon', 'ama'],
@@ -142,6 +142,8 @@ export function stem(word: string): string {
 export type Intent =
   | { kind: 'greeting' | 'thanks' | 'goodbye' | 'help' | 'empty' }
   | { kind: 'chapter'; number: number }
+  | { kind: 'progress' }                  // "what's my next module?"
+  | { kind: 'module'; number: number }    // "what is module 3 about?"
   | { kind: 'search' };
 
 export function detectIntent(question: string): Intent {
@@ -152,6 +154,19 @@ export function detectIntent(question: string): Intent {
   if (/^(thanks?|thank you|ty|salamat|maraming salamat)( po| so much| a lot)?$/.test(q)) return { kind: 'thanks' };
   if (/^(bye|goodbye|paalam|sige)( po)?$/.test(q)) return { kind: 'goodbye' };
   if (/^(help|tulong|what can you do|ano ang kaya mo|paano ka gamitin|how do i use (this|you))( po)?$/.test(q)) return { kind: 'help' };
+  // My own discipleship progress (English + Tagalog).
+  if (
+    /\bnext (module|lesson|aralin)\b/.test(q) ||
+    /\b(susunod|sunod) na (module|aralin|lesson)\b/.test(q) ||
+    /\bhow many (modules|lessons)\b/.test(q) ||
+    /\b(modules?|lessons?|aralin) (left|remaining|natitira)\b/.test(q) ||
+    /\bilan pa\b.*\b(module|aralin|lesson)/.test(q) ||
+    // "my modules / progress ko" — but not how-to questions ("how do I submit my module?")
+    (/\b(my|ko|aking|akin)\b/.test(q) && /\b(progress|modules?|lessons?|aralin|discipleship|pagdidisipulo|training)\b/.test(q)
+      && !/\b(how (do|can|to|should)|paano)\b/.test(q))
+  ) return { kind: 'progress' };
+  const mod = q.match(/\b(?:module|lesson|aralin)\s+(\d{1,2})\b/);
+  if (mod) return { kind: 'module', number: parseInt(mod[1], 10) };
   const ch = question.match(/\b(?:chapter|article|section|kabanata|seksyon)\s+(\d{1,3})\b/i);
   if (ch) return { kind: 'chapter', number: parseInt(ch[1], 10) };
   return { kind: 'search' };

@@ -9,6 +9,8 @@ import {
   Send, FileText, Download,
 } from 'lucide-react';
 import BranchLabel from '@/app/components/BranchLabel';
+import LessonAsk from '@/app/components/LessonAsk';
+import RelatedReading from '@/app/components/RelatedReading';
 
 const ANSWER_STATUS = {
   approved: { label: 'Approved',       cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
@@ -320,6 +322,13 @@ export default function DiscipleshipPage() {
                               onChange={(e) => setAnswers(p => ({ ...p, [q.id]: e.target.value }))}
                               className="w-full bg-[#111815] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 resize-none transition-colors"
                             />
+                            {/* Where to read for this question — not the answer itself */}
+                            <RelatedReading
+                              moduleId={mod.id}
+                              text={q.question}
+                              label="Related reading"
+                              hint="These parts of the handout can help you answer. Write the answer in your own words."
+                            />
                           </div>
                         )}
                       </div>
@@ -362,6 +371,9 @@ export default function DiscipleshipPage() {
                       </div>
                     );
                   })()}
+
+                  {/* Ask about this lesson — answers from this module's handouts */}
+                  <LessonAsk moduleId={mod.id} title={mod.title} />
 
                   {!complete && (
                     <div className="pt-1 flex items-center justify-between gap-4">

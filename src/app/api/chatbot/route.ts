@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCaller, resolveChurchId } from "@/app/lib/apiAuth";
-import { analyzeQuestion, detectIntent, pickAnswer, coverage, exactCoverage, splitSentences, tokenize, type Analysis } from "@/app/lib/nlp";
+import { analyzeQuestion, detectIntent, pickAnswer, coverage, splitSentences, tokenize, type Analysis } from "@/app/lib/nlp";
 import { embedQuery, embedPassages, toVector } from "@/app/lib/embeddings";
 import { correctQuestion } from "@/app/lib/spelling";
+import { rerank, type Hit } from "@/app/lib/assistantSearch";
+import { loadJourney, describeProgress, describeLessonProgress, findModule, describeModule } from "@/app/lib/discipleship";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,10 +16,7 @@ export const maxDuration = 60;
 // came from. It never makes text up — if nothing fits, it says so.
 
 type Source = { title: string; subtitle: string | null; type: "document" | "handout"; excerpt: string };
-type Hit = {
-  id: number; source_type: "document" | "handout"; source_id: string; title: string; subtitle: string | null;
-  content: string; text_rank: number; similarity: number | null; fuzzy: number; score: number;
-};
+// (Hit and the re-ranking live in lib/assistantSearch, shared with "Related reading".)
 
 const looksTagalog = (q: string) =>
   /\b(po|ang|ng|mga|sa|ano|paano|saan|kailan|bakit|sino|ba|naman|kumusta|kamusta|salamat)\b/i.test(q);
@@ -69,10 +68,20 @@ export async function POST(req: NextRequest) {
     const caller = await getCaller(req);
     if (caller instanceof NextResponse) return caller;
 
-    const { question: raw, church_id: requestedChurch } = await req.json();
+    const { question: raw, church_id: requestedChurch, module_id: rawModule } = await req.json();
     const question = String(raw || "").trim().slice(0, 500);
     const church_id = resolveChurchId(caller, requestedChurch);
     if (!question) return NextResponse.json({ error: "Missing question" }, { status: 400 });
+
+    // "Ask about this lesson": answer only from one module (db/037).
+    const moduleId = rawModule != null && /^\d+$/.test(String(rawModule)) ? Number(rawModule) : null;
+    let lesson: { id: number; title: string; description: string | null } | null = null;
+    if (moduleId) {
+      const { data } = await caller.db.from("discipleship_modules")
+        .select("id, title, description").eq("id", moduleId).maybeSingle();
+      if (!data) return NextResponse.json({ error: "Module not found" }, { status: 404 });
+      lesson = data;
+    }
 
     const tl = looksTagalog(question);
     const intent = detectIntent(question);
@@ -88,13 +97,29 @@ export async function POST(req: NextRequest) {
     if (intent.kind === "help" || intent.kind === "empty") {
       return reply(
         "I answer questions from the church's own materials: the documents uploaded in Assistant → Documents and the discipleship handouts in Training.\n\n" +
-        "Try things like:\n• What time is the Sunday service?\n• How do I join a ministry?\n• Ano ang ikapu?\n• What is in Article 3?\n\n" +
-        "I quote the material and show where it came from. If something isn't written down there, I'll tell you so you can ask a pastor."
+        "Try things like:\n• What time is the Sunday service?\n• How do I join a ministry?\n• Ano ang ikapu?\n• What is in Article 3?\n• What's my next module?\n• What is module 2 about?\n\n" +
+        "I answer from that material only. If something isn't written down there, I'll tell you so you can ask a pastor."
       );
     }
 
+    // ── My discipleship journey ─────────────────────────────────────────────
+    if (intent.kind === "progress" || intent.kind === "module") {
+      const groups = await loadJourney(caller.db, caller.userId);
+      if (intent.kind === "progress") {
+        // Inside a lesson: where they stand in THIS module and what opens next.
+        const here = lesson ? describeLessonProgress(groups, lesson.id, tl) : null;
+        return reply(here || describeProgress(groups, tl), { confidence: "high" });
+      }
+      const found = findModule(groups, intent.number, question);
+      if (found) return reply(describeModule(found.group, found.module, tl), { confidence: "high" });
+      const total = groups.find((g) => !g.ministryId)?.modules.length ?? 0;
+      return reply(tl
+        ? `Walang Module ${intent.number}${total ? ` — may ${total} module ang Discipleship path ninyo` : ""}.`
+        : `There's no Module ${intent.number}${total ? ` — your Discipleship path has ${total} module${total === 1 ? "" : "s"}` : ""}.`);
+    }
+
     // ── "What is in chapter / article N" ───────────────────────────────────
-    if (intent.kind === "chapter" && church_id) {
+    if (intent.kind === "chapter" && church_id && !lesson) {
       const { data: docs } = await caller.db.from("chatbot_documents")
         .select("title, content, doc_type").eq("church_id", church_id).eq("is_active", true);
       const found = (docs || [])
@@ -121,13 +146,17 @@ export async function POST(req: NextRequest) {
 
     // ── Hybrid search ──────────────────────────────────────────────────────
     const vector = await embedQuery(fixedQuestion);
-    const { data: hits, error } = await caller.db.rpc("search_knowledge", {
+    const { data: dbHits, error } = await caller.db.rpc("search_knowledge", {
       q_terms: analysis.searchTerms,
       q_embedding: vector ? toVector(vector) : null,
       p_church: church_id,
       match_count: 6,
+      ...(lesson ? { p_module: lesson.id } : {}),
     });
 
+    if (error && lesson) {
+      return reply("Asking about a single lesson isn't set up yet. Ask the administrator to run db/037_search_one_module.sql.");
+    }
     if (error) {
       // Search index not set up yet (db/035) → old keyword search on documents.
       if (!/search_knowledge|does not exist|schema cache/i.test(error.message)) throw error;
@@ -140,20 +169,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ answer: pickAnswer(sources[0].excerpt, analysis), sources, confidence: "medium", mode: "keyword" });
     }
 
-    // Re-rank the database's candidates: meaning first, then how many of the
-    // question's OWN words a passage has (so "prayer meeting" beats a lesson
-    // that only matches the synonyms of "prayer"), then synonym coverage.
-    const results = ((hits || []) as Hit[])
-      .map((h) => {
-        const text = `${h.title} ${h.content}`;
-        const exact = exactCoverage(text, analysis);
-        const cov = coverage(text, analysis);
-        const rank = h.similarity != null
-          ? h.similarity + 0.15 * exact + 0.05 * cov + (h.text_rank > 0 ? 0.02 : 0)
-          : exact + 0.5 * cov + Math.min(h.text_rank, 1) + 0.3 * h.fuzzy;
-        return { ...h, exact, cov, rank };
-      })
-      .sort((a, b) => b.rank - a.rank);
+    // In a lesson, its own description is a passage too.
+    const hits = [...((dbHits || []) as Hit[])];
+    if (lesson?.description?.trim()) {
+      const text = `${lesson.title}\n${lesson.description.trim()}`;
+      const dv = vector ? await embedPassages([text]) : null;
+      hits.push({
+        id: -1, source_type: "handout", source_id: `module-${lesson.id}`, title: lesson.title, subtitle: "Module description",
+        content: lesson.description.trim(), text_rank: coverage(text, analysis) > 0 ? 0.1 : 0,
+        similarity: dv && vector ? dv[0].reduce((s, x, i) => s + x * vector[i], 0) : null, fuzzy: 0, score: 0,
+      });
+    }
+
+    const results = rerank(hits, analysis);
     const best = results[0];
     const bestCoverage = best ? best.cov : 0;
     const sim = best?.similarity ?? 0;
@@ -168,13 +196,21 @@ export async function POST(req: NextRequest) {
     //   * no model available: a keyword hit covering 2/3 of the words
     const exact = best?.exact ?? 0;
     const manyWords = analysis.words.length >= 2;
+    //   * inside one lesson, the passage must share at least one word — a
+    //     short module description is "similar" to almost any short question
     const relevant = !!best && (vector
       ? (sim >= 0.81 && Math.max(exact, bestCoverage) >= 0.5)
         || (exact >= 0.99 && sim >= (manyWords ? 0.79 : 0.84))
-        || sim >= 0.88
+        || (sim >= 0.88 && (!lesson || Math.max(exact, bestCoverage) > 0))
       : best.text_rank > 0 && Math.max(exact, bestCoverage) >= 0.67);
     if (!relevant) {
       const nothingIndexed = results.length === 0;
+      if (lesson) {
+        return reply(tl
+          ? `Wala po akong nakitang sagot diyan sa mga handout ng “${lesson.title}”. Subukang itanong sa ibang paraan, gamitin ang pangunahing Assistant, o magtanong sa inyong leader.`
+          : `I couldn't find that in the handouts for “${lesson.title}”. Try asking another way, use the main Assistant, or ask your leader.`,
+          { confidence: "none" });
+      }
       return reply(
         nothingIndexed && !vector
           ? "I couldn't find anything about that. If documents or handouts were added recently, ask a pastor or leader to press “Rebuild search index” in Assistant → Documents."
