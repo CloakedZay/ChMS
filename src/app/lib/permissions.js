@@ -64,6 +64,10 @@ export const PERMISSIONS = {
 
   // Events and announcements
   events:             { admin: 'view', pastor: 'approve', leader: 'submit', ministry_head: 'submit', finance: 'view', secretary: 'view', member: 'view' },
+  // Event attendance (db/041): Leaders / Secretary own branch, Ministry Heads
+  // their ministries' events. Members see their own; members the Pastor or
+  // Secretary make "attendance helpers" also take it — checked by the database.
+  attendance:         { admin: 'view', pastor: 'edit', leader: 'edit', ministry_head: 'edit', finance: 'view', secretary: 'edit', member: 'own' },
   announcements:      { admin: 'view', pastor: 'edit', leader: 'edit', ministry_head: 'edit', finance: 'view', secretary: 'view', member: 'view' },
   bibleVerses:        { admin: 'view', pastor: 'edit', leader: 'edit', member: 'view' },
 
@@ -112,6 +116,7 @@ export const PAGE_FEATURES = {
   '/dashboard/members':          ['members'],
   '/dashboard/follow-up':        ['followUp'],
   '/dashboard/events':           ['events'],
+  '/dashboard/attendance':       ['attendance'],
   '/dashboard/finance':          ['finance'],
   '/dashboard/ministry':         ['ministryEnrollment', 'modules'],
   '/dashboard/training':         ['modules', 'moduleProgress', 'answerReview'],
@@ -128,6 +133,7 @@ export const PAGE_FEATURES = {
   '/member-dashboard':              null,
   '/member-dashboard/members':      ['members'],
   '/member-dashboard/events':       ['events'],
+  '/member-dashboard/attendance':   ['attendance'],
   '/member-dashboard/ministries':   ['modules'],
   '/member-dashboard/finances':     ['finance'],
   '/member-dashboard/discipleship': ['moduleProgress'],

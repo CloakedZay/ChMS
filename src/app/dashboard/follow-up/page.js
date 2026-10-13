@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   HeartHandshake, Search, UserX, Clock, CheckCircle2, KeyRound, X, Loader2, ChevronDown, ChevronUp, MessageSquarePlus,
+  Phone, MessageSquare, UserPlus, Trash2,
 } from 'lucide-react';
 import { supabase } from '@/app/lib/supabase';
 import { useAuth } from '@/app/context/AuthContext';
@@ -52,6 +53,7 @@ export default function FollowUpPage() {
   const { role } = useAuth();
   const { dark } = useTheme();
   const canChangeStatus = can(role, 'members', 'edit');   // the Secretary
+  const canMakeMember = can(role, 'memberArchive', 'edit'); // Pastor, Secretary (db/041)
 
   const [rows, setRows] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -65,6 +67,7 @@ export default function FollowUpPage() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [visitors, setVisitors] = useState(null);         // db/041; [] if not set up
 
   const t = dark
     ? { page: 'bg-[#111815]', card: 'bg-[#1b2420] border-slate-800/60', text: 'text-white', sub: 'text-slate-400', muted: 'text-slate-500',
@@ -76,8 +79,13 @@ export default function FollowUpPage() {
         tabOn: 'bg-[#e8f0ea] text-[#173f35]', tabOff: 'text-[#858b87] hover:text-[#173f35]', ghost: 'border-[#d9d6c8] text-[#4c534f] hover:bg-[#f8f7f2]',
         inner: 'bg-[#f8f7f2]', modal: 'bg-white border-[#e5e3d8]' };
 
-  async function load() {
-    const { data, error } = await supabase.rpc('member_activity');
+  // Visitors from event attendance sheets (db/041).
+  async function loadVisitors() {
+    const { data, error } = await supabase.rpc('visitor_list');
+    setVisitors(error ? [] : data || []);
+  }
+
+  function applyActivity({ data, error }) {
     if (error) {
       setLoadError(/does not exist|schema cache|Could not find/i.test(error.message)
         ? 'Follow-up has not been set up yet. Ask the administrator to run db/032_member_followups.sql.'
@@ -88,7 +96,23 @@ export default function FollowUpPage() {
     setLoadError('');
     setRows(data || []);
   }
-  useEffect(() => { load(); }, []);
+  const load = () => supabase.rpc('member_activity').then(applyActivity);
+  useEffect(() => { supabase.rpc('member_activity').then(applyActivity); }, []);
+  useEffect(() => {
+    supabase.rpc('visitor_list').then(({ data, error }) => setVisitors(error ? [] : data || []));
+  }, []);
+
+  async function makeMember(v) {
+    if (!window.confirm(`Add ${v.full_name} as a member? Their ${v.visits} visit${v.visits === 1 ? '' : 's'} will count as attendance, and they'll leave the visitor list.`)) return;
+    const { error } = await supabase.rpc('make_visitor_member', { p_visitor: v.visitor_id });
+    if (error) alert(error.message); else { load(); loadVisitors(); }
+  }
+
+  async function removeVisitor(v) {
+    if (!window.confirm(`Delete ${v.full_name} and their phone number from the visitor list? Their visits are removed from the attendance counts too.`)) return;
+    const { error } = await supabase.from('visitors').delete().eq('id', v.visitor_id);
+    if (error) alert(error.message); else loadVisitors();
+  }
 
   async function loadHistory(memberId) {
     const { data } = await supabase.rpc('member_followup_history', { mid: memberId });
@@ -154,7 +178,9 @@ export default function FollowUpPage() {
     ['followed', 'Followed up', counts.followed],
     ['noLogin', 'No login', counts.noLogin],
     ['all', 'All members', counts.all],
+    ['visitors', 'Visitors', visitors?.length ?? ''],
   ];
+  const shownVisitors = (visitors || []).filter((v) => !q || v.full_name.toLowerCase().includes(q) || (v.phone || '').includes(q));
 
   // Long lists are shown 10 at a time (components/Pagination).
   const pg = usePaged(shown, 10, `${tab}|${search}|${threshold}`);
@@ -198,24 +224,27 @@ export default function FollowUpPage() {
           ))}
         </div>
         <div className="flex gap-3 lg:ml-auto">
-          <label className={`flex items-center gap-2 text-sm ${t.sub}`}>
+          {tab !== 'visitors' && <label className={`flex items-center gap-2 text-sm ${t.sub}`}>
             <Clock size={15} />
             <span className="whitespace-nowrap">Not seen in</span>
             <select value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} aria-label="Days without activity"
               className={`border rounded-xl px-3 h-10 text-sm ${t.input}`}>
               {THRESHOLDS.map((d) => <option key={d} value={d}>{d}+ days</option>)}
             </select>
-          </label>
+          </label>}
           <div className="relative flex-1 lg:w-64">
             <Search size={15} className={`absolute left-3 top-3 ${t.muted}`} />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search members" aria-label="Search members"
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={tab === 'visitors' ? 'Search visitors' : 'Search members'} aria-label="Search"
               className={`w-full border rounded-xl pl-9 pr-3 h-10 text-sm ${t.input}`} />
           </div>
         </div>
       </div>
 
       {/* List */}
-      {rows === null ? (
+      {tab === 'visitors' ? (
+        <VisitorList t={t} visitors={visitors === null ? null : shownVisitors} searching={!!q}
+          canMakeMember={canMakeMember} onMakeMember={makeMember} onRemove={removeVisitor} />
+      ) : rows === null ? (
         <div className="space-y-3">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-20 w-full rounded-2xl" />)}</div>
       ) : shown.length === 0 ? (
         <div className={`border border-dashed rounded-3xl p-10 text-center ${t.card}`}>
@@ -304,7 +333,7 @@ export default function FollowUpPage() {
           })}
         </ul>
       )}
-      {rows !== null && <Pagination {...pg} label="members" />}
+      {rows !== null && tab !== 'visitors' && <Pagination {...pg} label="members" />}
 
       {/* Log a follow-up */}
       {logFor && (
@@ -352,5 +381,61 @@ export default function FollowUpPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Visitors written on event attendance sheets (db/041): call or text them,
+// and add the ones who keep coming as members. Removed automatically
+// 6 months after their last visit.
+function VisitorList({ t, visitors, searching, canMakeMember, onMakeMember, onRemove }) {
+  if (visitors === null) {
+    return <div className="space-y-3">{[0, 1, 2].map((i) => <div key={i} className="skeleton h-20 w-full rounded-2xl" />)}</div>;
+  }
+  if (visitors.length === 0) {
+    return (
+      <div className={`border border-dashed rounded-3xl p-10 text-center ${t.card}`}>
+        <p className={`font-bold ${t.text}`}>{searching ? 'No visitors match your search.' : 'No visitors yet'}</p>
+        {!searching && <p className={`text-sm mt-1 ${t.sub}`}>Visitors added on an event&apos;s attendance sheet show up here for follow-up.</p>}
+      </div>
+    );
+  }
+  const date = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
+  const tel = (p) => (p || '').replace(/[^\d+]/g, '');
+  return (
+    <ul className="space-y-3">
+      {visitors.map((v) => (
+        <li key={v.visitor_id} className={`border rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-5 ${t.card}`}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className={`font-bold ${t.text}`}>{v.full_name}</p>
+              {v.visits <= 1
+                ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600">First-timer</span>
+                : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-500">{v.visits} visits</span>}
+            </div>
+            <p className={`text-xs mt-1 ${t.sub}`}>
+              {v.phone || 'No phone number'} · Last visit {date(v.last_visit)}{v.last_event ? ` (${v.last_event})` : ''}
+              {v.visits > 1 && ` · first ${date(v.first_visit)}`}
+              {v.invited_by && ` · invited by ${v.invited_by}`}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {v.phone && (
+              <>
+                <a href={`tel:${tel(v.phone)}`} className={`inline-flex items-center gap-1 h-9 px-3 rounded-xl border text-xs font-semibold ${t.ghost}`}><Phone size={13} /> Call</a>
+                <a href={`sms:${tel(v.phone)}`} className={`inline-flex items-center gap-1 h-9 px-3 rounded-xl border text-xs font-semibold ${t.ghost}`}><MessageSquare size={13} /> Text</a>
+              </>
+            )}
+            {canMakeMember && (
+              <button onClick={() => onMakeMember(v)}
+                className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold">
+                <UserPlus size={14} /> Make member
+              </button>
+            )}
+            <button onClick={() => onRemove(v)} aria-label={`Delete ${v.full_name}`}
+              className={`w-9 h-9 rounded-xl border flex items-center justify-center ${t.ghost} hover:text-rose-500`}><Trash2 size={14} /></button>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

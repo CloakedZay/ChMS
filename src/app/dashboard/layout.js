@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import {
   LayoutDashboard, Users, Calendar, Wallet,
   ClipboardList, BarChart3, Bot, KeyRound,
-  Book, BookOpen, UserCog, History, NotebookPen, MessageCircle, Megaphone, HeartHandshake, UserCircle
+  Book, BookOpen, UserCog, History, NotebookPen, MessageCircle, Megaphone, HeartHandshake, UserCircle, ClipboardCheck
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext";
@@ -31,6 +31,7 @@ const NAV_GROUPS = [
   { label: "Church life", links: [
     { href: "/dashboard/announcements", icon: Megaphone,      label: "Announcements" },
     { href: "/dashboard/events",       icon: Calendar,        label: "Events" },
+    { href: "/dashboard/attendance",   icon: ClipboardCheck,  label: "Attendance" },
     { href: "/dashboard/training",     icon: Book,            label: "Training" },
     { href: "/dashboard/bible-verses", icon: BookOpen,        label: "Bible Verses" },
     { href: "/dashboard/chatbot",      icon: Bot,             label: "Assistant" },

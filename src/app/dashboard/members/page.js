@@ -7,7 +7,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import { authFetch } from "@/app/lib/authFetch";
 import MemberImport from "@/app/components/MemberImport";
-import { FileSpreadsheet, UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink } from "lucide-react";
+import { FileSpreadsheet, UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink, ClipboardCheck } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import { levelBadge } from "@/app/lib/roleColors";
 
@@ -119,6 +119,8 @@ export default function MembersPage() {
   const [linkSearch, setLinkSearch]       = useState("");
   const [linkLoading, setLinkLoading]     = useState(false);
   const [linkingId, setLinkingId]         = useState(null);
+  // Attendance helpers (db/041): logins allowed to take attendance.
+  const [helpers, setHelpers]             = useState(new Set());
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
@@ -147,7 +149,19 @@ export default function MembersPage() {
       (profiles || []).forEach((p) => { map[p.id] = p; });
       setLogins(map);
     }
+    const { data: helperRows } = await supabase.from('attendance_helpers').select('profile_id');
+    setHelpers(new Set((helperRows || []).map((h) => h.profile_id)));
     setLoading(false);
+  }
+
+  // Pastor / Secretary: let a member (with a login) take attendance.
+  async function toggleHelper(member) {
+    setOpenMenuId(null);
+    const on = !helpers.has(member.profile_id);
+    if (on && !window.confirm(`Make ${member.full_name} an attendance helper? They'll be able to tick attendance and add visitors for this branch's events — nothing else.`)) return;
+    const { error } = await supabase.rpc('set_attendance_helper', { p_member: member.id, p_on: on });
+    if (error) { alert(/does not exist|schema cache|Could not find/i.test(error.message) ? 'Run db/041_event_attendance.sql first.' : error.message); return; }
+    setHelpers((prev) => { const n = new Set(prev); if (on) n.add(member.profile_id); else n.delete(member.profile_id); return n; });
   }
 
   useEffect(() => { fetchMembers(); }, []);
@@ -487,6 +501,11 @@ export default function MembersPage() {
                         <span className={`text-xs ${t.textSub} break-all`}>
                           {logins[member.profile_id]?.email || 'Linked'}
                           {logins[member.profile_id]?.disabled && <span className="ml-1 text-rose-400 font-bold">(disabled)</span>}
+                          {helpers.has(member.profile_id) && (
+                            <span className="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-blue-400 bg-blue-500/10 whitespace-nowrap">
+                              <ClipboardCheck size={10} /> Attendance helper
+                            </span>
+                          )}
                         </span>
                       ) : canEdit && member.status !== ARCHIVED ? (
                         <div className="flex flex-col items-start gap-1">
@@ -546,7 +565,7 @@ export default function MembersPage() {
           <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
           {/* Menu */}
           <div
-            className={`fixed z-50 ${t.menuBg} border rounded-xl shadow-xl w-36 overflow-hidden`}
+            className={`fixed z-50 ${t.menuBg} border rounded-xl shadow-xl w-44 overflow-hidden`}
             style={{ top: menuPos.top, right: menuPos.right }}
           >
             {canEdit && activeMenuMember.status !== ARCHIVED && (
@@ -563,6 +582,14 @@ export default function MembersPage() {
                 className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}
               >
                 <Unlink size={13} /> Unlink login
+              </button>
+            )}
+            {canArchive && activeMenuMember.profile_id && activeMenuMember.status !== ARCHIVED && (
+              <button
+                onClick={() => toggleHelper(activeMenuMember)}
+                className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${t.textSub} ${t.menuHover} transition-colors`}
+              >
+                <ClipboardCheck size={13} className="shrink-0" /> {helpers.has(activeMenuMember.profile_id) ? 'Remove helper' : 'Attendance helper'}
               </button>
             )}
             {canArchive && (activeMenuMember.status === ARCHIVED ? (

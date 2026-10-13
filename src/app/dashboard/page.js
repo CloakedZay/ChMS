@@ -118,6 +118,8 @@ export default function DashboardPage() {
   // ── DB states ─────────────────────────────────────────────────────────────
   const [memberCount, setMemberCount]         = useState(0);
   const [activeMembers, setActiveMembers]     = useState(0);
+  // Event attendance, last 90 days (db/041): null = none taken yet.
+  const [attendance, setAttendance]           = useState(null);
   const [totalFunds, setTotalFunds]           = useState(0);
   const [upcomingEvents, setUpcomingEvents]   = useState([]);
   const [recentTransactions, setRecentTransactions] = useState([]);
@@ -139,6 +141,16 @@ export default function DashboardPage() {
 
         setMemberCount(mCount || 0);
         setActiveMembers(aCount || 0);
+
+        // Members present ÷ active members, over the events with attendance
+        // taken in the last 90 days.
+        const { data: attended } = await supabase.rpc('attendance_events', { p_church: null });
+        const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+        const taken = (attended || []).filter((e) => e.date >= since && e.members_present + e.visitors > 0);
+        const possible = taken.reduce((a, e) => a + e.active_members, 0);
+        setAttendance(taken.length && possible
+          ? { rate: Math.round((taken.reduce((a, e) => a + e.members_present, 0) / possible) * 100), events: taken.length }
+          : null);
         setUpcomingEvents(evts || []);
         setRecentMembers(latestMembers || []);
 
@@ -241,7 +253,6 @@ export default function DashboardPage() {
   const unreadCount    = notifications.filter(n => !n.is_read).length;
   const showReminder   = followUp.count > 0 && !followUp.snoozed;
   const bellCount      = unreadCount + (showReminder ? 1 : 0);
-  const attendanceRate = memberCount > 0 ? Math.round((activeMembers / memberCount) * 100) : 0;
   const q              = search.toLowerCase().trim();
 
   const filteredEvents = upcomingEvents.filter(ev =>
@@ -272,7 +283,9 @@ export default function DashboardPage() {
 
   const STATS = [
     { label: "Active Members",    value: loading ? "..." : memberCount.toString(),             sub: `${activeMembers} active`,     icon: Users,      color: A(dark, "blue"),   trend: "up"                        },
-    { label: "Attendance Rate",   value: loading ? "..." : `${attendanceRate}%`,               sub: "Based on active members",     icon: UserCheck,  color: A(dark, "indigo"), trend: "up"                        },
+    { label: "Attendance Rate",   value: loading ? "..." : attendance ? `${attendance.rate}%` : "—",
+      sub: attendance ? `Average of ${attendance.events} event${attendance.events === 1 ? "" : "s"}, last 90 days` : "No attendance taken yet",
+      icon: UserCheck,  color: A(dark, "indigo"), trend: "neutral" },
     // Hidden for levels without finance access (Admin, Secretary) — they'd only see ₱0.
     ...(can(role, 'finance') ? [
     { label: "Total Church Funds",value: loading ? "..." : `₱${totalFunds.toLocaleString()}`,  sub: "Live balance",                icon: HandCoins,  color: A(dark, "purple"), trend: totalFunds >= 0 ? "up" : "down" },

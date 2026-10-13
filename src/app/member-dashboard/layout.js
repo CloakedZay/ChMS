@@ -10,7 +10,7 @@ import { useUnreadMessages } from '@/app/lib/useUnreadMessages';
 import AppShell from '@/app/components/AppShell';
 import {
   LayoutDashboard, Users, CalendarDays, ClipboardList,
-  HandCoins, BookOpen, UserCircle, Bot, KeyRound, NotebookPen, MessageCircle
+  HandCoins, BookOpen, UserCircle, Bot, KeyRound, NotebookPen, MessageCircle, CalendarCheck2
 } from 'lucide-react';
 
 // Navigation, grouped. A group with no page the person can open is hidden.
@@ -22,6 +22,7 @@ const NAV_GROUPS = [
   { label: 'Community', links: [
     { href: '/member-dashboard/members',      icon: Users,           label: 'Members' },
     { href: '/member-dashboard/events',       icon: CalendarDays,    label: 'Events' },
+    { href: '/member-dashboard/attendance',   icon: CalendarCheck2,  label: 'Attendance' },
     { href: '/member-dashboard/ministries',   icon: ClipboardList,   label: 'Ministries' },
   ]},
   { label: 'Growth', links: [

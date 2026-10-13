@@ -8,8 +8,9 @@ import { can } from "@/app/lib/permissions";
 import {
   BarChart3, TrendingUp, PieChart,
   Download, Filter, ArrowUpRight, ArrowDownRight,
-  Users, Wallet, Calendar, TrendingDown, Sun, Moon, UserMinus, CalendarClock
+  Users, Wallet, Calendar, TrendingDown, Sun, Moon, UserMinus, CalendarClock, UserCheck
 } from "lucide-react";
+import Link from "next/link";
 import BranchLabel, { branchLabelText } from "@/app/components/BranchLabel";
 
 // Event statuses in order, for the "Events by Status" section shown to
@@ -689,6 +690,8 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {can(role, 'attendance') && <EventAttendanceReport t={t} dark={dark} />}
+
       {/* Finance Summary + Recent Transactions (finance levels only) */}
       {showFinance && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -764,6 +767,73 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
+      )}
+    </div>
+  );
+}
+
+// Event attendance (db/041): the last 90 days at a glance, and the most
+// recent events whose attendance was taken.
+function EventAttendanceReport({ t, dark }) {
+  const [{ events, since }, setReport] = useState({ events: null, since: '' });
+  useEffect(() => {
+    supabase.rpc('attendance_events', { p_church: null }).then(({ data }) => setReport({
+      events: data || [],
+      since: new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10),
+    }));
+  }, []);
+
+  const taken = (events || []).filter((e) => e.members_present + e.visitors > 0);
+  const recent = taken.filter((e) => e.date >= since);
+  const possible = recent.reduce((a, e) => a + e.active_members, 0);
+  const rate = possible ? Math.round((recent.reduce((a, e) => a + e.members_present, 0) / possible) * 100) : null;
+  const avgTotal = recent.length ? Math.round(recent.reduce((a, e) => a + e.members_present + e.visitors, 0) / recent.length) : null;
+  const visitors = recent.reduce((a, e) => a + e.visitors, 0);
+  const pct = (e) => (e.active_members ? Math.min(100, Math.round((e.members_present / e.active_members) * 100)) : 0);
+  const date = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  return (
+    <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 mb-8`}>
+      <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2 mb-5 border-b ${t.divider} pb-4`}>
+        <UserCheck className={`w-4 h-4 ${A(dark, "blue")}`} /> Event Attendance
+        <Link href="/dashboard/attendance" className={`ml-auto text-[10px] ${A(dark, "blue")} normal-case tracking-normal font-bold hover:underline`}>Take attendance →</Link>
+      </h3>
+      {events === null ? (
+        <p className={`${t.textFaint} text-sm text-center py-8`}>Syncing...</p>
+      ) : taken.length === 0 ? (
+        <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
+          <p className={`${t.textFaint} text-sm`}>No attendance taken yet. After an event, open Attendance and tick who came.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 content-start">
+            {[
+              { label: 'Attendance rate · 90 days', value: rate === null ? '—' : `${rate}%` },
+              { label: 'Average per event', value: avgTotal ?? '—' },
+              { label: 'Visitors · 90 days', value: visitors },
+            ].map((c) => (
+              <div key={c.label} className={`${t.deepCard} rounded-2xl p-3 text-center`}>
+                <p className={`text-xl font-black ${t.textPrimary}`}>{c.value}</p>
+                <p className={`text-[10px] ${t.textSub} mt-0.5 uppercase tracking-wider`}>{c.label}</p>
+              </div>
+            ))}
+          </div>
+          <div className="lg:col-span-2 space-y-4">
+            {taken.slice(0, 6).map((e) => (
+              <div key={e.id}>
+                <div className="flex justify-between gap-3 text-xs mb-1.5">
+                  <span className={`${t.textMuted} font-medium truncate`}>{e.title} <span className={t.textFaint}>· {date(e.date)}</span></span>
+                  <span className={`${t.textPrimary} font-black whitespace-nowrap`}>
+                    {e.members_present} <span className={`${t.textFaint} font-normal`}>+ {e.visitors} visitors ({pct(e)}%)</span>
+                  </span>
+                </div>
+                <div className={`w-full h-1.5 ${t.trackBg} rounded-full overflow-hidden`}>
+                  <div className="h-full bg-blue-500 rounded-full transition-all duration-700" style={{ width: `${pct(e)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

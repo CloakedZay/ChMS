@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import {
   Calendar, Plus, Search, MoreHorizontal,
-  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon
+  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 
@@ -96,6 +97,7 @@ export default function EventsPage() {
   // until they're approved. Everyone else only views (same as db/007).
   const canManageAll = can(role, 'events', 'approve');
   const canSubmit    = can(role, 'events', 'submit');
+  const canSeeAttendance = can(role, 'attendance', 'view');   // db/041
   const canEditEvent = (ev) =>
     canManageAll ||
     (canSubmit && ev.created_by === user?.id && LEADER_STATUSES.includes(ev.status));
@@ -286,7 +288,7 @@ export default function EventsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {pg.items.map((event) => (
-            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={canEditEvent(event) ? openEdit : null} onDelete={canManageAll ? handleDeleteLocal : null} t={t} dark={dark} />
+            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={canEditEvent(event) ? openEdit : null} onDelete={canManageAll ? handleDeleteLocal : null} attendance={canSeeAttendance} t={t} dark={dark} />
           ))}
         </div>
       )}
@@ -362,7 +364,10 @@ function inputStyle(t) {
   return `w-full ${t.inputBg} border ${t.inputBorder} ${t.inputText} rounded-xl px-4 py-2.5 text-sm outline-none transition-colors focus:border-blue-500 placeholder:text-slate-500`;
 }
 
-function EventCard({ event, branchName, onEdit, onDelete, t, dark }) {
+// Attendance opens on the event's date (Philippine time) once it's approved.
+const phToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+
+function EventCard({ event, branchName, onEdit, onDelete, attendance, t, dark }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const phase = event.status || "planning";
@@ -429,6 +434,12 @@ function EventCard({ event, branchName, onEdit, onDelete, t, dark }) {
             );
           })}
         </div>
+        {attendance && ['approved', 'done'].includes(phase) && event.date && event.date <= phToday() && (
+          <Link href={`/dashboard/attendance?event=${event.id}`}
+            className="mt-4 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition-colors">
+            <ClipboardCheck size={13} /> Attendance
+          </Link>
+        )}
       </div>
     </div>
   );
