@@ -58,10 +58,13 @@ export function useAssistantChats() {
       id = data.id;
       select(id);
     }
-    await supabase.from('assistant_messages').insert([
-      { chat_id: id, role: 'user', content: question.slice(0, 8000) },
+    // Both rows must carry the same fields: in a multi-row insert a missing
+    // field is sent as empty, which the NOT NULL is_error column refuses.
+    const { error } = await supabase.from('assistant_messages').insert([
+      { chat_id: id, role: 'user', content: question.slice(0, 8000), is_error: false },
       { chat_id: id, role: 'assistant', content: (answer || '…').slice(0, 8000), is_error: !!isError },
     ]);
+    if (error) console.error('Could not save the chat message:', error.message);
     load();
   }
 

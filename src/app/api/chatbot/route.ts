@@ -3,7 +3,7 @@ import { getCaller, resolveChurchId } from "@/app/lib/apiAuth";
 import { analyzeQuestion, detectIntent, wantsDetail, isMoreRequest, pickAnswer, coverage, splitSentences, tokenize, type Analysis } from "@/app/lib/nlp";
 import { embedQuery, embedPassages, toVector } from "@/app/lib/embeddings";
 import { correctQuestion } from "@/app/lib/spelling";
-import { rerank, type Hit } from "@/app/lib/assistantSearch";
+import { rerank, fillSimilarity, sectionPart, type Hit } from "@/app/lib/assistantSearch";
 import { loadJourney, describeProgress, describeLessonProgress, findModule, describeModule } from "@/app/lib/discipleship";
 
 export const runtime = "nodejs";
@@ -85,8 +85,10 @@ export async function POST(req: NextRequest) {
     const isMember = caller.role === "member";
 
     const { question: raw, church_id: requestedChurch, module_id: rawModule, previous: rawPrevious } = await req.json();
-    // The person's previous question, for follow-ups like "tell me more".
-    const previous = String(rawPrevious || "").trim().slice(0, 500);
+    // The person's recent questions, oldest first, for follow-ups like "tell
+    // me more" (older pages send just the last one, as a string).
+    const history = (Array.isArray(rawPrevious) ? rawPrevious : [rawPrevious])
+      .map((q) => String(q || "").trim().slice(0, 500)).filter(Boolean).slice(-6);
     const question = String(raw || "").trim().slice(0, 500);
     const church_id = resolveChurchId(caller, requestedChurch);
     if (!question) return NextResponse.json({ error: "Missing question" }, { status: 400 });
@@ -187,14 +189,26 @@ export async function POST(req: NextRequest) {
 
     // Fix typos against the church's own vocabulary ("chech" → "check").
     const { text: fixedQuestion } = await correctQuestion(caller.db, question);
-    // "Explain in detail…" → the whole section; "tell me more" → the whole
-    // section on the previous question's topic.
-    const detail = wantsDetail(question);
+    // "Explain in detail…" → the whole section; "tell me more" / "in detail"
+    // after an answer → the section on the earlier question's topic, and
+    // each further "tell me more" → the next part of that section.
+    const detail = wantsDetail(question) || isMoreRequest(question);
     let topic = fixedQuestion;
     let analysis = analyzeQuestion(topic);
-    if ((!analysis.words.length || isMoreRequest(question)) && previous && (detail || isMoreRequest(question))) {
-      topic = (await correctQuestion(caller.db, previous)).text;
-      analysis = analyzeQuestion(topic);
+    let part = 0;
+    if (detail && (!analysis.words.length || isMoreRequest(question))) {
+      for (let i = history.length - 1; i >= 0; i--) {
+        const h = history[i];
+        const followUp = wantsDetail(h) || isMoreRequest(h);
+        if (analyzeQuestion(h).words.length && !isMoreRequest(h)) {
+          if (followUp) part++;          // "Explain X in detail" already showed part 0
+          topic = (await correctQuestion(caller.db, h)).text;
+          analysis = analyzeQuestion(topic);
+          break;
+        }
+        if (!followUp) break;            // an unrelated question in between
+        part++;
+      }
     }
     if (!analysis.words.length) {
       return reply(tl
@@ -228,7 +242,7 @@ export async function POST(req: NextRequest) {
     }
 
     // In a lesson, its own description is a passage too.
-    const hits = [...((dbHits || []) as Hit[])];
+    const hits = await fillSimilarity((dbHits || []) as Hit[], vector);
     if (lesson?.description?.trim()) {
       const text = `${lesson.title}\n${lesson.description.trim()}`;
       const dv = vector ? await embedPassages([text]) : null;
@@ -301,16 +315,27 @@ export async function POST(req: NextRequest) {
 
     // Choose the answer sentences by meaning too, when the model is available.
     let sentenceSims: number[] | null = null;
-    if (vector) {
+    if (vector && !detail) {
       const sv = await embedPassages(splitSentences(best.content));
       if (sv) sentenceSims = sv.map((v) => v.reduce((s, x, i) => s + x * vector[i], 0));
     }
     let answer = pickAnswer(best.content, analysis, 3, sentenceSims);
-    if (detail || isMoreRequest(question)) {
-      // The whole section, plus one more closely related passage if there is one.
-      const extra = sources.find((s) => s.excerpt.trim() !== best.content.trim() && s.excerpt.length > 40);
-      answer = best.content.trim();
-      if (extra && answer.length < 1400) answer += `\n\n${extra.title}\n${extra.excerpt.trim().slice(0, 1600 - answer.length)}`;
+    if (detail) {
+      // The whole section in the document's own words, a part at a time.
+      const section = await sectionPart(caller.db, best.id, part);
+      if (section && !section.text) {
+        return reply(tl
+          ? "Iyan na po ang buong bahagi tungkol diyan sa dokumento. Magtanong po tungkol sa ibang paksa, o magtanong sa pastor para sa mas malalim na paliwanag."
+          : "That's everything this section of the document says about it. Ask about another topic, or ask a pastor to explain it further.",
+          { sources: sources.slice(0, 1), confidence });
+      }
+      if (section) {
+        answer = section.text + (section.more
+          ? (tl ? "\n\n(May kasunod pa — sabihin “ano pa” para ituloy.)" : "\n\n(There's more — ask “tell me more” to continue.)")
+          : "");
+      } else {
+        answer = best.content.trim();
+      }
     }
     // A very short extract (a heading) reads badly; use more of the passage.
     if (!detail && tokenize(answer).length < 8) answer = best.content.slice(0, 600);

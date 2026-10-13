@@ -15,11 +15,17 @@ const TTL = 10 * 60 * 1000;   // new documents join the dictionary within 10 min
 
 async function loadVocabulary(db: SupabaseClient): Promise<Vocab | null> {
   if (cache && Date.now() - cache.at < TTL) return cache.vocab;
-  const { data, error } = await db.rpc("knowledge_vocabulary");
-  if (error) return cache?.vocab ?? null;          // db/036 not run yet → no spell-check
-
+  // The API returns at most 1000 rows per request, and the books alone have
+  // thousands of words — read it in pages. With only part of the list, real
+  // words get "corrected" ("knowledge" → "acknowledge").
   const words = new Map<string, number>();
-  for (const r of (data || []) as { word: string; ndoc: number }[]) words.set(r.word, r.ndoc);
+  const PAGE = 1000;
+  for (let from = 0; from < 100_000; from += PAGE) {
+    const { data, error } = await db.rpc("knowledge_vocabulary").order("word").range(from, from + PAGE - 1);
+    if (error) return cache?.vocab ?? null;        // db/036 not run yet → no spell-check
+    for (const r of (data || []) as { word: string; ndoc: number }[]) words.set(r.word, r.ndoc);
+    if (!data || data.length < PAGE) break;
+  }
   for (const w of synonymWords()) if (!words.has(w)) words.set(w, 1);
 
   const byLength = new Map<number, string[]>();

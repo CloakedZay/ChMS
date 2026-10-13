@@ -19,6 +19,7 @@ not no nor only own same just also any some each every all both few more most ot
 please tell explain describe discuss summarize summarise mean meaning means understand know want need
 thing things something anything ok okay hi hello hey thanks thank
 detail detailed details elaborate fully complete completely everything whole depth step steps info information full
+answer answers explanation explanations give longer
 whats whos wheres whens hows thats theres inside`.split(/\s+/));
 
 const STOP_TL = new Set(`ang ng mga sa na at ay si ni kay kina sina nina ko mo niya natin namin ninyo nila
@@ -343,7 +344,7 @@ export function splitSentences(text: string): string[] {
 
 // A paragraph that starts a new section: "ARTICLE III. …", "Chapter 2",
 // "Aralin 1", "IV. …", or a short line in capitals.
-function isHeading(paragraph: string): boolean {
+export function isHeading(paragraph: string): boolean {
   const first = paragraph.split('\n')[0].trim();
   if (/^(article|chapter|section|part|lesson|aralin|kabanata|seksyon|bahagi)\s+([0-9]+|[ivxlc]+)\b/i.test(first)) return true;
   if (/^[IVXLC]+\.\s+\S/.test(first)) return true;

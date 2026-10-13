@@ -55,8 +55,8 @@ export default function MemberChatbotPage() {
     const question = input.trim();
     if (!question || sending || !churchId) return;
 
-    // the last question, so "tell me more" knows what it's about
-    const previous = [...messages].reverse().find((m) => m.role === 'user')?.text || '';
+    // the last few questions, so "tell me more" knows what it's about
+    const previous = messages.filter((m) => m.role === 'user').slice(-6).map((m) => m.text);
     setMessages((prev) => [...prev, { role: 'user', text: question }]);
     setInput('');
     setSending(true);
