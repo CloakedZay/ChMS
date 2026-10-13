@@ -18,6 +18,7 @@ and or but if then else so than too very can could will would shall should may m
 not no nor only own same just also any some each every all both few more most other such
 please tell explain describe discuss summarize summarise mean meaning means understand know want need
 thing things something anything ok okay hi hello hey thanks thank
+detail detailed details elaborate fully complete completely everything whole depth step steps info information full
 whats whos wheres whens hows thats theres inside`.split(/\s+/));
 
 const STOP_TL = new Set(`ang ng mga sa na at ay si ni kay kina sina nina ko mo niya natin namin ninyo nila
@@ -291,6 +292,20 @@ export function isSystemQuestion(q: string): boolean {
   if (SYSTEM_WORDS.test(q)) return true;
   // staff actions: "how do I add in finance?", "paano mag-approve ng event?"
   return /\b(add|record|enter|edit|delete|remove|void|approve|reject|assign|post|publish|mag ?add|i ?approve|mag ?approve|i ?record)\b.*\b(finance|transactions?|entry|entries|members?|events?|announcements?|modules?|users?|handouts?|documents?|questions?|answers?)\b/.test(q);
+}
+
+// "Explain in detail", "tell me everything about…", "step by step",
+// "ipaliwanag nang buo" — the person wants the whole section, not a summary.
+export function wantsDetail(question: string): boolean {
+  const q = normalize(fixCommonTypos(question));
+  return /\b(detail|detailed|details|in depth|elaborate|explain (more|fully|everything|further)|fully|complete|completely|everything about|all about|tell me more|more (info|information|details|about)|whole|full (answer|explanation|text|section)|step by step|longer|detalye|detalyado|buo|buong|kumpleto|lahat tungkol|ipaliwanag (nang|ng) (mabuti|buo|maayos))\b/.test(q);
+}
+
+// A follow-up with no topic of its own ("tell me more", "more details",
+// "elaborate", "ano pa?") — answer it with the previous question's topic.
+export function isMoreRequest(question: string): boolean {
+  const q = normalize(fixCommonTypos(question));
+  return /^(please |pls |can you |could you )?(tell me more|more( please)?|more (info|information|details)( please)?|elaborate( more| please)?|explain (more|further|it)( please)?|go on|continue|and( then)?|ano pa( po)?|tapos( po)?|ituloy( mo)?|more about (it|that|this))( please| po)?$/.test(q);
 }
 
 export type Analysis = {

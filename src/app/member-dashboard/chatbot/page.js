@@ -43,6 +43,8 @@ export default function MemberChatbotPage() {
     const question = input.trim();
     if (!question || sending || !churchId) return;
 
+    // the last question, so "tell me more" knows what it's about
+    const previous = [...messages].reverse().find((m) => m.role === 'user')?.text || '';
     setMessages((prev) => [...prev, { role: 'user', text: question }]);
     setInput('');
     setSending(true);
@@ -51,7 +53,7 @@ export default function MemberChatbotPage() {
       const res = await authFetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, church_id: churchId }),
+        body: JSON.stringify({ question, church_id: churchId, previous }),
       });
       const data = await res.json();
       quota.update(data);

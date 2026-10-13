@@ -32,7 +32,7 @@ export default function LessonAsk({ moduleId, title }) {
       const res = await authFetch('/api/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q, module_id: moduleId }),
+        body: JSON.stringify({ question: q, module_id: moduleId, previous: items[items.length - 1]?.q || '' }),
       });
       const data = await res.json();
       quota.update(data);

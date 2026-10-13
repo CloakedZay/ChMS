@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCaller, resolveChurchId } from "@/app/lib/apiAuth";
-import { analyzeQuestion, detectIntent, pickAnswer, coverage, splitSentences, tokenize, type Analysis } from "@/app/lib/nlp";
+import { analyzeQuestion, detectIntent, wantsDetail, isMoreRequest, pickAnswer, coverage, splitSentences, tokenize, type Analysis } from "@/app/lib/nlp";
 import { embedQuery, embedPassages, toVector } from "@/app/lib/embeddings";
 import { correctQuestion } from "@/app/lib/spelling";
 import { rerank, type Hit } from "@/app/lib/assistantSearch";
@@ -23,7 +23,7 @@ const looksTagalog = (q: string) =>
 
 // How many questions a Member may ask per day (Philippine date). Staff have
 // no limit. Change it with ASSISTANT_DAILY_LIMIT in the environment.
-const DAILY_LIMIT = Math.max(1, Number(process.env.ASSISTANT_DAILY_LIMIT) || 20);
+const DAILY_LIMIT = Math.max(1, Number(process.env.ASSISTANT_DAILY_LIMIT) || 50);
 
 
 // Members: how many questions are left today (for the chat pages).
@@ -84,7 +84,9 @@ export async function POST(req: NextRequest) {
     if (caller instanceof NextResponse) return caller;
     const isMember = caller.role === "member";
 
-    const { question: raw, church_id: requestedChurch, module_id: rawModule } = await req.json();
+    const { question: raw, church_id: requestedChurch, module_id: rawModule, previous: rawPrevious } = await req.json();
+    // The person's previous question, for follow-ups like "tell me more".
+    const previous = String(rawPrevious || "").trim().slice(0, 500);
     const question = String(raw || "").trim().slice(0, 500);
     const church_id = resolveChurchId(caller, requestedChurch);
     if (!question) return NextResponse.json({ error: "Missing question" }, { status: 400 });
@@ -178,7 +180,15 @@ export async function POST(req: NextRequest) {
 
     // Fix typos against the church's own vocabulary ("chech" → "check").
     const { text: fixedQuestion } = await correctQuestion(caller.db, question);
-    const analysis = analyzeQuestion(fixedQuestion);
+    // "Explain in detail…" → the whole section; "tell me more" → the whole
+    // section on the previous question's topic.
+    const detail = wantsDetail(question);
+    let topic = fixedQuestion;
+    let analysis = analyzeQuestion(topic);
+    if ((!analysis.words.length || isMoreRequest(question)) && previous && (detail || isMoreRequest(question))) {
+      topic = (await correctQuestion(caller.db, previous)).text;
+      analysis = analyzeQuestion(topic);
+    }
     if (!analysis.words.length) {
       return reply(tl
         ? "Pakisabi po nang mas tiyak ang tanong — halimbawa: “Anong oras ang pagsamba sa Linggo?”"
@@ -186,7 +196,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Hybrid search ──────────────────────────────────────────────────────
-    const vector = await embedQuery(fixedQuestion);
+    const vector = await embedQuery(topic);
     const { data: dbHits, error } = await caller.db.rpc("search_knowledge", {
       q_terms: analysis.searchTerms,
       q_embedding: vector ? toVector(vector) : null,
@@ -289,8 +299,14 @@ export async function POST(req: NextRequest) {
       if (sv) sentenceSims = sv.map((v) => v.reduce((s, x, i) => s + x * vector[i], 0));
     }
     let answer = pickAnswer(best.content, analysis, 3, sentenceSims);
+    if (detail || isMoreRequest(question)) {
+      // The whole section, plus one more closely related passage if there is one.
+      const extra = sources.find((s) => s.excerpt.trim() !== best.content.trim() && s.excerpt.length > 40);
+      answer = best.content.trim();
+      if (extra && answer.length < 1400) answer += `\n\n${extra.title}\n${extra.excerpt.trim().slice(0, 1600 - answer.length)}`;
+    }
     // A very short extract (a heading) reads badly; use more of the passage.
-    if (tokenize(answer).length < 8) answer = best.content.slice(0, 600);
+    if (!detail && tokenize(answer).length < 8) answer = best.content.slice(0, 600);
     if (confidence === "medium") answer = (tl ? "Ito po ang pinakamalapit na nakita ko:\n\n" : "Here's the closest thing I found:\n\n") + answer;
 
     return NextResponse.json({ answer, sources, confidence, mode: vector ? "meaning+keyword" : "keyword", ...usage });
