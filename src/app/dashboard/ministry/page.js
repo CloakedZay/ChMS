@@ -11,6 +11,7 @@ import {
   Trash2, Loader2, Users, CalendarClock, Link2, BookOpen,
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
+import NotHeadNotice from "@/app/components/NotHeadNotice";
 
 // Real ministries per branch (step M1, db/022). The database decides who
 // may do what; this page only shows the matching buttons:
@@ -325,6 +326,11 @@ export default function MinistriesPage() {
                   </button>
                 </div>
               )}
+              {assignable && m.is_active && (
+                <p className={`text-[11px] ${t.textMuted} mt-1.5`}>
+                  Only people registered on the Members page in this ministry&apos;s branch appear here. Someone missing? Ask the Secretary to add them on Members.
+                </p>
+              )}
             </div>
 
             <div>
@@ -389,6 +395,9 @@ export default function MinistriesPage() {
           )}
         </div>
       </div>
+
+      {/* A Ministry Head who heads nothing yet: say what to ask for */}
+      {!loading && role === "ministry_head" && !ministries.some((m) => m.leader_id === user?.id) && <NotHeadNotice />}
 
       {isGlobal && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">

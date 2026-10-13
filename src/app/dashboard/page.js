@@ -439,6 +439,9 @@ export default function DashboardPage() {
 
       {/* ── OVERVIEW ── */}
       <div className="space-y-8">
+        {/* Top: announcements, reminder and verse on the left; birthday box in the top-right corner */}
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-6 lg:items-start space-y-8 lg:space-y-0">
+        <div className="min-w-0 space-y-8">
         {/* Announcements — always first */}
         <AnnouncementsBanner manageHref="/dashboard/announcements" />
 
@@ -463,6 +466,19 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        </div>
+
+        {/* Upcoming birthdays — compact box, top right */}
+        <UpcomingBirthdays
+          compact
+          cardClass={`${card} p-4`}
+          titleClass={t.textPrimary}
+          textClass={t.textPrimary}
+          subClass={t.textMuted}
+          rowClass={`${t.innerCard} border ${t.innerBorder}`}
+          accentClass={A(dark, "purple")}
+        />
+        </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
           {STATS.map((s) => (
@@ -481,16 +497,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Upcoming birthdays */}
-          <UpcomingBirthdays
-            cardClass={`${card} p-6 lg:col-span-2`}
-            titleClass={t.textPrimary}
-            textClass={t.textPrimary}
-            subClass={t.textMuted}
-            rowClass={`${t.innerCard} border ${t.innerBorder}`}
-            accentClass={A(dark, "purple")}
-          />
-
           {/* Next Schedule */}
           <div className={`${card} p-6`}>
             <div className={`flex items-center justify-between mb-5 border-b ${t.divider} pb-3`}>

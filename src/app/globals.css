@@ -234,6 +234,26 @@ tbody tr { transition: background-color 120ms ease; }
   }
 }
 
+/* Sidebar: a thin, quiet scrollbar that belongs to the green sidebar
+   (the page's ivory scrollbar looked out of place there). Only visible
+   when the menu is taller than the window. */
+.sidebar-scroll::-webkit-scrollbar { width: 6px; }
+.sidebar-scroll::-webkit-scrollbar-button { display: none; height: 0; }
+.sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgb(244 242 234 / 0.18);
+  border: 0;
+  border-radius: 9999px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgb(244 242 234 / 0.32); }
+/* Firefox only — in Chrome these would override the styling above */
+@supports not selector(::-webkit-scrollbar) {
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(244 242 234 / 0.18) transparent;
+  }
+}
+
 /* Member dashboard light theme. The member pages are written with dark
    classes; when the layout adds .member-light these remap them to the ivory
    theme, so the pages themselves don't need a theme switch. Text that sits on

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { authFetch } from "@/app/lib/authFetch";
 import RelatedReading from "@/app/components/RelatedReading";
+import NotHeadNotice from "@/app/components/NotHeadNotice";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
@@ -342,6 +343,9 @@ export default function TrainingPage() {
 
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
+
+      {/* A Ministry Head who heads nothing yet: say what to ask for */}
+      {!loading && role === "ministry_head" && headedIds.size === 0 && <NotHeadNotice className="mb-6" />}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">

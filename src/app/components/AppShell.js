@@ -106,7 +106,7 @@ export default function AppShell({
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-5 space-y-6">
+        <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-5 space-y-6">
           {groups.map((group) => (
             <div key={group.label}>
               <p className={`px-3 mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#f4f2ea]/40 ${label}`}>
