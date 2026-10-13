@@ -238,11 +238,13 @@ export type Intent =
 export function detectIntent(question: string): Intent {
   const q = normalize(fixCommonTypos(question));
   if (!q) return { kind: 'empty' };
-  if (/^(hi|hello|hey|yo|good day|kumusta|kamusta|magandang (umaga|tanghali|hapon|gabi)|good (morning|afternoon|evening))( po)?$/.test(q)) return { kind: 'greeting' };
-  if (/^(how are you|kumusta ka|kamusta ka)( po)?$/.test(q)) return { kind: 'greeting' };
+  // greetings, incl. common spellings ("halo", "helo", "hii", "musta")
+  if (/^((hi+|hey+|hello+w?|helo+|hallo+|halo+|hola|yo|sup|good day|greetings|shalom|kumusta|kamusta|musta|uy+|magandang (umaga|tanghali|hapon|gabi)|good (morning|afternoon|evening|eve))( (there|everyone|po|sir|maam|pastor|bro|sis|ate|kuya))?[ !.]*)+$/.test(q)) return { kind: 'greeting' };
+  if (/^(how are you|how r u|hows it going|kumusta ka|kamusta ka|musta ka)( (po|today|doing))?$/.test(q)) return { kind: 'greeting' };
   if (/^(thanks?|thank you|ty|salamat|maraming salamat)( po| so much| a lot)?$/.test(q)) return { kind: 'thanks' };
   if (/^(bye|goodbye|paalam|sige)( po)?$/.test(q)) return { kind: 'goodbye' };
-  if (/^(help|tulong|what can you do|ano ang kaya mo|paano ka gamitin|how do i use (this|you))( po)?$/.test(q)) return { kind: 'help' };
+  // "what can you do (for me)?", "who are you?", "ano ang kaya mong gawin?"
+  if (/^((please |pls )?(help|help me|tulong|tulungan mo ako)|(what|how) (can|could|do) you (do|help)( me| us)?( for (me|us))?( with)?|what do you do|what are you|who are you|what is this( chat| bot| assistant)?|how (can|do) i use (this|you)|what (can|should) i ask( you)?|can you help( me)?|what are you for|ano ang (kaya|magagawa) mo( gawin)?|ano ang kaya mong gawin|ano ang pwede kong itanong|sino ka|ano ka|paano mo ako matutulungan|paano ka gamitin|ano ang ginagawa mo)( po| please| pls)?[ ?!.]*$/.test(q)) return { kind: 'help' };
   // Questions about using FaithSync itself (pages, buttons, logins, staff
   // tools). The assistant declines these for Members (api/chatbot).
   if (isSystemQuestion(q)) return { kind: 'system' };

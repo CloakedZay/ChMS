@@ -11,6 +11,8 @@ import {
   Upload, FileText, Trash2, Eye, EyeOff, File as FileIcon, RefreshCw
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
+import ChatHistory from "@/app/components/ChatHistory";
+import { useAssistantChats } from "@/app/lib/useAssistantChats";
 
 const DOC_TYPES = ["Policy", "Handbook", "FAQ", "Announcement", "Other"];
 const GLOBAL_ROLES = ["admin", "pastor"];
@@ -73,7 +75,13 @@ export default function ChatbotPage() {
       if (data && GLOBAL_ROLES.includes(data.role)) {
         const { data: churchList } = await supabase.from('churches').select('id, name').order('name', { ascending: true });
         setChurches(churchList || []);
-        if (churchList?.length) setSelectedBranch(churchList[0].id);
+        // Start on the main church (Pandi); otherwise their own branch, else the first.
+        if (churchList?.length) {
+          const start = churchList.find((c) => /pandi/i.test(c.name))
+            || churchList.find((c) => c.id === data.church_id)
+            || churchList[0];
+          setSelectedBranch(start.id);
+        }
       }
       setProfileLoading(false);
     }
@@ -99,36 +107,44 @@ export default function ChatbotPage() {
         </button>
       </div>
 
-      {isGlobal && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-6">
-          <span className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Branch</span>
-          <select
-            value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
-            className={`w-full sm:w-auto ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 px-4 text-sm ${t.inputText} focus:outline-none focus:border-blue-500 transition-colors`}
-          >
-            {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+      {/* Chat / Documents switch and the branch picker, on one row */}
+      {(canSeeDocs || isGlobal) && (
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          {canSeeDocs ? (
+            <div className={`flex gap-1 ${t.tabBar} border rounded-xl p-1 w-fit`} role="tablist">
+              {[
+                { key: "chat", label: "Chat" },
+                { key: "documents", label: "Documents" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                    activeTab === tab.key ? "bg-blue-600 text-white shadow" : t.tabInactive
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          ) : <span />}
+
+          {isGlobal && (
+            <label className="flex items-center gap-2">
+              <span className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Branch</span>
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className={`w-full sm:w-auto ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 px-4 text-sm ${t.inputText} focus:outline-none focus:border-blue-500 transition-colors`}
+              >
+                {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+          )}
         </div>
       )}
-
-      {/* Tabs */}
-      {canSeeDocs && <div className={`flex gap-1 ${t.tabBar} border rounded-xl p-1 w-fit mb-6`}>
-        {[
-          { key: "chat", label: "Chat" },
-          { key: "documents", label: "Documents" },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-all ${
-              activeTab === tab.key ? "bg-blue-600 text-white shadow" : t.tabInactive
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>}
 
       {activeTab === "chat" || !canSeeDocs ? (
         <ChatPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} />
@@ -146,6 +162,16 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
+  const hist = useAssistantChats();    // saved chats: New chat + history
+
+  async function openChat(id) {
+    if (sending) return;
+    setMessages(await hist.open(id));
+  }
+  function startNewChat() {
+    hist.newChat();
+    setMessages([]);
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -169,10 +195,9 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
         body: JSON.stringify({ question, church_id: churchId, previous }),
       });
       const data = await res.json();
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: data.answer || data.error || "Sorry, something went wrong.", isError: !res.ok },
-      ]);
+      const answerText = data.answer || data.error || "Sorry, something went wrong.";
+      setMessages((prev) => [...prev, { role: "assistant", text: answerText, isError: !res.ok }]);
+      hist.save(question, answerText, !res.ok);   // keep it in this chat (db/040)
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -188,7 +213,9 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
   return (
     // Fixed to the window height so the question box stays in view; long
     // answers scroll inside the card instead of pushing it down.
-    <div className={`flex flex-col ${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm h-[calc(100dvh-20rem)] min-h-[24rem]`}>
+    <div className={`flex flex-col md:flex-row ${t.cardBg} border ${t.cardBorder} rounded-3xl overflow-hidden backdrop-blur-sm h-[calc(100dvh-17rem)] min-h-[24rem]`}>
+      <ChatHistory hist={hist} onNew={startNewChat} onOpen={openChat} disabled={sending} />
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
@@ -251,6 +278,7 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
           <Send className="w-4 h-4" />
         </button>
       </form>
+      </div>
     </div>
   );
 }

@@ -113,10 +113,17 @@ export async function POST(req: NextRequest) {
     if (intent.kind === "thanks") return reply(tl ? "Walang anuman po! May iba pa po ba kayong tanong?" : "You're welcome! Anything else you'd like to know?");
     if (intent.kind === "goodbye") return reply(tl ? "Paalam po, God bless!" : "Goodbye, God bless!");
     if (intent.kind === "help" || intent.kind === "empty") {
-      return reply(
-        "I answer questions from the church's own materials: the documents uploaded in Assistant → Documents and the discipleship handouts in Training.\n\n" +
-        "Try things like:\n• What time is the Sunday service?\n• How do I join a ministry?\n• Ano ang ikapu?\n• What is in Article 3?\n• What's my next module?\n• What is module 2 about?\n\n" +
-        "I answer from that material only. If something isn't written down there, I'll tell you so you can ask a pastor."
+      // Members get a plain description; staff are told where the material comes from.
+      const where = isMember
+        ? "the church's documents and your discipleship lessons"
+        : "the church's own materials: the documents uploaded in Assistant → Documents and the discipleship handouts in Training";
+      return reply(tl
+        ? `Ako ang church assistant. Sinasagot ko ang mga tanong tungkol sa simbahan mula sa ${isMember ? "mga dokumento ng simbahan at sa inyong mga aralin" : "mga dokumento at handouts ng simbahan"}.\n\n` +
+          "Halimbawa:\n• Anong oras ang pagsamba sa Linggo?\n• Paano sumali sa isang ministeryo?\n• Ano ang ikapu?\n• Ano ang susunod kong module?\n• Ipaliwanag nang buo ang kaligtasan\n\n" +
+          "Kung wala sa mga dokumento ang sagot, sasabihin ko po para makapagtanong kayo sa pastor."
+        : `I'm the church assistant. I answer questions about the church from ${where}.\n\n` +
+          "Try things like:\n• What time is the Sunday service?\n• How do I join a ministry?\n• Ano ang ikapu?\n• What's my next module?\n• What is module 2 about?\n• Explain salvation in detail (or ask \"tell me more\" after any answer)\n\n" +
+          "I answer from that material only. If something isn't written down there, I'll tell you so you can ask a pastor."
       );
     }
 

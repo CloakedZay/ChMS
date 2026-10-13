@@ -7,6 +7,8 @@ import { authFetch } from '@/app/lib/authFetch';
 import { useAssistantQuota, quotaText } from '@/app/lib/useAssistantQuota';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import BranchLabel from '@/app/components/BranchLabel';
+import ChatHistory from '@/app/components/ChatHistory';
+import { useAssistantChats } from '@/app/lib/useAssistantChats';
 
 export default function MemberChatbotPage() {
   const { user } = useAuth();
@@ -18,6 +20,16 @@ export default function MemberChatbotPage() {
   const [input, setInput]       = useState('');
   const [sending, setSending]   = useState(false);
   const quota = useAssistantQuota();   // Members: questions left today
+  const hist = useAssistantChats();    // saved chats: New chat + history
+
+  async function openChat(id) {
+    if (sending) return;
+    setMessages(await hist.open(id));
+  }
+  function startNewChat() {
+    hist.newChat();
+    setMessages([]);
+  }
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -57,10 +69,9 @@ export default function MemberChatbotPage() {
       });
       const data = await res.json();
       quota.update(data);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', text: data.answer || data.error || 'Sorry, something went wrong.', isError: !res.ok },
-      ]);
+      const answerText = data.answer || data.error || 'Sorry, something went wrong.';
+      setMessages((prev) => [...prev, { role: 'assistant', text: answerText, isError: !res.ok }]);
+      hist.save(question, answerText, !res.ok);   // keep it in this chat (db/040)
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -82,7 +93,9 @@ export default function MemberChatbotPage() {
       </div>
 
       {/* Fixed to the window height so the question box stays in view. */}
-      <div className="flex flex-col bg-[#1b2420] border border-white/10 rounded-3xl overflow-hidden h-[calc(100dvh-13rem)] min-h-[24rem]">
+      <div className="flex flex-col md:flex-row bg-[#1b2420] border border-white/10 rounded-3xl overflow-hidden h-[calc(100dvh-13rem)] min-h-[24rem]">
+        <ChatHistory hist={hist} onNew={startNewChat} onOpen={openChat} disabled={sending} />
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
@@ -148,6 +161,7 @@ export default function MemberChatbotPage() {
         {quotaText(quota) && (
           <p className={`px-4 pb-3 -mt-1 text-[11px] ${quota.used ? 'text-orange-400' : 'text-white/40'}`}>{quotaText(quota)}</p>
         )}
+        </div>
       </div>
     </div>
   );
