@@ -5,6 +5,7 @@ import { supabase } from '@/app/lib/supabase';
 import { Search, CalendarDays, Clock } from 'lucide-react';
 import BranchLabel from '@/app/components/BranchLabel';
 
+import Pagination, { usePaged } from '@/app/components/Pagination';
 const STATUS_COLORS = {
   approved: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   pending:  'bg-orange-500/10 text-orange-400 border-orange-500/20',
@@ -102,6 +103,9 @@ export default function MemberEventsPage() {
     ? new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
     : 'No date set';
 
+  // Long lists are shown 9 at a time (components/Pagination).
+  const pg = usePaged(filtered, 9, `${search}|${ministryFilter}`);
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
       <div className="mb-8">
@@ -168,7 +172,7 @@ export default function MemberEventsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filtered.map((ev) => {
+          {pg.items.map((ev) => {
             const color = colorFor(ev.ministry);
             const days = ev.date ? daysUntil(ev.date) : null;
             const past = days !== null && days < 0;
@@ -229,6 +233,7 @@ export default function MemberEventsPage() {
           })}
         </div>
       )}
+      {!loading && <Pagination {...pg} label="events" />}
     </div>
   );
 }

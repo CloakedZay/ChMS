@@ -11,6 +11,7 @@ import { FileSpreadsheet, UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pe
 import BranchLabel from "@/app/components/BranchLabel";
 import { levelBadge } from "@/app/lib/roleColors";
 
+import Pagination, { usePaged } from "@/app/components/Pagination";
 const EMPTY_FORM = {
   full_name: '',
   role: '',
@@ -345,6 +346,9 @@ export default function MembersPage() {
 
   // ── UI ────────────────────────────────────────────────────────────────────
 
+  // Long lists are shown 15 at a time (components/Pagination).
+  const pg = usePaged(filtered, 15, `${search}|${filterStatus}`);
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
 
@@ -460,7 +464,7 @@ export default function MembersPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((member) => (
+                pg.items.map((member) => (
                   <tr key={member.id} className={`${t.rowHover} transition-colors`}>
                     {/* Name + Avatar */}
                     <td className="px-6 py-4">
@@ -527,10 +531,10 @@ export default function MembersPage() {
           </table>
         </div>
 
-        {/* Footer count */}
+        {/* Pages */}
         {!loading && filtered.length > 0 && (
-          <div className={`px-6 py-3 border-t ${t.divider} text-[10px] ${t.textMuted} uppercase tracking-widest`}>
-            Showing {filtered.length} of {counts.total} members
+          <div className={`px-6 pb-4 border-t ${t.divider}`}>
+            <Pagination {...pg} label={`members${filtered.length < counts.total ? ` (of ${counts.total})` : ''}`} />
           </div>
         )}
       </div>

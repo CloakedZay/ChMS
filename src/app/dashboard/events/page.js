@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 
+import Pagination, { usePaged } from "@/app/components/Pagination";
 const EMPTY_FORM = {
   title: '',
   ministry: '',
@@ -211,6 +212,9 @@ export default function EventsPage() {
     done:     events.filter((e) => e.status === "done").length,
   };
 
+  // Long lists are shown 9 at a time (components/Pagination).
+  const pg = usePaged(filtered, 9, `${search}|${activeFilter}`);
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
 
@@ -281,11 +285,12 @@ export default function EventsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filtered.map((event) => (
+          {pg.items.map((event) => (
             <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={canEditEvent(event) ? openEdit : null} onDelete={canManageAll ? handleDeleteLocal : null} t={t} dark={dark} />
           ))}
         </div>
       )}
+      {!loading && <Pagination {...pg} label="events" />}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

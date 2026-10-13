@@ -9,6 +9,7 @@ import { can } from '@/app/lib/permissions';
 import BranchLabel from '@/app/components/BranchLabel';
 import { todayManila, postedLabel } from '@/app/components/AnnouncementsBanner';
 
+import Pagination, { usePaged } from '@/app/components/Pagination';
 // Announcements (db/031, db/038). Pastor: any branch or all branches.
 // Leader: own branch. Ministry Head: only the ministries they head. Any of
 // them can aim an announcement at one ministry's members. Everyone else who
@@ -135,6 +136,9 @@ export default function AnnouncementsPage() {
   const label = `block text-xs font-semibold mb-1.5 ${t.sub}`;
   const field = `w-full border rounded-xl px-4 py-2.5 text-sm ${t.input}`;
 
+  // Long lists are shown 10 at a time (components/Pagination).
+  const pg = usePaged(items || [], 10, '');
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.page}`}>
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
@@ -172,7 +176,7 @@ export default function AnnouncementsPage() {
         </div>
       ) : (
         <ul className="space-y-4 max-w-3xl">
-          {items.map((a) => {
+          {pg.items.map((a) => {
             const expired = a.expires_on && a.expires_on < today;
             return (
               <li key={a.id} className={`relative overflow-hidden border rounded-3xl p-6 ${t.card} ${expired ? 'opacity-60' : ''}`}>
@@ -216,6 +220,7 @@ export default function AnnouncementsPage() {
           })}
         </ul>
       )}
+      {items !== null && <Pagination {...pg} label="announcements" className="max-w-3xl" />}
 
       {editing && (
         <div className="fixed inset-0 z-50 bg-[#0c1311]/60 flex items-end sm:items-center justify-center sm:p-4"

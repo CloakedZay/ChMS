@@ -12,6 +12,7 @@ import { levelBadge } from '@/app/lib/roleColors';
 import BranchLabel from '@/app/components/BranchLabel';
 import { notifyFollowUpChanged } from '@/app/lib/useFollowUpReminder';
 
+import Pagination, { usePaged } from '@/app/components/Pagination';
 // Member inactivity and follow-up (db/032).
 // "Last seen" = the later of a member's last sign-in and last page visit,
 // for members whose record is linked to a login. A member is flagged when
@@ -155,6 +156,9 @@ export default function FollowUpPage() {
     ['all', 'All members', counts.all],
   ];
 
+  // Long lists are shown 10 at a time (components/Pagination).
+  const pg = usePaged(shown, 10, `${tab}|${search}|${threshold}`);
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.page}`}>
       <div className="mb-8">
@@ -227,7 +231,7 @@ export default function FollowUpPage() {
         </div>
       ) : (
         <ul className="space-y-3">
-          {shown.map((p) => {
+          {pg.items.map((p) => {
             const last = p.last_outcome ? OUTCOMES[p.last_outcome] : null;
             const isOpen = openHistory === p.member_id;
             return (
@@ -300,6 +304,7 @@ export default function FollowUpPage() {
           })}
         </ul>
       )}
+      {rows !== null && <Pagination {...pg} label="members" />}
 
       {/* Log a follow-up */}
       {logFor && (

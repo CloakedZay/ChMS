@@ -7,6 +7,7 @@ import BranchLabel from '@/app/components/BranchLabel';
 import { useTheme } from '@/app/context/ThemeContext';
 import { levelBadge } from '@/app/lib/roleColors';
 
+import Pagination, { usePaged } from '@/app/components/Pagination';
 export default function MemberDirectoryPage() {
   const { dark } = useTheme();
   const [members, setMembers] = useState([]);
@@ -34,6 +35,9 @@ export default function MemberDirectoryPage() {
       m.role?.toLowerCase().includes(term)
     );
   });
+
+  // Long lists are shown 12 at a time (components/Pagination).
+  const pg = usePaged(filtered, 12, search);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
@@ -65,7 +69,7 @@ export default function MemberDirectoryPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((m, i) => (
+          {pg.items.map((m, i) => (
             <div key={i} className="bg-[#1b2420] rounded-3xl p-5 border border-white/10 flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/20 flex items-center justify-center shrink-0">
                 <span className="text-xs font-black text-blue-400">
@@ -84,6 +88,7 @@ export default function MemberDirectoryPage() {
           ))}
         </div>
       )}
+      {!loading && <Pagination {...pg} label="members" />}
     </div>
   );
 }
