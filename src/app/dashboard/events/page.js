@@ -6,9 +6,10 @@ import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
+import { notifyEventsChanged } from "@/app/lib/useEventNotices";
 import {
   Calendar, Plus, Search, MoreHorizontal,
-  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck
+  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, Undo2, Send, Check
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 
@@ -34,7 +35,8 @@ const STATUS_COLORS = {
 
 const FILTERS = ["all", "planning", "pending", "approved", "done"];
 const GLOBAL_ROLES = ["admin", "pastor"];
-// Statuses a leader may give an event; approving is the Pastor's job.
+// A leader may still edit their own event while it's in one of these;
+// approving is the Pastor's job.
 const LEADER_STATUSES = ["planning", "pending"];
 
 // ─── Theme token map — same pattern as DashboardPage.js ────────────────────
@@ -87,7 +89,14 @@ export default function EventsPage() {
   const [saving, setSaving]         = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [search, setSearch]         = useState("");
-  const [activeFilter, setActiveFilter] = useState("all");
+  // ?filter=pending (from the dashboard bell) opens on that tab.
+  const [activeFilter, setActiveFilter] = useState(() => {
+    const f = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('filter') : null;
+    return FILTERS.includes(f) ? f : 'all';
+  });
+  const [sendBack, setSendBack]     = useState(null);   // event being sent back
+  const [backNote, setBackNote]     = useState("");
+  const [acting, setActing]         = useState(false);
   const [form, setForm]             = useState(EMPTY_FORM);
   const [ministries, setMinistries] = useState([]);
 
@@ -125,6 +134,7 @@ export default function EventsPage() {
 
   async function fetchEvents() {
     setLoading(true);
+    await supabase.rpc('complete_past_events');   // approved + date passed → done (db/042)
     const { data } = await supabase.from('events').select('*').order('date', { ascending: true });
     if (data) setEvents(data);
     setLoading(false);
@@ -173,7 +183,12 @@ export default function EventsPage() {
       return;
     }
     setSaving(true);
-    const payload = { ...form, budget: parseFloat(form.budget) || 0, church_id: isGlobal ? form.church_id : profile?.church_id };
+    const payload = {
+      ...form,
+      budget: parseFloat(form.budget) || 0,
+      church_id: isGlobal ? form.church_id : profile?.church_id,
+      status: editingEvent ? editingEvent.status : 'planning',
+    };
     if (editingEvent) {
       const { error } = await supabase.from('events').update(payload).eq('id', editingEvent.id);
       if (error) alert('Error updating event: ' + error.message);
@@ -186,6 +201,38 @@ export default function EventsPage() {
     setEditingEvent(null);
     setForm(EMPTY_FORM);
     await fetchEvents();
+  }
+
+  // ── Approval (db/042) ──────────────────────────────────────────────────
+  async function setStatus(ev, changes) {
+    setActing(true);
+    const { error } = await supabase.from('events').update(changes).eq('id', ev.id);
+    setActing(false);
+    if (error) { alert(error.message); return false; }
+    await fetchEvents();
+    notifyEventsChanged();
+    return true;
+  }
+
+  function approve(ev) {
+    if (!ev.date) { alert(`Set the date of "${ev.title}" before approving it.`); openEdit(ev); return; }
+    setStatus(ev, { status: 'approved' });
+  }
+
+  async function confirmSendBack(e) {
+    e.preventDefault();
+    if (await setStatus(sendBack, { status: 'planning', review_note: backNote.trim() })) setSendBack(null);
+  }
+
+  function submitForApproval(ev) {
+    if (!window.confirm(`Send "${ev.title}" to the Pastor for approval?`)) return;
+    setStatus(ev, { status: 'pending' });
+  }
+
+  async function dismissReviews() {
+    await supabase.rpc('mark_event_reviews_seen', { p_ids: null });
+    await fetchEvents();
+    notifyEventsChanged();
   }
 
   function handleDeleteLocal(id) {
@@ -206,6 +253,9 @@ export default function EventsPage() {
   const branchMinistries = ministries
     .filter((m) => m.church_id === eventChurch && (role !== 'ministry_head' || m.leader_id === user?.id))
     .map((m) => m.name);
+
+  const waiting = canManageAll ? events.filter((e) => e.status === 'pending') : [];
+  const myReviews = events.filter((e) => e.created_by === user?.id && e.review_seen === false);
 
   const counts = {
     total:    events.length,
@@ -244,6 +294,37 @@ export default function EventsPage() {
           )}
         </div>
       </div>
+
+      {/* The Pastor: events waiting for approval */}
+      {waiting.length > 0 && activeFilter !== 'pending' && (
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-5 py-4">
+          <p className={`text-sm ${t.textPrimary} flex-1`}>
+            <b>{waiting.length} event{waiting.length === 1 ? '' : 's'}</b> waiting for your approval: {waiting.map((e) => e.title).join(', ')}
+          </p>
+          <button onClick={() => setActiveFilter('pending')}
+            className="shrink-0 bg-orange-500 hover:bg-orange-400 text-white px-4 py-2 rounded-xl text-xs font-bold">Review</button>
+        </div>
+      )}
+
+      {/* Whoever filed events: the Pastor's decisions */}
+      {myReviews.length > 0 && (
+        <div className={`mb-6 rounded-2xl border ${t.cardBorder} ${t.cardBg} px-5 py-4`}>
+          <ul className="space-y-2">
+            {myReviews.map((e) => (
+              <li key={e.id} className="text-sm flex items-start gap-2">
+                {e.status === 'approved'
+                  ? <CheckCircle2 size={16} className={`${A(dark, 'emerald')} shrink-0 mt-0.5`} />
+                  : <Undo2 size={16} className={`${A(dark, 'orange')} shrink-0 mt-0.5`} />}
+                <span className={t.textPrimary}>
+                  <b>{e.title}</b> {e.status === 'approved' ? 'was approved by the Pastor.' : 'was sent back to planning.'}
+                  {e.status !== 'approved' && e.review_note && <span className={t.textSub}> Reason: “{e.review_note}”</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <button onClick={dismissReviews} className={`mt-3 text-xs font-bold ${A(dark, 'blue')} hover:underline`}>Got it</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
@@ -288,11 +369,35 @@ export default function EventsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {pg.items.map((event) => (
-            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={canEditEvent(event) ? openEdit : null} onDelete={canManageAll ? handleDeleteLocal : null} attendance={canSeeAttendance} t={t} dark={dark} />
+            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={canEditEvent(event) ? openEdit : null} onDelete={canManageAll ? handleDeleteLocal : null} attendance={canSeeAttendance}
+              onApprove={canManageAll && (event.status === 'pending' || (event.status === 'planning' && event.created_by === user?.id)) ? approve : null}
+              onSendBack={canManageAll && event.status === 'pending' ? (ev) => { setSendBack(ev); setBackNote(''); } : null}
+              onSubmit={canSubmit && !canManageAll && event.created_by === user?.id && event.status === 'planning' ? submitForApproval : null}
+              busy={acting} t={t} dark={dark} />
           ))}
         </div>
       )}
       {!loading && <Pagination {...pg} label="events" />}
+
+      {sendBack && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onMouseDown={(e) => { if (e.target === e.currentTarget && !acting) setSendBack(null); }}>
+          <form onSubmit={confirmSendBack} role="dialog" aria-modal="true" aria-label="Send back"
+            className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
+            <h2 className={`text-lg font-black ${t.textPrimary}`}>Send back to planning</h2>
+            <p className={`text-xs ${t.textSub} mt-1 mb-4`}>“{sendBack.title}” — tell them what to change. They&apos;ll see this, then they can fix it and submit again.</p>
+            <textarea value={backNote} onChange={(e) => setBackNote(e.target.value)} required maxLength={1000} rows={4} autoFocus
+              placeholder="e.g. Please lower the budget to ₱2,000 and choose a Saturday."
+              className={`${inputStyle(t)} resize-none`} />
+            <div className="flex gap-3 pt-4">
+              <button type="button" onClick={() => setSendBack(null)} disabled={acting} className={`flex-1 ${t.cancelBtn} rounded-xl py-2.5 text-sm font-semibold`}>Cancel</button>
+              <button type="submit" disabled={acting || !backNote.trim()} className="flex-1 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-bold">
+                {acting ? 'Sending…' : 'Send back'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -325,26 +430,24 @@ export default function EventsPage() {
                 </select>
               </Field>
 
-              <Field label="Date" t={t}>
-                <input type="date" name="date" value={form.date} onChange={handleChange} className={inputStyle(t)} />
+              <Field label="Date" required t={t}>
+                <input type="date" name="date" value={form.date} onChange={handleChange} required className={inputStyle(t)} />
               </Field>
 
               <Field label="Budget (₱)" t={t}>
                 <input type="number" name="budget" value={form.budget} onChange={handleChange} placeholder="e.g. 3000" min="0" className={inputStyle(t)} onWheel={(e) => e.target.blur()} />
               </Field>
 
-              <Field label="Status" t={t}>
-                <select name="status" value={form.status} onChange={handleChange} className={inputStyle(t)}>
-                  <option value="planning">Planning</option>
-                  <option value="pending">Pending</option>
-                  {canManageAll && <option value="approved">Approved</option>}
-                  {canManageAll && <option value="done">Done</option>}
-                </select>
-              </Field>
-
               <Field label="Description" t={t}>
                 <textarea name="description" value={form.description} onChange={handleChange} placeholder="Optional notes about this event..." rows={3} className={`${inputStyle(t)} resize-none`} />
               </Field>
+
+              {!editingEvent && (
+                <p className={`text-[11px] ${t.textSub}`}>
+                  New events start as <b>Planning</b>.{' '}
+                  {canManageAll ? 'Approve it from its card when it’s ready.' : 'When it’s ready, press “Submit for approval” on its card.'}
+                </p>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className={`flex-1 ${t.cancelBtn} rounded-xl py-2.5 text-sm font-semibold transition-all`}>Cancel</button>
@@ -367,7 +470,7 @@ function inputStyle(t) {
 // Attendance opens on the event's date (Philippine time) once it's approved.
 const phToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 
-function EventCard({ event, branchName, onEdit, onDelete, attendance, t, dark }) {
+function EventCard({ event, branchName, onEdit, onDelete, attendance, onApprove, onSendBack, onSubmit, busy, t, dark }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const phase = event.status || "planning";
@@ -419,7 +522,35 @@ function EventCard({ event, branchName, onEdit, onDelete, attendance, t, dark })
           <span className={`text-xs font-mono ${t.textPrimary}`}>₱{Number(event.budget || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
         </div>
         {event.description && <p className={`text-xs ${t.textMuted} leading-relaxed line-clamp-2`}>{event.description}</p>}
+        {phase === 'planning' && event.review_note && (
+          <p className={`text-xs rounded-xl px-3 py-2 bg-orange-500/10 border border-orange-500/20 ${t.textSub}`}>
+            <span className={`font-bold ${A(dark, 'orange')}`}>Sent back:</span> {event.review_note}
+          </p>
+        )}
       </div>
+
+      {(onApprove || onSendBack || onSubmit) && (
+        <div className="flex gap-2 mb-5">
+          {onApprove && (
+            <button onClick={() => onApprove(event)} disabled={busy}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold">
+              <Check size={14} /> Approve
+            </button>
+          )}
+          {onSendBack && (
+            <button onClick={() => onSendBack(event)} disabled={busy}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-xl border border-orange-500/30 text-orange-500 hover:bg-orange-500/10 disabled:opacity-50 text-xs font-bold">
+              <Undo2 size={14} /> Send back
+            </button>
+          )}
+          {onSubmit && (
+            <button onClick={() => onSubmit(event)} disabled={busy}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold">
+              <Send size={13} /> Submit for approval
+            </button>
+          )}
+        </div>
+      )}
 
       <div className={`pt-4 border-t ${t.divider}`}>
         <div className="flex items-center justify-between">

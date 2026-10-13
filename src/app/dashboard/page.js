@@ -19,6 +19,7 @@ import ScriptureLink from "@/app/components/ScriptureLink";
 import AnnouncementsBanner from "@/app/components/AnnouncementsBanner";
 import FollowUpReminder from "@/app/components/FollowUpReminder";
 import { useFollowUpReminder, REMINDER_DAYS } from "@/app/lib/useFollowUpReminder";
+import { useEventNotices } from "@/app/lib/useEventNotices";
 import Link from "next/link";
 
 // ─── Theme token maps ──────────────────────────────────────────────────────────
@@ -108,6 +109,7 @@ export default function DashboardPage() {
   const { role, user } = useAuth();
   // Follow-up reminder — staff who follow up members only, never members.
   const followUp = useFollowUpReminder(user?.id, can(role, 'followUp'));
+  const eventNotices = useEventNotices(user?.id, role, can(role, 'events'));   // db/042
   const t = T(dark);
 
   const [loading, setLoading]           = useState(true);
@@ -252,7 +254,7 @@ export default function DashboardPage() {
   // ── Computed ──────────────────────────────────────────────────────────────
   const unreadCount    = notifications.filter(n => !n.is_read).length;
   const showReminder   = followUp.count > 0 && !followUp.snoozed;
-  const bellCount      = unreadCount + (showReminder ? 1 : 0);
+  const bellCount      = unreadCount + (showReminder ? 1 : 0) + (eventNotices.pending.length ? 1 : 0) + eventNotices.reviews.length;
   const q              = search.toLowerCase().trim();
 
   const filteredEvents = upcomingEvents.filter(ev =>
@@ -391,7 +393,46 @@ export default function DashboardPage() {
                       </div>
                     </Link>
                   )}
-                  {notifications.length === 0 ? (!showReminder &&
+                  {eventNotices.pending.length > 0 && (
+                    <Link
+                      href="/dashboard/events?filter=pending"
+                      onClick={() => setShowNotifs(false)}
+                      className={`flex items-start gap-3 px-4 py-3 border-b ${t.divider} bg-orange-500/10 hover:bg-orange-500/15 transition-colors`}
+                    >
+                      <div className="mt-0.5 w-7 h-7 rounded-xl flex items-center justify-center shrink-0 bg-orange-500/20 text-orange-500">
+                        <CalendarDays className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-bold truncate ${t.textPrimary}`}>
+                          {eventNotices.pending.length} event{eventNotices.pending.length === 1 ? '' : 's'} waiting for your approval
+                        </p>
+                        <p className={`text-[10px] ${t.textSub} mt-0.5 line-clamp-2`}>
+                          {eventNotices.pending.map((e) => e.title).join(', ')}
+                        </p>
+                      </div>
+                    </Link>
+                  )}
+                  {eventNotices.reviews.map((r) => (
+                    <Link
+                      key={`review-${r.id}`}
+                      href="/dashboard/events"
+                      onClick={() => setShowNotifs(false)}
+                      className={`flex items-start gap-3 px-4 py-3 border-b ${t.divider} ${r.status === 'approved' ? 'bg-emerald-500/10 hover:bg-emerald-500/15' : 'bg-orange-500/10 hover:bg-orange-500/15'} transition-colors`}
+                    >
+                      <div className={`mt-0.5 w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${r.status === 'approved' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-orange-500/20 text-orange-500'}`}>
+                        <CalendarDays className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-bold truncate ${t.textPrimary}`}>
+                          {r.status === 'approved' ? `“${r.title}” was approved` : `“${r.title}” was sent back`}
+                        </p>
+                        <p className={`text-[10px] ${t.textSub} mt-0.5 line-clamp-2`}>
+                          {r.status === 'approved' ? 'The Pastor approved your event.' : r.review_note || 'The Pastor sent it back to planning.'}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                  {notifications.length === 0 ? (!showReminder && !eventNotices.count &&
                     <div className="py-10 text-center">
                       <Bell className={`w-6 h-6 ${t.emptyIcon} mx-auto mb-2`} />
                       <p className={`text-xs ${t.textMuted}`}>No notifications yet.</p>
