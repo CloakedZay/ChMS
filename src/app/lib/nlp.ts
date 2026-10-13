@@ -92,6 +92,93 @@ export function normalize(text: string): string {
     .trim();
 }
 
+// Everyday slips in the words questions are built from ("cna" → "can",
+// "waht" → "what", "moduel" → "module"): two letters swapped, or one letter
+// missing or doubled. Only these words are fixed — short words in general
+// are left alone because too many of them are real words.
+const COMMON_WORDS = new Set(`what when where which who why how can could should would will have has does
+the this that there their they you your yours my mine me and for from with about
+next module modules lesson lessons learn study today progress finish start need want
+church service pastor member members ministry ministries prayer worship tithe offering
+password account login finance event events announcement schedule time sunday
+ano anong paano saan kailan sino bakit ilan dapat kailangan ngayon aralin simbahan`.split(/\s+/));
+
+// Real words that are one slip away from a word above — never "fix" these.
+const REAL_WORDS = new Set(`were three thee form even evens lean cold mien dose odes abut stud anon star stat
+wold sion tite lian sana bait nayon kalan paan now nest fir bow tie top
+among ago mind gave hour hours tour tours nine neat thus dies foes cab cam fan gas van swan sink tome tow mow fog foe
+mas san ani ane`.split(/\s+/));
+
+// Neighbouring keys on a QWERTY keyboard, for "tge" → "the", "nexr" → "next".
+const KEY_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+const NEAR_KEYS = new Map<string, Set<string>>();
+KEY_ROWS.forEach((row, r) => {
+  for (let i = 0; i < row.length; i++) {
+    const near = new Set<string>([row[i - 1], row[i + 1]].filter(Boolean));
+    for (const other of [KEY_ROWS[r - 1], KEY_ROWS[r + 1]]) {
+      if (!other) continue;
+      for (const j of [i - 1, i, i + 1]) if (other[j]) near.add(other[j]);
+    }
+    NEAR_KEYS.set(row[i], near);
+  }
+});
+
+function fixCommonWord(w: string): string {
+  if (w.length < 3 || COMMON_WORDS.has(w) || REAL_WORDS.has(w)) return w;
+  const swaps: string[] = [];                                    // swapped neighbours
+  for (let i = 0; i < w.length - 1; i++) {
+    const c = w.slice(0, i) + w[i + 1] + w[i] + w.slice(i + 2);
+    if (COMMON_WORDS.has(c)) swaps.push(c);
+  }
+  // "hwo" could be "how" or "who": prefer the one that keeps the first letter
+  if (swaps.length) return swaps.find((c) => c[0] === w[0]) || swaps[0];
+  for (let i = 0; i < w.length; i++) {                           // one extra letter
+    const c = w.slice(0, i) + w.slice(i + 1);
+    if (c.length >= 3 && COMMON_WORDS.has(c)) return c;
+  }
+  for (const c of COMMON_WORDS) {
+    if (w.length >= 4 && c.length === w.length + 1 && c[0] === w[0]) {   // one missing letter
+      for (let i = 0; i < c.length; i++) if (c.slice(0, i) + c.slice(i + 1) === w) return c;
+    }
+    if (c.length === w.length) {                                 // one wrong, neighbouring key
+      let diff = -1;
+      for (let i = 0; i < w.length; i++) {
+        if (w[i] !== c[i]) { if (diff >= 0) { diff = -2; break; } diff = i; }
+      }
+      if (diff >= 0 && NEAR_KEYS.get(c[diff])?.has(w[diff])) return c;
+    }
+  }
+  return w;
+}
+
+// Words a run-together pair may be made of ("ofthe", "mynext").
+const isKnownWord = (w: string) => COMMON_WORDS.has(w) || STOP_EN.has(w) || STOP_TL.has(w);
+
+function fixToken(token: string): string {
+  let w = token.toLowerCase();
+  // letters and digits mixed up inside a word: "m0dule", "passw0rd", "1esson"
+  if (/[a-z]/.test(w) && /[0-9]/.test(w)) {
+    const asLetters = fixCommonWord(w.replace(/0/g, 'o').replace(/1/g, 'l').replace(/3/g, 'e').replace(/5/g, 's'));
+    return COMMON_WORDS.has(asLetters) ? asLetters : token;     // "3pm", "1st" stay as typed
+  }
+  w = w.replace(/([a-z])\1{2,}/g, '$1$1');                      // "helllo" → "hello"
+  const fixed = fixCommonWord(w);
+  if (fixed !== w || isKnownWord(w)) return fixed === token.toLowerCase() ? token : fixed;
+  // missing space: "ofthe" → "of the", "mynext" → "my next" (one half must be
+  // a question / church word, so ordinary words like "another" stay whole)
+  if (w.length >= 5) {
+    for (let i = 2; i <= w.length - 2; i++) {
+      const a = w.slice(0, i), b = w.slice(i);
+      if (isKnownWord(a) && isKnownWord(b) && (COMMON_WORDS.has(a) || COMMON_WORDS.has(b))) return `${a} ${b}`;
+    }
+  }
+  return w === token.toLowerCase() ? token : w;
+}
+
+export function fixCommonTypos(text: string): string {
+  return text.replace(/[A-Za-z0-9]+/g, fixToken);
+}
+
 export function tokenize(text: string): string[] {
   return normalize(text).split(/[\s-]+/).filter(Boolean);
 }
@@ -142,18 +229,22 @@ export function stem(word: string): string {
 export type Intent =
   | { kind: 'greeting' | 'thanks' | 'goodbye' | 'help' | 'empty' }
   | { kind: 'chapter'; number: number }
+  | { kind: 'system' }                    // "how do I change my password?" — how FaithSync works
   | { kind: 'progress' }                  // "what's my next module?"
   | { kind: 'module'; number: number }    // "what is module 3 about?"
   | { kind: 'search' };
 
 export function detectIntent(question: string): Intent {
-  const q = normalize(question);
+  const q = normalize(fixCommonTypos(question));
   if (!q) return { kind: 'empty' };
   if (/^(hi|hello|hey|yo|good day|kumusta|kamusta|magandang (umaga|tanghali|hapon|gabi)|good (morning|afternoon|evening))( po)?$/.test(q)) return { kind: 'greeting' };
   if (/^(how are you|kumusta ka|kamusta ka)( po)?$/.test(q)) return { kind: 'greeting' };
   if (/^(thanks?|thank you|ty|salamat|maraming salamat)( po| so much| a lot)?$/.test(q)) return { kind: 'thanks' };
   if (/^(bye|goodbye|paalam|sige)( po)?$/.test(q)) return { kind: 'goodbye' };
   if (/^(help|tulong|what can you do|ano ang kaya mo|paano ka gamitin|how do i use (this|you))( po)?$/.test(q)) return { kind: 'help' };
+  // Questions about using FaithSync itself (pages, buttons, logins, staff
+  // tools). The assistant declines these for Members (api/chatbot).
+  if (isSystemQuestion(q)) return { kind: 'system' };
   // My own discipleship progress (English + Tagalog).
   if (
     /\bnext (module|lesson|aralin)\b/.test(q) ||
@@ -161,6 +252,13 @@ export function detectIntent(question: string): Intent {
     /\bhow many (modules|lessons)\b/.test(q) ||
     /\b(modules?|lessons?|aralin) (left|remaining|natitira)\b/.test(q) ||
     /\bilan pa\b.*\b(module|aralin|lesson)/.test(q) ||
+    // "what module (do) I have to learn?" (typos in the middle are fine)
+    /\bwhat (module|modules|lesson|lessons|aralin)\b.*\b(i|ko|me)\b/.test(q) ||
+    // "what can I learn / study (today)?" — only when nothing follows, so
+    // "what can I learn from John 3:16?" stays a Bible question
+    /\bwhat (i can|can i|should i|i should|do i|i have to|i need to|must i|i must) (learn|study|take|read)( (today|next|now|ngayon))?$/.test(q) ||
+    /\b(anong|ano ang|ano) (module|aralin|lesson)\b.*\b(ko|ako)\b/.test(q) ||
+    /\b(ano|anong) (ang )?(dapat|kailangan|pwede|puwede) (kong|ko) (pag ?aralan|aralin|matutunan|matutuhan)/.test(q) ||
     // "my modules / progress ko" — but not how-to questions ("how do I submit my module?")
     (/\b(my|ko|aking|akin)\b/.test(q) && /\b(progress|modules?|lessons?|aralin|discipleship|pagdidisipulo|training)\b/.test(q)
       && !/\b(how (do|can|to|should)|paano)\b/.test(q))
@@ -172,6 +270,29 @@ export function detectIntent(question: string): Intent {
   return { kind: 'search' };
 }
 
+// "How does FaithSync work?" — a question about the website / app rather
+// than the church. Needs a system word AND a how / where / can-I word, so
+// "How do I join a ministry?" or "What is the message of John 3:16?" don't
+// count. (q is already normalized: lower case, no punctuation.)
+const SYSTEM_WORDS = new RegExp('\\b(' + [
+  'faithsync', 'system', 'website', 'web site', 'site', 'app', 'application', 'dashboard', 'portal',
+  'sidebar', 'menu', 'button', 'page', 'tab', 'log ?in', 'login', 'sign ?in', 'sign ?up', 'logout', 'log out',
+  'password', 'account', 'profile', 'upload', 'download', 'notifications?', 'settings?', 'dark mode', 'light mode',
+  'admin', 'administrator', 'users? page', 'user levels?', 'access levels?', 'finance entry', 'new entry',
+  'spending requests?', 'approval limits?', 'liquidat\\w*', 'receipts?', 'reports? page', 'activity log',
+  'screen time', 'follow ?up page', 'import', 'excel', 'template', 'create (a )?login', 'reset (my |a )?password',
+  'search index', 'chatbot', 'assistant',
+].join('|') + ')\\b');
+const HOW_WORDS = /\b(how|paano|pano|where|saan|nasaan|what|whats|ano ang|anong|can i|could i|pwede|puwede|why cant|why can t|bakit hindi|use|gamitin|gagamitin|works?|gumagana|access|open|buksan)\b/;
+
+export function isSystemQuestion(q: string): boolean {
+  if (/\bhow (does|do|can) (the|this|that)? ?(system|app|website|site|faithsync|portal)\b/.test(q)) return true;
+  if (!HOW_WORDS.test(q)) return false;
+  if (SYSTEM_WORDS.test(q)) return true;
+  // staff actions: "how do I add in finance?", "paano mag-approve ng event?"
+  return /\b(add|record|enter|edit|delete|remove|void|approve|reject|assign|post|publish|mag ?add|i ?approve|mag ?approve|i ?record)\b.*\b(finance|transactions?|entry|entries|members?|events?|announcements?|modules?|users?|handouts?|documents?|questions?|answers?)\b/.test(q);
+}
+
 export type Analysis = {
   words: string[];      // meaningful words from the question
   stems: string[];      // their stems
@@ -179,7 +300,7 @@ export type Analysis = {
 };
 
 export function analyzeQuestion(question: string): Analysis {
-  const words = [...new Set(tokenize(question).filter((w) => w.length >= 2 && !isStop(w)))];
+  const words = [...new Set(tokenize(fixCommonTypos(question)).filter((w) => w.length >= 2 && !isStop(w)))];
   const stems = [...new Set(words.map(stem))];
   const expanded = new Set<string>([...words, ...stems]);
   for (const w of [...words, ...stems]) {

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MessageCircleQuestion, Send, Loader2, ChevronDown, ChevronUp, Bot } from 'lucide-react';
 import { authFetch } from '@/app/lib/authFetch';
+import { useAssistantQuota, quotaText } from '@/app/lib/useAssistantQuota';
 
 // "Ask about this lesson" — a small question box inside one discipleship
 // module. Answers come only from that module's handouts and description
@@ -14,6 +15,7 @@ export default function LessonAsk({ moduleId, title }) {
   const [input, setInput] = useState('');
   const [items, setItems] = useState([]);     // { q, a, error }
   const [busy, setBusy] = useState(false);
+  const quota = useAssistantQuota();   // Members: questions left today
   const endRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -33,6 +35,7 @@ export default function LessonAsk({ moduleId, title }) {
         body: JSON.stringify({ question: q, module_id: moduleId }),
       });
       const data = await res.json();
+      quota.update(data);
       setItems((list) => [...list, { q, a: data.answer || data.error || 'Sorry, something went wrong.', error: !res.ok }]);
     } catch {
       setItems((list) => [...list, { q, a: "Sorry, I couldn't reach the assistant. Please try again.", error: true }]);
@@ -97,7 +100,7 @@ export default function LessonAsk({ moduleId, title }) {
               placeholder="e.g. Ano ang ibig sabihin ng…?"
               aria-label={`Ask about ${title}`}
               maxLength={500}
-              disabled={busy}
+              disabled={busy || quota.used}
               className="flex-1 min-w-0 bg-[#111815] border border-white/10 rounded-full py-2 px-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 disabled:opacity-60"
             />
             <button
@@ -109,6 +112,9 @@ export default function LessonAsk({ moduleId, title }) {
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>
           </form>
+          {quotaText(quota) && (
+            <p className={`text-[11px] ${quota.used ? 'text-orange-400' : 'text-white/40'}`}>{quotaText(quota)}</p>
+          )}
         </div>
       )}
     </div>

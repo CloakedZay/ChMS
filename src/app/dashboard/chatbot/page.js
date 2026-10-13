@@ -260,6 +260,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [title, setTitle] = useState("");
   const [docType, setDocType] = useState(DOC_TYPES[0]);
+  const [staffOnly, setStaffOnly] = useState(false);
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -306,6 +307,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
       formData.append("title", title.trim());
       formData.append("doc_type", docType);
       formData.append("church_id", churchId);
+      formData.append("staff_only", staffOnly ? "true" : "false");
 
       const res = await authFetch("/api/chatbot/documents", { method: "POST", body: formData });
       const data = await res.json();
@@ -318,6 +320,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
       if (data.indexWarning) setUploadError(`Uploaded, but not yet searchable: ${data.indexWarning}. Use “Rebuild search index” to retry.`);
       setTitle("");
       setDocType(DOC_TYPES[0]);
+      setStaffOnly(false);
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       await fetchDocuments();
@@ -337,6 +340,21 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
         body: JSON.stringify({ id: doc.id, is_active: !doc.is_active }),
       });
       setDocuments((prev) => prev.map((d) => d.id === doc.id ? { ...d, is_active: !d.is_active } : d));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function toggleStaffOnly(doc) {
+    setBusyId(doc.id);
+    try {
+      const res = await authFetch("/api/chatbot/documents", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: doc.id, staff_only: !doc.staff_only }),
+      });
+      if (res.ok) setDocuments((prev) => prev.map((d) => d.id === doc.id ? { ...d, staff_only: !d.staff_only } : d));
+      else alert((await res.json()).error || "Could not change it. Has db/039 been run?");
     } finally {
       setBusyId(null);
     }
@@ -400,6 +418,14 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
             </div>
           </div>
 
+          <label className={`flex items-start gap-2.5 text-xs ${t.textSub} cursor-pointer w-fit`}>
+            <input type="checkbox" checked={staffOnly} onChange={(e) => setStaffOnly(e.target.checked)} className="mt-0.5 accent-[#173f35]" />
+            <span>
+              <span className={`font-bold ${t.textPrimary}`}>Staff only</span> — the assistant uses it for staff, never for Members
+              (e.g. the FaithSync staff guide).
+            </span>
+          </label>
+
           <label className={`flex items-center justify-center gap-2 w-full border border-dashed rounded-xl py-3 cursor-pointer transition-colors text-xs font-bold ${
             uploading ? `${t.uploadBorderDisabled} cursor-not-allowed` : t.uploadBorder
           }`}>
@@ -456,9 +482,22 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
                     {doc.created_at ? ` · ${new Date(doc.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                     {!doc.is_active ? ' · Inactive' : ''}
                   </p>
+                  {doc.staff_only && (
+                    <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#3b6e9e]/15 text-[#5b8cbd]">
+                      Staff only
+                    </span>
+                  )}
                 </div>
                 {canEdit && (
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => toggleStaffOnly(doc)}
+                    disabled={busyId === doc.id}
+                    title={doc.staff_only ? "Staff only — make it available to everyone" : "Everyone — make it staff only"}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-colors disabled:opacity-50 ${t.textSub} hover:text-blue-400 hover:bg-blue-500/10`}
+                  >
+                    {doc.staff_only ? "Staff only" : "Everyone"}
+                  </button>
                   <button
                     onClick={() => toggleActive(doc)}
                     disabled={busyId === doc.id}

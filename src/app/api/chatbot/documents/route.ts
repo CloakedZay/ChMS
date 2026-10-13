@@ -18,11 +18,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
   }
 
-  const { data, error } = await caller.db
+  const list = (columns: string) => caller.db
     .from("chatbot_documents")
-    .select("id, title, doc_type, is_active, created_at")
+    .select(columns)
     .eq("church_id", church_id)
     .order("created_at", { ascending: false });
+  let { data, error } = await list("id, title, doc_type, is_active, staff_only, created_at");
+  // Before db/039 there is no staff_only column.
+  if (error && /staff_only/.test(error.message)) {
+    ({ data, error } = await list("id, title, doc_type, is_active, created_at"));
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -41,6 +46,8 @@ export async function POST(req: NextRequest) {
     const file = formData.get("file");
     const title = formData.get("title")?.toString().trim();
     const docType = formData.get("doc_type")?.toString().trim() || "Other";
+    // "Staff only" documents (db/039) are never used to answer Members.
+    const staffOnly = formData.get("staff_only")?.toString() === "true";
     const churchId = resolveChurchId(caller, formData.get("church_id")?.toString());
 
     if (!(file instanceof File) || !title || !churchId) {
@@ -76,6 +83,7 @@ export async function POST(req: NextRequest) {
       church_id: churchId,
       is_active: true,
       created_by: caller.userId,
+      ...(staffOnly ? { staff_only: true } : {}),
     }).select("id, title, doc_type, church_id, content, is_active").single();
 
     if (error) {
@@ -100,20 +108,23 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Toggle a document's active state
+// Toggle a document's active state or who may use it ("staff only", db/039)
 export async function PATCH(req: NextRequest) {
   const caller = await getCaller(req, CONTENT_ROLES);
   if (caller instanceof NextResponse) return caller;
 
-  const { id, is_active } = await req.json();
-  if (!id || typeof is_active !== "boolean") {
-    return NextResponse.json({ error: "Missing id or is_active" }, { status: 400 });
+  const { id, is_active, staff_only } = await req.json();
+  const changes: Record<string, boolean> = {};
+  if (typeof is_active === "boolean") changes.is_active = is_active;
+  if (typeof staff_only === "boolean") changes.staff_only = staff_only;
+  if (!id || !Object.keys(changes).length) {
+    return NextResponse.json({ error: "Missing id, is_active or staff_only" }, { status: 400 });
   }
 
   // RLS silently skips rows from other churches, so check something changed.
   const { data, error } = await caller.db
     .from("chatbot_documents")
-    .update({ is_active })
+    .update(changes)
     .eq("id", id)
     .select("id");
 

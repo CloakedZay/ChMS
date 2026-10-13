@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
 import { authFetch } from '@/app/lib/authFetch';
+import { useAssistantQuota, quotaText } from '@/app/lib/useAssistantQuota';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import BranchLabel from '@/app/components/BranchLabel';
 
@@ -16,6 +17,7 @@ export default function MemberChatbotPage() {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState('');
   const [sending, setSending]   = useState(false);
+  const quota = useAssistantQuota();   // Members: questions left today
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -52,6 +54,7 @@ export default function MemberChatbotPage() {
         body: JSON.stringify({ question, church_id: churchId }),
       });
       const data = await res.json();
+      quota.update(data);
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', text: data.answer || data.error || 'Sorry, something went wrong.', isError: !res.ok },
@@ -66,7 +69,7 @@ export default function MemberChatbotPage() {
     }
   }
 
-  const disabled = sending || loadingChurch || !churchId;
+  const disabled = sending || loadingChurch || !churchId || quota.used;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen flex flex-col">
@@ -140,6 +143,9 @@ export default function MemberChatbotPage() {
             <Send className="w-4 h-4" />
           </button>
         </form>
+        {quotaText(quota) && (
+          <p className={`px-4 pb-3 -mt-1 text-[11px] ${quota.used ? 'text-orange-400' : 'text-white/40'}`}>{quotaText(quota)}</p>
+        )}
       </div>
     </div>
   );

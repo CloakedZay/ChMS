@@ -21,8 +21,19 @@ type Source = { title: string; subtitle: string | null; type: "document" | "hand
 const looksTagalog = (q: string) =>
   /\b(po|ang|ng|mga|sa|ano|paano|saan|kailan|bakit|sino|ba|naman|kumusta|kamusta|salamat)\b/i.test(q);
 
-function reply(answer: string, extra: Record<string, unknown> = {}) {
-  return NextResponse.json({ answer, sources: [], ...extra });
+// How many questions a Member may ask per day (Philippine date). Staff have
+// no limit. Change it with ASSISTANT_DAILY_LIMIT in the environment.
+const DAILY_LIMIT = Math.max(1, Number(process.env.ASSISTANT_DAILY_LIMIT) || 20);
+
+
+// Members: how many questions are left today (for the chat pages).
+export async function GET(req: NextRequest) {
+  const caller = await getCaller(req);
+  if (caller instanceof NextResponse) return caller;
+  if (caller.role !== "member") return NextResponse.json({ limit: null, remaining: null });
+  const { data, error } = await caller.db.rpc("my_assistant_questions_today");
+  const used = error ? 0 : Number(data) || 0;
+  return NextResponse.json({ limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - used) });
 }
 
 // ── Chapter / article requests ("what is in article 3") ─────────────────────
@@ -65,8 +76,13 @@ function legacySearch(docs: { title: string; doc_type: string; content: string }
 
 export async function POST(req: NextRequest) {
   try {
+    // Every answer carries the Member's remaining questions once they're counted.
+    let usage: Record<string, unknown> = {};
+    const reply = (answer: string, extra: Record<string, unknown> = {}) =>
+      NextResponse.json({ answer, sources: [], ...extra, ...usage });
     const caller = await getCaller(req);
     if (caller instanceof NextResponse) return caller;
+    const isMember = caller.role === "member";
 
     const { question: raw, church_id: requestedChurch, module_id: rawModule } = await req.json();
     const question = String(raw || "").trim().slice(0, 500);
@@ -102,6 +118,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── How FaithSync works: not for Members ──────────────────────────────
+    // (staff-only documents are also kept from Members by the database, db/039)
+    if (isMember && intent.kind === "system") {
+      return reply(tl
+        ? "Pasensya na po, mga tanong lang tungkol sa simbahan, sa mga ministeryo at sa mga aral ang kaya kong sagutin. Para sa tulong sa paggamit ng FaithSync, magtanong po sa church secretary o administrator."
+        : "Sorry, I can only answer questions about the church, its ministries and its teachings. For help using FaithSync, please ask the church secretary or administrator.",
+        { confidence: "none" });
+    }
+
+    // ── Daily limit for Members ───────────────────────────────────────────
+    if (isMember) {
+      const { data: used, error: usageError } = await caller.db.rpc("count_assistant_question");
+      if (!usageError && used != null) {
+        const n = Number(used);
+        usage = { limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - n) };
+        if (n > DAILY_LIMIT) {
+          return reply(tl
+            ? `Naabot na po ninyo ang ${DAILY_LIMIT} tanong para sa araw na ito. Puwede po ulit bukas — God bless!`
+            : `You've reached today's limit of ${DAILY_LIMIT} questions. You can ask again tomorrow — God bless!`,
+            { confidence: "none", limitReached: true });
+        }
+      }
+    }
+
     // ── My discipleship journey ─────────────────────────────────────────────
     if (intent.kind === "progress" || intent.kind === "module") {
       const groups = await loadJourney(caller.db, caller.userId);
@@ -127,6 +167,7 @@ export async function POST(req: NextRequest) {
         .filter((x): x is { d: typeof x.d; text: string } => !!x.text);
       if (found.length) {
         return NextResponse.json({
+          ...usage,
           answer: found[0].text,
           sources: found.slice(0, 3).map(({ d, text }) => ({ title: d.title, subtitle: d.doc_type, type: "document", excerpt: text })),
           confidence: "high",
@@ -166,7 +207,7 @@ export async function POST(req: NextRequest) {
       if (!sources.length) {
         return reply("I couldn't find anything about that in the uploaded documents. Try rephrasing, or ask a pastor directly.");
       }
-      return NextResponse.json({ answer: pickAnswer(sources[0].excerpt, analysis), sources, confidence: "medium", mode: "keyword" });
+      return NextResponse.json({ answer: pickAnswer(sources[0].excerpt, analysis), sources, confidence: "medium", mode: "keyword", ...usage });
     }
 
     // In a lesson, its own description is a passage too.
@@ -252,7 +293,7 @@ export async function POST(req: NextRequest) {
     if (tokenize(answer).length < 8) answer = best.content.slice(0, 600);
     if (confidence === "medium") answer = (tl ? "Ito po ang pinakamalapit na nakita ko:\n\n" : "Here's the closest thing I found:\n\n") + answer;
 
-    return NextResponse.json({ answer, sources, confidence, mode: vector ? "meaning+keyword" : "keyword" });
+    return NextResponse.json({ answer, sources, confidence, mode: vector ? "meaning+keyword" : "keyword", ...usage });
   } catch (err) {
     console.error("Chatbot API error:", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
