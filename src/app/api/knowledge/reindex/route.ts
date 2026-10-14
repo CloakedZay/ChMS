@@ -22,7 +22,8 @@ export async function GET(req: NextRequest) {
 }
 
 // Rebuild the index: every document of the branch (all branches for the
-// Pastor / Admin when none is picked) and every handout the caller may edit.
+// Pastor / Admin when none is picked), the documents for all branches (the
+// Pastor's, db/045) and every handout the caller may edit.
 export async function POST(req: NextRequest) {
   const caller = await getCaller(req, CONTENT_ROLES);
   if (caller instanceof NextResponse) return caller;
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
   const allBranches = GLOBAL_ROLES.includes(caller.role) && !church_id;
 
   try {
-    const report = await reindexAll(caller.db, churchId, allBranches);
+    const report = await reindexAll(caller.db, churchId, allBranches, caller.role === "pastor");
     return NextResponse.json({ success: true, ...report });
   } catch (err) {
     console.error("Rebuilding the search index failed:", err);

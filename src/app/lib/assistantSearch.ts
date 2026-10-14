@@ -10,6 +10,7 @@ import { correctQuestion } from "@/app/lib/spelling";
 export type Hit = {
   id: number; source_type: "document" | "handout"; source_id: string; title: string; subtitle: string | null;
   content: string; text_rank: number; similarity: number | null; fuzzy: number; score: number;
+  church_id?: string | null;   // documents: null = for all branches (db/045)
 };
 export type Ranked = Hit & { exact: number; cov: number; rank: number };
 
@@ -29,16 +30,18 @@ export async function fillSimilarity(hits: Hit[], vector: number[] | null): Prom
 
 // Meaning first, then how many of the question's OWN words a passage has
 // (so "prayer meeting" beats a lesson that only matches the synonyms of
-// "prayer"), then synonym coverage.
+// "prayer"), then synonym coverage. A document for all branches gives way
+// to the branch's own one when both say much the same.
 export function rerank(hits: Hit[], analysis: Analysis): Ranked[] {
   return hits
     .map((h) => {
       const text = `${h.title} ${h.content}`;
       const exact = exactCoverage(text, analysis);
       const cov = coverage(text, analysis);
-      const rank = h.similarity != null
+      const shared = h.source_type === "document" && h.church_id === null ? 0.02 : 0;
+      const rank = (h.similarity != null
         ? h.similarity + 0.15 * exact + 0.05 * cov + (h.text_rank > 0 ? 0.02 : 0)
-        : exact + 0.5 * cov + Math.min(h.text_rank, 1) + 0.3 * h.fuzzy;
+        : exact + 0.5 * cov + Math.min(h.text_rank, 1) + 0.3 * h.fuzzy) - shared;
       return { ...h, exact, cov, rank };
     })
     .sort((a, b) => b.rank - a.rank);

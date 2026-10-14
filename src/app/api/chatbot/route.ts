@@ -59,7 +59,7 @@ function findHeadingChunk(content: string, n: number): string | null {
 }
 
 // ── Before db/035 is run: the old word-count search ──────────────────────────
-function legacySearch(docs: { title: string; doc_type: string; content: string }[], analysis: Analysis): Source[] {
+function legacySearch(docs: { title: string; content: string }[], analysis: Analysis): Source[] {
   const words = analysis.searchTerms;
   if (!words.length) return [];
   const score = (text: string) => {
@@ -71,7 +71,7 @@ function legacySearch(docs: { title: string; doc_type: string; content: string }
     .filter((c) => c.s > 0)
     .sort((a, b) => b.s - a.s)
     .slice(0, 3)
-    .map(({ d, text }) => ({ title: d.title, subtitle: d.doc_type, type: "document" as const, excerpt: text }));
+    .map(({ d, text }) => ({ title: d.title, subtitle: null, type: "document" as const, excerpt: text }));
 }
 
 export async function POST(req: NextRequest) {
@@ -92,6 +92,9 @@ export async function POST(req: NextRequest) {
     const question = String(raw || "").trim().slice(0, 500);
     const church_id = resolveChurchId(caller, requestedChurch);
     if (!question) return NextResponse.json({ error: "Missing question" }, { status: 400 });
+    if (church_id && !/^[0-9a-f-]{36}$/i.test(church_id)) return NextResponse.json({ error: "Bad church_id" }, { status: 400 });
+    // The branch's documents plus the ones for all branches (db/045).
+    const branchDocs = church_id ? `church_id.eq.${church_id},church_id.is.null` : "church_id.is.null";
 
     // "Ask about this lesson": answer only from one module (db/037).
     const moduleId = rawModule != null && /^\d+$/.test(String(rawModule)) ? Number(rawModule) : null;
@@ -172,7 +175,7 @@ export async function POST(req: NextRequest) {
     // ── "What is in chapter / article N" ───────────────────────────────────
     if (intent.kind === "chapter" && church_id && !lesson) {
       const { data: docs } = await caller.db.from("chatbot_documents")
-        .select("title, content, doc_type").eq("church_id", church_id).eq("is_active", true);
+        .select("title, content").or(branchDocs).eq("is_active", true);
       const found = (docs || [])
         .map((d) => ({ d, text: findHeadingChunk(d.content, intent.number) }))
         .filter((x): x is { d: typeof x.d; text: string } => !!x.text);
@@ -180,7 +183,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           ...usage,
           answer: found[0].text,
-          sources: found.slice(0, 3).map(({ d, text }) => ({ title: d.title, subtitle: d.doc_type, type: "document", excerpt: text })),
+          sources: found.slice(0, 3).map(({ d, text }) => ({ title: d.title, subtitle: null, type: "document", excerpt: text })),
           confidence: "high",
         });
       }
@@ -233,7 +236,7 @@ export async function POST(req: NextRequest) {
       // Search index not set up yet (db/035) → old keyword search on documents.
       if (!/search_knowledge|does not exist|schema cache/i.test(error.message)) throw error;
       const { data: docs } = await caller.db.from("chatbot_documents")
-        .select("title, content, doc_type").eq("church_id", church_id).eq("is_active", true);
+        .select("title, content").or(branchDocs).eq("is_active", true);
       const sources = legacySearch(docs || [], analysis);
       if (!sources.length) {
         return reply("I couldn't find anything about that in the uploaded documents. Try rephrasing, or ask a pastor directly.");

@@ -7,26 +7,34 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// List documents for a church
+// Documents with no branch are shared by every branch (db/045); only the
+// Pastor may add, move or change them.
+const SHARE_ROLE = "pastor";
+const needsSetup = (msg: string) => /null value in column "(church_id|doc_type)"/i.test(msg)
+  ? "This needs db/045_shared_documents.sql. Ask the administrator to run it."
+  : msg;
+
+// List a church's documents, plus the ones shared by all branches
 export async function GET(req: NextRequest) {
   const caller = await getCaller(req, AI_DOCUMENT_VIEWERS);
   if (caller instanceof NextResponse) return caller;
 
   const church_id = resolveChurchId(caller, req.nextUrl.searchParams.get("church_id"));
-  if (!church_id) {
+  if (!church_id || !UUID.test(church_id)) {
     return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
   }
 
   const list = (columns: string) => caller.db
     .from("chatbot_documents")
     .select(columns)
-    .eq("church_id", church_id)
+    .or(`church_id.eq.${church_id},church_id.is.null`)
     .order("created_at", { ascending: false });
-  let { data, error } = await list("id, title, doc_type, is_active, staff_only, created_at");
+  let { data, error } = await list("id, title, church_id, is_active, staff_only, created_at");
   // Before db/039 there is no staff_only column.
   if (error && /staff_only/.test(error.message)) {
-    ({ data, error } = await list("id, title, doc_type, is_active, created_at"));
+    ({ data, error } = await list("id, title, church_id, is_active, created_at"));
   }
 
   if (error) {
@@ -45,12 +53,15 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file");
     const title = formData.get("title")?.toString().trim();
-    const docType = formData.get("doc_type")?.toString().trim() || "Other";
     // "Staff only" documents (db/039) are never used to answer Members.
     const staffOnly = formData.get("staff_only")?.toString() === "true";
-    const churchId = resolveChurchId(caller, formData.get("church_id")?.toString());
+    const allBranches = formData.get("all_branches")?.toString() === "true";
+    if (allBranches && caller.role !== SHARE_ROLE) {
+      return NextResponse.json({ error: "Only the Pastor can add documents for all branches." }, { status: 403 });
+    }
+    const churchId = allBranches ? null : resolveChurchId(caller, formData.get("church_id")?.toString());
 
-    if (!(file instanceof File) || !title || !churchId) {
+    if (!(file instanceof File) || !title || (!allBranches && !churchId)) {
       return NextResponse.json(
         { error: "Missing file, title, or church_id" },
         { status: 400 }
@@ -79,15 +90,14 @@ export async function POST(req: NextRequest) {
     const { data: saved, error } = await caller.db.from("chatbot_documents").insert({
       title,
       content,
-      doc_type: docType,
       church_id: churchId,
       is_active: true,
       created_by: caller.userId,
       ...(staffOnly ? { staff_only: true } : {}),
-    }).select("id, title, doc_type, church_id, content, is_active").single();
+    }).select("id, title, church_id, content, is_active").single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: needsSetup(error.message) }, { status: 500 });
     }
 
     // Add it to the assistant's search index. The upload still counts if
@@ -108,17 +118,27 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Toggle a document's active state or who may use it ("staff only", db/039)
+// Toggle a document's active state, who may use it ("staff only", db/039)
+// or which branches use it (all_branches, db/045: back to church_id when
+// false)
 export async function PATCH(req: NextRequest) {
   const caller = await getCaller(req, CONTENT_ROLES);
   if (caller instanceof NextResponse) return caller;
 
-  const { id, is_active, staff_only } = await req.json();
-  const changes: Record<string, boolean> = {};
+  const { id, is_active, staff_only, all_branches, church_id } = await req.json();
+  const changes: Record<string, boolean | string | null> = {};
   if (typeof is_active === "boolean") changes.is_active = is_active;
   if (typeof staff_only === "boolean") changes.staff_only = staff_only;
+  if (typeof all_branches === "boolean") {
+    if (caller.role !== SHARE_ROLE) {
+      return NextResponse.json({ error: "Only the Pastor can choose which branches use a document." }, { status: 403 });
+    }
+    const branch = all_branches ? null : resolveChurchId(caller, church_id);
+    if (!all_branches && !branch) return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
+    changes.church_id = branch;
+  }
   if (!id || !Object.keys(changes).length) {
-    return NextResponse.json({ error: "Missing id, is_active or staff_only" }, { status: 400 });
+    return NextResponse.json({ error: "Missing id, is_active, staff_only or all_branches" }, { status: 400 });
   }
 
   // RLS silently skips rows from other churches, so check something changed.
@@ -129,7 +149,7 @@ export async function PATCH(req: NextRequest) {
     .select("id");
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: needsSetup(error.message) }, { status: 500 });
   }
   if (!data?.length) {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });

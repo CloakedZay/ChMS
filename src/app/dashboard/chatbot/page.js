@@ -8,13 +8,12 @@ import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import {
   Send, Bot, User, Sparkles, Loader2, Sun, Moon,
-  Upload, FileText, Trash2, Eye, EyeOff, File as FileIcon, RefreshCw
+  Upload, FileText, Trash2, Eye, EyeOff, File as FileIcon, RefreshCw, Globe2
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import ChatHistory from "@/app/components/ChatHistory";
 import { useAssistantChats } from "@/app/lib/useAssistantChats";
 
-const DOC_TYPES = ["Policy", "Handbook", "FAQ", "Announcement", "Other"];
 const GLOBAL_ROLES = ["admin", "pastor"];
 
 // ─── Theme token map — same pattern as DashboardPage.js ────────────────────
@@ -53,6 +52,8 @@ export default function ChatbotPage() {
   // Admin sees the documents read-only; Finance and Secretary only chat.
   const canSeeDocs  = can(role, 'aiDocuments');
   const canEditDocs = can(role, 'aiDocuments', 'edit');
+  // Documents for all branches are the Pastor's (db/045).
+  const canShareDocs = role === 'pastor';
 
   const [activeTab, setActiveTab] = useState("chat");
 
@@ -149,7 +150,7 @@ export default function ChatbotPage() {
       {activeTab === "chat" || !canSeeDocs ? (
         <ChatPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} />
       ) : (
-        <DocumentsPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} canEdit={canEditDocs} />
+        <DocumentsPanel t={t} dark={dark} churchId={churchId} loadingChurch={profileLoading} canEdit={canEditDocs} canShare={canShareDocs} />
       )}
     </div>
   );
@@ -285,12 +286,12 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
 
 // ─── Documents tab ───────────────────────────────────────────────────────────
 
-function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
+function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit, canShare }) {
   const [documents, setDocuments] = useState([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [title, setTitle] = useState("");
-  const [docType, setDocType] = useState(DOC_TYPES[0]);
   const [staffOnly, setStaffOnly] = useState(false);
+  const [allBranches, setAllBranches] = useState(false);
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -335,9 +336,9 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("title", title.trim());
-      formData.append("doc_type", docType);
       formData.append("church_id", churchId);
       formData.append("staff_only", staffOnly ? "true" : "false");
+      if (canShare && allBranches) formData.append("all_branches", "true");
 
       const res = await authFetch("/api/chatbot/documents", { method: "POST", body: formData });
       const data = await res.json();
@@ -349,8 +350,8 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
 
       if (data.indexWarning) setUploadError(`Uploaded, but not yet searchable: ${data.indexWarning}. Use “Rebuild search index” to retry.`);
       setTitle("");
-      setDocType(DOC_TYPES[0]);
       setStaffOnly(false);
+      setAllBranches(false);
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       await fetchDocuments();
@@ -390,8 +391,30 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
     }
   }
 
+  // One branch <-> all branches (the Pastor only). Back to one branch means
+  // the branch picked above.
+  async function toggleShared(doc) {
+    const shared = !doc.church_id;
+    if (!confirm(shared
+      ? `Use "${doc.title}" in this branch only? The other branches' assistants will stop using it.`
+      : `Use "${doc.title}" in every branch? All branches' assistants will answer from it, and only the Pastor can change or delete it.`)) return;
+    setBusyId(doc.id);
+    try {
+      const res = await authFetch("/api/chatbot/documents", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: doc.id, all_branches: !shared, church_id: churchId }),
+      });
+      if (res.ok) setDocuments((prev) => prev.map((d) => d.id === doc.id ? { ...d, church_id: shared ? churchId : null } : d));
+      else alert((await res.json()).error || "Could not change it.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleDelete(doc) {
-    if (!confirm(`Delete "${doc.title}"? This can't be undone.`)) return;
+    const where = doc.church_id ? "" : " Every branch uses it.";
+    if (!confirm(`Delete "${doc.title}"?${where} This can't be undone.`)) return;
     setBusyId(doc.id);
     try {
       await authFetch(`/api/chatbot/documents?id=${encodeURIComponent(doc.id)}`, { method: "DELETE" });
@@ -425,27 +448,15 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 backdrop-blur-sm`}>
         <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-4`}>Upload a Document</h3>
         <form onSubmit={handleUpload} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>Title</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Membership Handbook"
-                className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-4 py-2.5 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
-              />
-            </div>
-            <div>
-              <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>Document Type</label>
-              <select
-                value={docType}
-                onChange={(e) => setDocType(e.target.value)}
-                className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-4 py-2.5 text-sm ${t.inputText} focus:outline-none focus:border-blue-500 transition-colors`}
-              >
-                {DOC_TYPES.map((dt) => <option key={dt} value={dt}>{dt}</option>)}
-              </select>
-            </div>
+          <div>
+            <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>Title</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Membership Handbook"
+              className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-4 py-2.5 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
+            />
           </div>
 
           <label className={`flex items-start gap-2.5 text-xs ${t.textSub} cursor-pointer w-fit`}>
@@ -455,6 +466,16 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
               (e.g. the FaithSync staff guide).
             </span>
           </label>
+
+          {canShare && (
+            <label className={`flex items-start gap-2.5 text-xs ${t.textSub} cursor-pointer w-fit`}>
+              <input type="checkbox" checked={allBranches} onChange={(e) => setAllBranches(e.target.checked)} className="mt-0.5 accent-[#173f35]" />
+              <span>
+                <span className={`font-bold ${t.textPrimary}`}>All branches</span> — every branch&apos;s assistant uses it, not just this one
+                (e.g. books, the statement of faith).
+              </span>
+            </label>
+          )}
 
           <label className={`flex items-center justify-center gap-2 w-full border border-dashed rounded-xl py-3 cursor-pointer transition-colors text-xs font-bold ${
             uploading ? `${t.uploadBorderDisabled} cursor-not-allowed` : t.uploadBorder
@@ -508,18 +529,37 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit }) {
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{doc.title}</p>
                   <p className={`text-[10px] ${t.textMuted} mt-0.5`}>
-                    {doc.doc_type}
-                    {doc.created_at ? ` · ${new Date(doc.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                    {doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
                     {!doc.is_active ? ' · Inactive' : ''}
                   </p>
-                  {doc.staff_only && (
-                    <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#3b6e9e]/15 text-[#5b8cbd]">
-                      Staff only
-                    </span>
+                  {(!doc.church_id || doc.staff_only) && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {!doc.church_id && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500">
+                          <Globe2 className="w-3 h-3" /> All branches
+                        </span>
+                      )}
+                      {doc.staff_only && (
+                        <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#3b6e9e]/15 text-[#5b8cbd]">
+                          Staff only
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
-                {canEdit && (
+                {/* A Leader can't change documents for all branches (db/045). */}
+                {canEdit && (doc.church_id || canShare) && (
                 <div className="flex items-center gap-1 shrink-0">
+                  {canShare && (
+                    <button
+                      onClick={() => toggleShared(doc)}
+                      disabled={busyId === doc.id}
+                      title={doc.church_id ? "This branch only — use it in every branch" : "All branches — use it in this branch only"}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-colors disabled:opacity-50 ${t.textSub} hover:text-blue-400 hover:bg-blue-500/10`}
+                    >
+                      {doc.church_id ? "This branch" : "All branches"}
+                    </button>
+                  )}
                   <button
                     onClick={() => toggleStaffOnly(doc)}
                     disabled={busyId === doc.id}

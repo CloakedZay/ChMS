@@ -10,7 +10,8 @@ import { extractText, canExtract } from "@/app/lib/extractText";
 
 export type IndexResult = { chunks: number; semantic: boolean; skipped?: string };
 
-type DocumentRow = { id: string | number; title: string; doc_type: string | null; church_id: string; content: string; is_active?: boolean | null };
+// church_id null = a document for all branches (db/045)
+type DocumentRow = { id: string | number; title: string; church_id: string | null; content: string; is_active?: boolean | null };
 type HandoutRow = { id: string | number; module_id: number; file_name: string; file_path: string; description: string | null };
 
 async function replaceChunks(
@@ -46,7 +47,7 @@ export async function indexDocument(db: SupabaseClient, doc: DocumentRow): Promi
     church_id: doc.church_id,
     module_id: null,
     title: doc.title,
-    subtitle: doc.doc_type || null,
+    subtitle: null,
     is_active: doc.is_active !== false,
   }, doc.content);
 }
@@ -80,13 +81,16 @@ export async function getHandout(db: SupabaseClient, id: string | number): Promi
 }
 
 // Rebuild everything the caller may index: documents of the branch (or
-// every branch for the Pastor when no branch is picked) and all handouts of
-// modules they may edit. Failures are collected, not fatal.
-export async function reindexAll(db: SupabaseClient, churchId: string | null, includeAllBranches: boolean) {
+// every branch for the Pastor when no branch is picked), the documents for
+// all branches if includeShared (only the Pastor may write those), and all
+// handouts of modules they may edit. Failures are collected, not fatal.
+export async function reindexAll(db: SupabaseClient, churchId: string | null, includeAllBranches: boolean, includeShared: boolean) {
   const report = { documents: 0, handouts: 0, chunks: 0, semantic: true, skipped: [] as string[], failed: [] as string[] };
 
-  let q = db.from("chatbot_documents").select("id, title, doc_type, church_id, content, is_active");
-  if (!includeAllBranches && churchId) q = q.eq("church_id", churchId);
+  let q = db.from("chatbot_documents").select("id, title, church_id, content, is_active");
+  if (!includeAllBranches && churchId) {
+    q = includeShared ? q.or(`church_id.eq.${churchId},church_id.is.null`) : q.eq("church_id", churchId);
+  }
   const { data: docs, error: docErr } = await q;
   if (docErr) throw new Error(docErr.message);
 
