@@ -8,12 +8,13 @@ import {
 import { supabase } from '@/app/lib/supabase';
 import { useAuth } from '@/app/context/AuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
-import { can } from '@/app/lib/permissions';
+import { can, GLOBAL_ROLES } from '@/app/lib/permissions';
 import { levelBadge } from '@/app/lib/roleColors';
 import BranchLabel from '@/app/components/BranchLabel';
 import { notifyFollowUpChanged, MISSED_EVENTS } from '@/app/lib/useFollowUpReminder';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
+import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 // Member inactivity and follow-up (db/032).
 // "Last seen" = the later of a member's last sign-in and last page visit,
 // for members whose record is linked to a login. A member is flagged when
@@ -22,7 +23,7 @@ import Pagination, { usePaged } from '@/app/components/Pagination';
 // the Secretary has marked them inactive. Logging a follow-up clears the
 // flag for that many days.
 
-const THRESHOLDS = [14, 30, 60, 90];
+const THRESHOLDS = [7, 14, 30, 60, 90];
 const OUTCOMES = {
   contacted:     { label: 'Contacted',        cls: 'bg-blue-500/15 text-blue-500' },
   no_answer:     { label: 'No answer',        cls: 'bg-orange-500/15 text-orange-500' },
@@ -48,6 +49,8 @@ const ago = (iso) => {
   return `${Math.round(d / 30)} months ago`;
 };
 const shortDate = (iso) => new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
+// A timestamp's date in the Philippines, "YYYY-MM-DD" (to compare with event dates).
+const manilaDate = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 const eventDate = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 
 export default function FollowUpPage() {
@@ -68,7 +71,20 @@ export default function FollowUpPage() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [alsoActive, setAlsoActive] = useState(true);    // "Came back" → mark Active too
   const [visitors, setVisitors] = useState(null);         // db/041; [] if not set up
+  // The Pastor sees every branch: which one to show, and their names.
+  const isGlobal = GLOBAL_ROLES.includes(role);
+  const [branch, setBranch] = useState('all');
+  const [churches, setChurches] = useState([]);
+  useEffect(() => {
+    if (!isGlobal) return;
+    supabase.from('churches').select('id, name').order('name').then(({ data }) => setChurches(data || []));
+  }, [isGlobal]);
+  const branchName = (id) => churches.find((c) => c.id === id)?.name || 'No branch';
+  const inBranch = (cid) => branch === 'all' || cid === branch;
+  // Branch shown on each row only when several branches are listed together.
+  const showBranch = isGlobal && branch === 'all' && churches.length > 1;
 
   const t = dark
     ? { page: 'bg-[#111815]', card: 'bg-[#1b2420] border-slate-800/60', text: 'text-white', sub: 'text-slate-400', muted: 'text-slate-500',
@@ -104,15 +120,15 @@ export default function FollowUpPage() {
   }, []);
 
   async function makeMember(v) {
-    if (!window.confirm(`Add ${v.full_name} as a member? Their ${v.visits} visit${v.visits === 1 ? '' : 's'} will count as attendance, and they'll leave the visitor list.`)) return;
+    if (!await confirmDialog(`Add ${v.full_name} as a member? Their ${v.visits} visit${v.visits === 1 ? '' : 's'} will count as attendance, and they'll leave the visitor list.`)) return;
     const { error } = await supabase.rpc('make_visitor_member', { p_visitor: v.visitor_id });
-    if (error) alert(error.message); else { load(); loadVisitors(); }
+    if (error) alertDialog(error.message); else { load(); loadVisitors(); }
   }
 
   async function removeVisitor(v) {
-    if (!window.confirm(`Delete ${v.full_name} and their phone number from the visitor list? Their visits are removed from the attendance counts too.`)) return;
+    if (!await confirmDialog(`Delete ${v.full_name} and their phone number from the visitor list? Their visits are removed from the attendance counts too.`)) return;
     const { error } = await supabase.from('visitors').delete().eq('id', v.visitor_id);
-    if (error) alert(error.message); else loadVisitors();
+    if (error) alertDialog(error.message); else loadVisitors();
   }
 
   async function loadHistory(memberId) {
@@ -121,31 +137,43 @@ export default function FollowUpPage() {
   }
 
   // Classify every member for the chosen threshold.
-  const people = useMemo(() => (rows || []).map((r) => {
+  const people = useMemo(() => (rows || []).filter((r) => branch === 'all' || r.church_id === branch).map((r) => {
     const away = daysSince(r.last_seen);
     const sinceFollowUp = daysSince(r.last_followup_at);
-    const quiet = r.has_login && (away === null || away >= threshold);
+    // A login never used counts from when it was made (db/052), so new
+    // logins aren't flagged before they've had a chance to sign in.
+    const loginAge = daysSince(r.login_created_at);
+    const quiet = r.has_login && (away !== null ? away >= threshold : loginAge === null || loginAge >= threshold);
     const missing = (r.missed_events ?? 0) >= MISSED_EVENTS;   // undefined before db/046
-    const flagged = quiet || missing || r.member_status === 'inactive';
+    // Latest follow-up "Not returning": rest until they show up again after it.
+    const notReturning = r.last_outcome === 'not_returning'
+      && !(r.last_seen && new Date(r.last_seen) > new Date(r.last_followup_at))
+      && !(r.last_attended && r.last_attended > manilaDate(r.last_followup_at));
+    const flagged = (quiet || missing || r.member_status === 'inactive') && !notReturning;
     const followedRecently = sinceFollowUp !== null && sinceFollowUp < threshold;
-    return { ...r, away, quiet, missing, flagged, followedRecently, needs: flagged && !followedRecently };
-  }), [rows, threshold]);
+    return { ...r, away, quiet, missing, notReturning, flagged, followedRecently, needs: flagged && !followedRecently };
+  }), [rows, threshold, branch]);
 
   const counts = {
     needs: people.filter((p) => p.needs).length,
     followed: people.filter((p) => p.flagged && p.followedRecently).length,
+    notReturning: people.filter((p) => p.notReturning).length,
     noLogin: people.filter((p) => !p.has_login).length,
     all: people.length,
   };
 
   const q = search.trim().toLowerCase();
   const shown = people
-    .filter((p) => (tab === 'needs' ? p.needs : tab === 'followed' ? p.flagged && p.followedRecently : tab === 'noLogin' ? !p.has_login : true))
+    .filter((p) => (tab === 'needs' ? p.needs : tab === 'followed' ? p.flagged && p.followedRecently
+      : tab === 'notReturning' ? p.notReturning : tab === 'noLogin' ? !p.has_login : true))
     .filter((p) => !q || p.full_name?.toLowerCase().includes(q))
     // longest away first; never-seen at the top
     .sort((a, b) => (b.away ?? Infinity) - (a.away ?? Infinity) || a.full_name.localeCompare(b.full_name));
 
-  function openLog(p) { setLogFor(p); setOutcome('contacted'); setNote(''); setFormError(''); }
+  function openLog(p) { setLogFor(p); setOutcome('contacted'); setNote(''); setFormError(''); setAlsoActive(true); }
+  // "Came back" for someone marked Inactive: offer to mark them Active too
+  // (Pastor, Secretary — who may change status, db/006).
+  const offerActive = logFor && outcome === 'returned' && logFor.member_status === 'inactive' && canMakeMember;
 
   async function saveLog(e) {
     e.preventDefault();
@@ -155,6 +183,10 @@ export default function FollowUpPage() {
       .insert([{ member_id: logFor.member_id, outcome, note: note.trim() || null }]);
     setSaving(false);
     if (error) { setFormError(error.message); return; }
+    if (offerActive && alsoActive) {
+      const { error: e2 } = await supabase.from('members').update({ status: 'active' }).eq('id', logFor.member_id);
+      if (e2) alertDialog(`The follow-up was saved, but ${logFor.full_name} couldn't be marked Active: ${e2.message}`);
+    }
     const id = logFor.member_id;
     setLogFor(null);
     notifyFollowUpChanged();
@@ -164,9 +196,9 @@ export default function FollowUpPage() {
 
   async function changeStatus(p, status) {
     if (status === p.member_status) return;
-    if (!window.confirm(`Mark ${p.full_name} as ${status}?`)) return;
+    if (!await confirmDialog(`Mark ${p.full_name} as ${status}?`)) return;
     const { error } = await supabase.from('members').update({ status }).eq('id', p.member_id);
-    if (error) alert(error.message); else { load(); notifyFollowUpChanged(); }
+    if (error) alertDialog(error.message); else { load(); notifyFollowUpChanged(); }
   }
 
   function toggleHistory(id) {
@@ -175,17 +207,19 @@ export default function FollowUpPage() {
     loadHistory(id);
   }
 
+  const branchVisitors = (visitors || []).filter((v) => inBranch(v.church_id));
   const TABS = [
     ['needs', 'Needs follow-up', counts.needs],
     ['followed', 'Followed up', counts.followed],
+    ['notReturning', 'Not returning', counts.notReturning],
     ['noLogin', 'No login', counts.noLogin],
     ['all', 'All members', counts.all],
-    ['visitors', 'Visitors', visitors?.length ?? ''],
+    ['visitors', 'Visitors', visitors ? branchVisitors.length : ''],
   ];
-  const shownVisitors = (visitors || []).filter((v) => !q || v.full_name.toLowerCase().includes(q) || (v.phone || '').includes(q));
+  const shownVisitors = branchVisitors.filter((v) => !q || v.full_name.toLowerCase().includes(q) || (v.phone || '').includes(q));
 
   // Long lists are shown 10 at a time (components/Pagination).
-  const pg = usePaged(shown, 10, `${tab}|${search}|${threshold}`);
+  const pg = usePaged(shown, 10, `${tab}|${search}|${threshold}|${branch}`);
 
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.page}`}>
@@ -226,7 +260,14 @@ export default function FollowUpPage() {
             </button>
           ))}
         </div>
-        <div className="flex gap-3 lg:ml-auto">
+        <div className="flex flex-wrap gap-3 lg:ml-auto">
+          {isGlobal && churches.length > 1 && (
+            <select value={branch} onChange={(e) => setBranch(e.target.value)} aria-label="Branch"
+              className={`border rounded-xl px-3 h-10 text-sm ${t.input}`}>
+              <option value="all">All branches</option>
+              {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
           {tab !== 'visitors' && <label className={`flex items-center gap-2 text-sm ${t.sub}`}>
             <Clock size={15} />
             <span className="whitespace-nowrap">Not seen in</span>
@@ -246,6 +287,7 @@ export default function FollowUpPage() {
       {/* List */}
       {tab === 'visitors' ? (
         <VisitorList t={t} visitors={visitors === null ? null : shownVisitors} searching={!!q}
+          branchOf={showBranch ? (v) => branchName(v.church_id) : null}
           canMakeMember={canMakeMember} onMakeMember={makeMember} onRemove={removeVisitor} />
       ) : rows === null ? (
         <div className="space-y-3">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-20 w-full rounded-2xl" />)}</div>
@@ -272,6 +314,7 @@ export default function FollowUpPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className={`font-bold ${t.text}`}>{p.full_name}</p>
+                      {showBranch && <span className={`text-[11px] font-semibold ${t.muted}`}>{branchName(p.church_id)}</span>}
                       {p.member_role && (
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border capitalize ${levelBadge(p.member_role, dark)}`}>{p.member_role}</span>
                       )}
@@ -279,7 +322,8 @@ export default function FollowUpPage() {
                     </div>
                     <p className={`text-xs mt-1 ${t.sub}`}>
                       {p.has_login
-                        ? <>Last seen: <span className={`font-semibold ${p.quiet ? 'text-rose-500' : ''}`}>{ago(p.last_seen)}</span></>
+                        ? <>Last seen: <span className={`font-semibold ${p.quiet ? 'text-rose-500' : ''}`}>{ago(p.last_seen)}</span>
+                            {!p.last_seen && p.login_created_at && <> (login created {ago(p.login_created_at).toLowerCase()})</>}</>
                         : <span className={t.muted}>No login — app activity isn&apos;t tracked</span>}
                       {p.missing
                         ? <> · <span className="font-semibold text-rose-500">Missed the last {p.missed_events} events</span>{p.last_attended ? ` (last came ${eventDate(p.last_attended)})` : ''}</>
@@ -366,11 +410,23 @@ export default function FollowUpPage() {
               ))}
             </div>
 
+            {offerActive && (
+              <label className={`flex items-start gap-2.5 text-xs mb-4 cursor-pointer ${t.sub}`}>
+                <input type="checkbox" checked={alsoActive} onChange={(e) => setAlsoActive(e.target.checked)} className="mt-0.5 accent-[#2f6b58]" />
+                <span><span className={`font-semibold ${t.text}`}>Also mark {logFor.full_name} as Active</span> — they&apos;re marked Inactive now, and would be flagged again later.</span>
+              </label>
+            )}
+            {outcome === 'not_returning' && (
+              <p className={`text-xs mb-4 ${t.sub}`}>
+                They won&apos;t be reminded about again and move to the <b>Not returning</b> tab — unless they sign in or attend an event after today.
+              </p>
+            )}
+
             <label htmlFor="fu-note" className={`block text-xs font-semibold mb-1.5 ${t.sub}`}>Note <span className="font-normal">(optional)</span></label>
             <textarea id="fu-note" rows={4} value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000}
               placeholder="e.g. Called — busy with work, will attend next Sunday."
               className={`w-full border rounded-xl px-4 py-2.5 text-sm resize-y ${t.input}`} />
-            <p className={`text-[11px] mt-1.5 ${t.muted}`}>Visible to the Pastor, to Leaders and the Secretary of this branch, and to the head of the member's ministry. Members never see it.</p>
+            <p className={`text-[11px] mt-1.5 ${t.muted}`}>Visible to the Pastor, and to the Leaders and the Secretary of this branch. Members never see it.</p>
 
             {formError && <p className="mt-3 text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{formError}</p>}
 
@@ -393,7 +449,7 @@ export default function FollowUpPage() {
 // Visitors written on event attendance sheets (db/041): call or text them,
 // and add the ones who keep coming as members. Removed automatically
 // 6 months after their last visit.
-function VisitorList({ t, visitors, searching, canMakeMember, onMakeMember, onRemove }) {
+function VisitorList({ t, visitors, searching, branchOf, canMakeMember, onMakeMember, onRemove }) {
   if (visitors === null) {
     return <div className="space-y-3">{[0, 1, 2].map((i) => <div key={i} className="skeleton h-20 w-full rounded-2xl" />)}</div>;
   }
@@ -414,6 +470,7 @@ function VisitorList({ t, visitors, searching, canMakeMember, onMakeMember, onRe
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className={`font-bold ${t.text}`}>{v.full_name}</p>
+              {branchOf && <span className={`text-[11px] font-semibold ${t.muted}`}>{branchOf(v)}</span>}
               {v.visits <= 1
                 ? <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600">First-timer</span>
                 : <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-500">{v.visits} visits</span>}
