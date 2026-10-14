@@ -6,6 +6,7 @@ import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can, ROLE_LABELS } from "@/app/lib/permissions";
 import { History, ChevronDown, ChevronRight, Loader2, Sun, Moon } from "lucide-react";
+import DatePicker from "@/app/components/DatePicker";
 
 // Who changed what, and when. Entries are written only by database
 // triggers (db/010); this page just reads them. Pastor sees everything;
@@ -264,8 +265,8 @@ export default function ActivityPage() {
           <option value="all">All actions</option>
           {ACTIONS.map((a) => <option key={a} value={a} className="capitalize">{a}</option>)}
         </select>
-        <input type="date" value={dateFrom} onChange={onFilter(setDateFrom)} className={selectStyle} title="From" />
-        <input type="date" value={dateTo} onChange={onFilter(setDateTo)} className={selectStyle} title="To" />
+        <DatePicker value={dateFrom} max={dateTo || undefined} onChange={onFilter(setDateFrom)} placeholder="From" weekday={false} ariaLabel="From date" className={`${selectStyle} min-w-[9.5rem]`} />
+        <DatePicker value={dateTo} min={dateFrom || undefined} onChange={onFilter(setDateTo)} placeholder="To" weekday={false} ariaLabel="To date" className={`${selectStyle} min-w-[9.5rem]`} />
       </div>
 
       {/* List */}
@@ -392,9 +393,9 @@ function ScreenTimePanel({ t, people, selectStyle }) {
     <>
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
         <span className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>From</span>
-        <input type="date" value={dateFrom} max={dateTo} onChange={onDate(setDateFrom)} className={selectStyle} />
+        <DatePicker value={dateFrom} max={dateTo} onChange={onDate(setDateFrom)} clearable={false} weekday={false} ariaLabel="From date" className={`${selectStyle} min-w-[9.5rem]`} />
         <span className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>To</span>
-        <input type="date" value={dateTo} min={dateFrom} onChange={onDate(setDateTo)} className={selectStyle} />
+        <DatePicker value={dateTo} min={dateFrom} onChange={onDate(setDateTo)} clearable={false} weekday={false} ariaLabel="To date" className={`${selectStyle} min-w-[9.5rem]`} />
         <span className={`text-xs ${t.textMuted} sm:ml-auto`}>Only time with the page open and visible is counted.</span>
       </div>
 

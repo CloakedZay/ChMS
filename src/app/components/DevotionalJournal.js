@@ -6,6 +6,7 @@ import { supabase } from '@/app/lib/supabase';
 import { useAuth } from '@/app/context/AuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
 import ScriptureLink from '@/app/components/ScriptureLink';
+import DatePicker from '@/app/components/DatePicker';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 // Devotional journal (db/027). Private: every person reads and writes only
@@ -241,7 +242,7 @@ export default function DevotionalJournal() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className={label} htmlFor="j-date">Date</label>
-                  <input id="j-date" type="date" name="entry_date" value={form.entry_date} onChange={change} required className={field} />
+                  <DatePicker id="j-date" name="entry_date" value={form.entry_date} onChange={change} required className={field} />
                 </div>
                 <div>
                   <label className={label} htmlFor="j-verse">Scripture</label>

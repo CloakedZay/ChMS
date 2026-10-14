@@ -10,6 +10,8 @@ import { ROLE_LABELS } from '@/app/lib/permissions';
 import { levelBadge } from '@/app/lib/roleColors';
 import { branchLabelText } from '@/app/components/BranchLabel';
 import GoogleAccountCard from '@/app/components/GoogleAccountCard';
+import DatePicker from '@/app/components/DatePicker';
+import { phToday } from '@/app/lib/phDate';
 
 // "My profile" for everyone — the member portal and the staff dashboard.
 //   * display name (profiles.full_name — the user's own row)
@@ -127,7 +129,7 @@ export default function ProfileSettings() {
                 <div className="skeleton h-10 w-full" />
               ) : (
                 <>
-                  <input type="date" value={birthday} max={new Date().toISOString().split('T')[0]} aria-label="Birthday"
+                  <DatePicker value={birthday} max={phToday()} yearPicker weekday={false} placeholder="Pick your birthday" ariaLabel="Birthday"
                     onChange={(e) => setBirthday(e.target.value)} className={field} />
                   <p className={`text-[11px] mt-1.5 ${t.muted}`}>Optional. Only the month and day are ever shown — never the year or your age.</p>
 

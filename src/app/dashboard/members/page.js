@@ -12,6 +12,8 @@ import BranchLabel from "@/app/components/BranchLabel";
 import { levelBadge } from "@/app/lib/roleColors";
 
 import Pagination, { usePaged } from "@/app/components/Pagination";
+import DatePicker from "@/app/components/DatePicker";
+import { phToday } from "@/app/lib/phDate";
 const EMPTY_FORM = {
   full_name: '',
   role: '',
@@ -767,12 +769,8 @@ export default function MembersPage() {
               </Field>
 
               <Field label="Birthday (optional)" t={t}>
-                <input
-                  type="date" name="birth_date" value={form.birth_date}
-                  onChange={handleChange}
-                  max={new Date().toISOString().split('T')[0]}
-                  className={inputStyle(t)}
-                />
+                <DatePicker name="birth_date" value={form.birth_date} onChange={handleChange} max={phToday()}
+                  yearPicker weekday={false} placeholder="Pick their birthday" ariaLabel="Birthday" className={inputStyle(t)} />
                 <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>Only the month and day are shown in the birthday widget.</p>
               </Field>
 

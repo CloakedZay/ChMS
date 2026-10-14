@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import { phToday } from "@/app/lib/phDate";
+import DatePicker from "@/app/components/DatePicker";
 
 const EMPTY_FORM = {
   category: 'Tithe',
@@ -533,7 +534,7 @@ export default function FinancePage() {
               </Field>
 
               <Field label="Date" t={t}>
-                <input type="date" name="date" value={form.date} onChange={handleChange} className={inputStyle(t)} />
+                <DatePicker name="date" value={form.date} onChange={handleChange} clearable={false} ariaLabel="Date" className={inputStyle(t)} />
               </Field>
 
               <Field label="Status" t={t}>

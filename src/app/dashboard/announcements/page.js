@@ -8,6 +8,7 @@ import { useTheme } from '@/app/context/ThemeContext';
 import { can } from '@/app/lib/permissions';
 import BranchLabel from '@/app/components/BranchLabel';
 import { todayManila, postedLabel } from '@/app/components/AnnouncementsBanner';
+import DatePicker from '@/app/components/DatePicker';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 // Announcements (db/031, db/038). Pastor: any branch or all branches.
@@ -267,7 +268,7 @@ export default function AnnouncementsPage() {
                 </div>
                 <div>
                   <label className={label} htmlFor="a-exp">Stop showing after <span className="font-normal">(optional)</span></label>
-                  <input id="a-exp" type="date" name="expires_on" value={form.expires_on} onChange={change} min={today} className={field} />
+                  <DatePicker id="a-exp" name="expires_on" value={form.expires_on} onChange={change} min={today} placeholder="Keep showing" className={field} />
                 </div>
               </div>
               <label className={`flex items-center gap-2.5 text-sm cursor-pointer w-fit ${t.sub}`}>
