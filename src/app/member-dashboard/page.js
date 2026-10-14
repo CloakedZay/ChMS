@@ -8,7 +8,7 @@ import { supabase } from '@/app/lib/supabase';
 import { verseOfDayIndex, nextLocalMidnight } from '@/app/lib/verseOfDay';
 import { formatEventTime } from '@/app/lib/eventTime';
 import { phToday } from '@/app/lib/phDate';
-import { CalendarDays, HandCoins, BookOpen, Search } from 'lucide-react';
+import { CalendarDays, HandCoins, BookOpen } from 'lucide-react';
 import UpcomingBirthdays from '@/app/components/UpcomingBirthdays';
 import ScriptureLink from '@/app/components/ScriptureLink';
 import AnnouncementsBanner from '@/app/components/AnnouncementsBanner';
@@ -27,7 +27,6 @@ export default function MemberDashboard() {
   const showFinance = can(role || 'member', 'finance');
 
   const [dataLoading, setDataLoading]       = useState(true);
-  const [memberCount, setMemberCount]       = useState(null);
   const [myMinistryCount, setMyMinistryCount] = useState(null);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [upcomingCount, setUpcomingCount]   = useState(0);
@@ -38,20 +37,12 @@ export default function MemberDashboard() {
   // Verse of the day
   const [verseOfDay, setVerseOfDay] = useState(undefined); // undefined = loading, null = none yet
 
-  // Member search
-  const [memberSearch, setMemberSearch]   = useState('');
-  const [searchResults, setSearchResults] = useState(null);
-  const [searching, setSearching]         = useState(false);
-
   // ── Fetch overview ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     async function fetchOverview() {
       setDataLoading(true);
       try {
-        const { count: mCount } = await supabase
-          .from('member_directory').select('*', { count: 'exact', head: true });
-
         // Ministries this member is in (they only see their own, db/024).
         const { count: myMinCount } = await supabase
           .from('ministry_assignments').select('id', { count: 'exact', head: true });
@@ -71,7 +62,6 @@ export default function MemberDashboard() {
           trans = data?.filter((t) => t.status !== 'Void');
         }
 
-        setMemberCount(mCount || 0);
         setUpcomingEvents(evts || []);
         setUpcomingCount(evCount || 0);
 
@@ -135,27 +125,6 @@ export default function MemberDashboard() {
     };
   }, [user]);
 
-  // ── Member search — searches the full congregation ─────────────────────────
-  useEffect(() => {
-    if (!memberSearch.trim()) {
-      setSearchResults(null);
-      return;
-    }
-    setSearching(true);
-    const handle = setTimeout(async () => {
-      const term = memberSearch.trim().replace(/[,()%]/g, '');
-      const { data } = await supabase
-        .from('member_directory')
-        .select('full_name, status, ministry, role')
-        .or(`full_name.ilike.%${term}%,ministry.ilike.%${term}%,role.ilike.%${term}%`)
-        .order('full_name', { ascending: true })
-        .limit(20);
-      setSearchResults(data || []);
-      setSearching(false);
-    }, 300);
-    return () => clearTimeout(handle);
-  }, [memberSearch]);
-
   const formatDate = (d) => d
     ? new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
     : '—';
@@ -175,50 +144,6 @@ export default function MemberDashboard() {
         {/* Top: search + verse on the left, birthday box in the top-right corner */}
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-6 lg:items-start mb-8">
         <div className="min-w-0">
-
-        {/* Search — very top */}
-        <div className="relative mb-6">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-white/30" />
-          <input
-            type="text"
-            placeholder="Search members by name, role, or ministry..."
-            value={memberSearch}
-            onChange={(e) => setMemberSearch(e.target.value)}
-            className="w-full bg-[#1b2420] border border-white/10 rounded-2xl py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors"
-          />
-          {memberSearch.trim() && (
-            <div className="absolute z-30 mt-2 w-full bg-[#1b2420] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-              <div className="max-h-80 overflow-y-auto divide-y divide-white/5">
-                {searching ? (
-                  <p className="text-white/30 text-sm p-4">Searching...</p>
-                ) : (searchResults || []).length === 0 ? (
-                  <p className="text-white/30 text-sm p-4">No members match &ldquo;{memberSearch.trim()}&rdquo;.</p>
-                ) : (
-                  searchResults.map((m, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 hover:bg-white/[0.03] transition-colors">
-                      <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/20 flex items-center justify-center shrink-0">
-                        <span className="text-[11px] font-black text-blue-400">
-                          {m.full_name?.split(' ').map(w => w[0]).slice(0, 2).join('')}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{m.full_name}</p>
-                        <p className="text-xs text-white/40 truncate">{m.ministry || 'Unassigned'}</p>
-                      </div>
-                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'active' ? 'bg-emerald-500' : 'bg-slate-600'}`} />
-                    </div>
-                  ))
-                )}
-              </div>
-              <Link
-                href="/member-dashboard/members"
-                className="block text-center text-xs font-bold text-blue-400 hover:text-blue-300 py-3 border-t border-white/5 transition-colors"
-              >
-                View full member directory →
-              </Link>
-            </div>
-          )}
-        </div>
 
         {/* Verse of the Day */}
         <div className="bg-gradient-to-br from-blue-600/10 to-indigo-600/10 border border-blue-500/20 rounded-3xl p-6">
@@ -261,7 +186,10 @@ export default function MemberDashboard() {
           {/* Stats — each redirects to its module */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: 'Total Members',   value: dataLoading ? '...' : memberCount,           icon: '👥', href: '/member-dashboard/members' },
+              // Members don't get a member directory or head count; their next event instead.
+              { label: upcomingEvents[0] ? `Next: ${upcomingEvents[0].title}` : 'Next event',
+                value: dataLoading ? '...' : upcomingEvents[0] ? formatDate(upcomingEvents[0].date) : 'None yet',
+                icon: '🗓️', href: '/member-dashboard/events' },
               { label: 'Upcoming Events', value: dataLoading ? '...' : upcomingCount, icon: '📅', href: '/member-dashboard/events' },
               { label: 'My Ministries',   value: dataLoading ? '...' : myMinistryCount ?? 0,  icon: '✝️', href: '/member-dashboard/ministries' },
             ].map((s) => (

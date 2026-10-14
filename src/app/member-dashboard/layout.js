@@ -9,7 +9,7 @@ import { usePageVisit } from '@/app/lib/usePageVisit';
 import { useUnreadMessages } from '@/app/lib/useUnreadMessages';
 import AppShell from '@/app/components/AppShell';
 import {
-  LayoutDashboard, Users, CalendarDays, ClipboardList,
+  LayoutDashboard, CalendarDays, ClipboardList,
   HandCoins, BookOpen, UserCircle, Bot, KeyRound, NotebookPen, MessageCircle, CalendarCheck2
 } from 'lucide-react';
 
@@ -20,7 +20,6 @@ const NAV_GROUPS = [
     { href: '/member-dashboard/messages',     icon: MessageCircle,   label: 'Messages' },
   ]},
   { label: 'Community', links: [
-    { href: '/member-dashboard/members',      icon: Users,           label: 'Members' },
     { href: '/member-dashboard/events',       icon: CalendarDays,    label: 'Events' },
     { href: '/member-dashboard/attendance',   icon: CalendarCheck2,  label: 'Attendance' },
     { href: '/member-dashboard/ministries',   icon: ClipboardList,   label: 'Ministries' },

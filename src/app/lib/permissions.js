@@ -131,7 +131,6 @@ export const PAGE_FEATURES = {
   '/dashboard/activity':         ['changeLog', 'screenTime'],
 
   '/member-dashboard':              null,
-  '/member-dashboard/members':      ['members'],
   '/member-dashboard/events':       ['events'],
   '/member-dashboard/attendance':   ['attendance'],
   '/member-dashboard/ministries':   ['modules'],
