@@ -120,7 +120,10 @@ export default function UsersPage() {
     const church_id = churchId || null;
     if (church_id === u.church_id) return;
     const to = church_id ? churchName(church_id) : 'no branch';
-    saveChange(u, { church_id }, `Move ${displayName(u)} to ${to}?`);
+    // Their member record moves with them (db/047), except to "no branch".
+    saveChange(u, { church_id }, church_id
+      ? `Move ${displayName(u)} to ${to}? Their member record moves too.`
+      : `Move ${displayName(u)} to ${to}?`);
   }
 
   // Elder: a Leader who can approve large spending and love gifts (db/016).
