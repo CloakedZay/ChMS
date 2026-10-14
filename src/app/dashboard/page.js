@@ -18,7 +18,7 @@ import UpcomingBirthdays from "@/app/components/UpcomingBirthdays";
 import ScriptureLink from "@/app/components/ScriptureLink";
 import AnnouncementsBanner from "@/app/components/AnnouncementsBanner";
 import FollowUpReminder from "@/app/components/FollowUpReminder";
-import { useFollowUpReminder, REMINDER_DAYS } from "@/app/lib/useFollowUpReminder";
+import { useFollowUpReminder, REMINDER_DAYS, MISSED_EVENTS } from "@/app/lib/useFollowUpReminder";
 import { useEventNotices } from "@/app/lib/useEventNotices";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
@@ -395,7 +395,7 @@ export default function DashboardPage() {
                           <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-rose-500" />
                         </div>
                         <p className={`text-[10px] ${t.textSub} mt-0.5 leading-relaxed line-clamp-2`}>
-                          Not active for {REMINDER_DAYS}+ days or marked inactive. Tap to review.
+                          Not active for {REMINDER_DAYS}+ days, missed {MISSED_EVENTS} events in a row, or marked inactive. Tap to review.
                         </p>
                       </div>
                     </Link>

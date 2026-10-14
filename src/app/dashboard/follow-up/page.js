@@ -11,16 +11,16 @@ import { useTheme } from '@/app/context/ThemeContext';
 import { can } from '@/app/lib/permissions';
 import { levelBadge } from '@/app/lib/roleColors';
 import BranchLabel from '@/app/components/BranchLabel';
-import { notifyFollowUpChanged } from '@/app/lib/useFollowUpReminder';
+import { notifyFollowUpChanged, MISSED_EVENTS } from '@/app/lib/useFollowUpReminder';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 // Member inactivity and follow-up (db/032).
 // "Last seen" = the later of a member's last sign-in and last page visit,
 // for members whose record is linked to a login. A member is flagged when
-// they haven't been seen for the chosen number of days, or the Secretary
-// has marked them inactive. Logging a follow-up clears the flag for that
-// many days. Members without a login can't be measured and are listed
-// separately.
+// they haven't been seen for the chosen number of days, missed their last
+// MISSED_EVENTS events in a row (db/046 — works without a login too), or
+// the Secretary has marked them inactive. Logging a follow-up clears the
+// flag for that many days.
 
 const THRESHOLDS = [14, 30, 60, 90];
 const OUTCOMES = {
@@ -48,6 +48,7 @@ const ago = (iso) => {
   return `${Math.round(d / 30)} months ago`;
 };
 const shortDate = (iso) => new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
+const eventDate = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 
 export default function FollowUpPage() {
   const { role } = useAuth();
@@ -124,9 +125,10 @@ export default function FollowUpPage() {
     const away = daysSince(r.last_seen);
     const sinceFollowUp = daysSince(r.last_followup_at);
     const quiet = r.has_login && (away === null || away >= threshold);
-    const flagged = quiet || r.member_status === 'inactive';
+    const missing = (r.missed_events ?? 0) >= MISSED_EVENTS;   // undefined before db/046
+    const flagged = quiet || missing || r.member_status === 'inactive';
     const followedRecently = sinceFollowUp !== null && sinceFollowUp < threshold;
-    return { ...r, away, flagged, followedRecently, needs: flagged && !followedRecently };
+    return { ...r, away, quiet, missing, flagged, followedRecently, needs: flagged && !followedRecently };
   }), [rows, threshold]);
 
   const counts = {
@@ -191,7 +193,8 @@ export default function FollowUpPage() {
         <p className={`text-[10px] uppercase tracking-widest ${t.muted} mb-1`}><BranchLabel /></p>
         <h1 className={`text-2xl font-black ${t.text}`}>Member Follow-up</h1>
         <p className={`text-sm mt-1 ${t.sub} max-w-2xl`}>
-          Members who haven&apos;t been active in FaithSync for a while, or are marked inactive. Reach out, then log how it went.
+          Members who haven&apos;t been active in FaithSync for a while, missed their last {MISSED_EVENTS} events, or are marked inactive.
+          Reach out, then log how it went.
         </p>
       </div>
 
@@ -202,7 +205,7 @@ export default function FollowUpPage() {
         {[
           { label: 'Need follow-up', value: counts.needs, icon: UserX, tone: 'text-rose-500 bg-rose-500/10' },
           { label: 'Followed up', value: counts.followed, icon: CheckCircle2, tone: 'text-emerald-500 bg-emerald-500/10' },
-          { label: 'No login (not tracked)', value: counts.noLogin, icon: KeyRound, tone: 'text-[#9c7f45] bg-[#c5a66a]/15' },
+          { label: 'No login (app not tracked)', value: counts.noLogin, icon: KeyRound, tone: 'text-[#9c7f45] bg-[#c5a66a]/15' },
           { label: 'Members', value: counts.all, icon: HeartHandshake, tone: 'text-blue-500 bg-blue-500/10' },
         ].map(({ label, value, icon: Icon, tone }) => (
           <div key={label} className={`border rounded-2xl p-4 ${t.card}`}>
@@ -255,7 +258,7 @@ export default function FollowUpPage() {
             {q ? 'No members match your search.' : tab === 'needs' ? 'Everyone is accounted for' : 'Nobody here'}
           </p>
           {tab === 'needs' && !q && (
-            <p className={`text-sm mt-1 ${t.sub}`}>No one has been away for {threshold}+ days without a recent follow-up.</p>
+            <p className={`text-sm mt-1 ${t.sub}`}>No one has been away for {threshold}+ days or missed their last {MISSED_EVENTS} events without a recent follow-up.</p>
           )}
         </div>
       ) : (
@@ -276,8 +279,11 @@ export default function FollowUpPage() {
                     </div>
                     <p className={`text-xs mt-1 ${t.sub}`}>
                       {p.has_login
-                        ? <>Last seen: <span className={`font-semibold ${p.flagged && p.away !== 0 ? 'text-rose-500' : ''}`}>{ago(p.last_seen)}</span></>
-                        : <span className={t.muted}>No login — activity isn&apos;t tracked</span>}
+                        ? <>Last seen: <span className={`font-semibold ${p.quiet ? 'text-rose-500' : ''}`}>{ago(p.last_seen)}</span></>
+                        : <span className={t.muted}>No login — app activity isn&apos;t tracked</span>}
+                      {p.missing
+                        ? <> · <span className="font-semibold text-rose-500">Missed the last {p.missed_events} events</span>{p.last_attended ? ` (last came ${eventDate(p.last_attended)})` : ''}</>
+                        : p.last_attended && <> · Last attended {eventDate(p.last_attended)}</>}
                       {last && (
                         <> · Last follow-up {ago(p.last_followup_at).toLowerCase()} by {p.last_by || 'someone'}{' '}
                           <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${last.cls}`}>{last.label}</span></>

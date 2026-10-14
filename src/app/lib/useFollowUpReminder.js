@@ -5,8 +5,9 @@ import { supabase } from '@/app/lib/supabase';
 
 // Follow-up reminder for staff who can follow up members (Pastor, Leader,
 // Secretary — see lib/permissions.js "followUp"; never members). Reads
-// followup_due() (db/033): members not seen for REMINDER_DAYS days, or
-// marked inactive, with no follow-up logged in that time.
+// followup_due() (db/033, db/046): members not seen for REMINDER_DAYS days,
+// who missed their last MISSED_EVENTS events, or marked inactive, with no
+// follow-up logged in that time.
 //
 // Refreshes when the tab regains focus, every 15 minutes, and when the
 // Follow-up page fires 'faithsync-followup-changed'.
@@ -15,6 +16,9 @@ import { supabase } from '@/app/lib/supabase';
 // next day, per person on this browser.
 
 export const REMINDER_DAYS = 30;
+// Events in a row a member may miss before they're flagged; the database's
+// followup_due() uses the same default (db/046).
+export const MISSED_EVENTS = 3;
 const snoozeKey = (userId) => `faithsync-followup-snooze-${userId}`;
 const todayManila = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { BellRing, ArrowRight } from 'lucide-react';
 import { useTheme } from '@/app/context/ThemeContext';
-import { REMINDER_DAYS } from '@/app/lib/useFollowUpReminder';
+import { REMINDER_DAYS, MISSED_EVENTS } from '@/app/lib/useFollowUpReminder';
 
 // Reminder card for the top of the staff Dashboard: who needs a follow-up.
 // Takes the result of useFollowUpReminder(); renders nothing when there is
@@ -34,7 +34,7 @@ export default function FollowUpReminder({ due, snoozed, onSnooze }) {
           {due.length} member{due.length === 1 ? '' : 's'} need{due.length === 1 ? 's' : ''} a follow-up
         </p>
         <p className={`text-sm mt-0.5 ${t.body}`}>
-          {list} — not active for {REMINDER_DAYS}+ days or marked inactive, with no follow-up logged.
+          {list} — not active for {REMINDER_DAYS}+ days, missed their last {MISSED_EVENTS} events, or marked inactive, with no follow-up logged.
         </p>
       </div>
       <div className="flex gap-2 shrink-0">
