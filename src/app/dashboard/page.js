@@ -20,6 +20,8 @@ import AnnouncementsBanner from "@/app/components/AnnouncementsBanner";
 import FollowUpReminder from "@/app/components/FollowUpReminder";
 import { useFollowUpReminder, REMINDER_DAYS } from "@/app/lib/useFollowUpReminder";
 import { useEventNotices } from "@/app/lib/useEventNotices";
+import { formatEventTime } from "@/app/lib/eventTime";
+import { phToday } from "@/app/lib/phDate";
 import Link from "next/link";
 
 // ─── Theme token maps ──────────────────────────────────────────────────────────
@@ -124,6 +126,7 @@ export default function DashboardPage() {
   const [attendance, setAttendance]           = useState(null);
   const [totalFunds, setTotalFunds]           = useState(0);
   const [upcomingEvents, setUpcomingEvents]   = useState([]);
+  const [upcomingCount, setUpcomingCount]     = useState(0);
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [recentMembers, setRecentMembers]     = useState([]);
   const [notifications, setNotifications]     = useState([]);
@@ -139,7 +142,10 @@ export default function DashboardPage() {
         const { data: latestMembers } = await supabase.from('member_directory').select('full_name, status, ministry').order('id', { ascending: false }).limit(3);
         const { data: allTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status').order('date', { ascending: false });
         const trans = allTrans?.filter((t) => t.status !== 'Void');
-        const { data: evts } = await supabase.from('events').select('*').gte('date', new Date().toISOString().split('T')[0]).order('date', { ascending: true }).limit(4);
+        // Upcoming = approved, from today (Philippine date) on. Planning and
+        // pending events aren't happening yet.
+        const { data: evts, count: evCount } = await supabase.from('events').select('*', { count: 'exact' })
+          .eq('status', 'approved').gte('date', phToday()).order('date', { ascending: true }).limit(4);
 
         setMemberCount(mCount || 0);
         setActiveMembers(aCount || 0);
@@ -154,6 +160,7 @@ export default function DashboardPage() {
           ? { rate: Math.round((taken.reduce((a, e) => a + e.members_present, 0) / possible) * 100), events: taken.length }
           : null);
         setUpcomingEvents(evts || []);
+        setUpcomingCount(evCount || 0);
         setRecentMembers(latestMembers || []);
 
         if (trans) {
@@ -292,7 +299,7 @@ export default function DashboardPage() {
     ...(can(role, 'finance') ? [
     { label: "Total Church Funds",value: loading ? "..." : `₱${totalFunds.toLocaleString()}`,  sub: "Live balance",                icon: HandCoins,  color: A(dark, "purple"), trend: totalFunds >= 0 ? "up" : "down" },
     ] : []),
-    { label: "Upcoming Events",   value: loading ? "..." : upcomingEvents.length.toString(),   sub: "From today onward",           icon: CalendarDays,color: A(dark, "pink"),  trend: "neutral"                   },
+    { label: "Upcoming Events",   value: loading ? "..." : upcomingCount.toString(),   sub: "From today onward",           icon: CalendarDays,color: A(dark, "pink"),  trend: "neutral"                   },
   ];
 
   // ─── Shared card classname builder ────────────────────────────────────────
@@ -576,6 +583,8 @@ export default function DashboardPage() {
                       <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{ev.title}</p>
                       <p className={`text-xs ${t.textMuted} mt-0.5`}>
                         {ev.date ? new Date(ev.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}
+                        {ev.start_time ? `, ${formatEventTime(ev.start_time)}` : ''}
+                        {ev.venue ? ` · ${ev.venue}` : ''}
                         {ev.ministry ? ` · ${ev.ministry}` : ''}
                       </p>
                     </div>

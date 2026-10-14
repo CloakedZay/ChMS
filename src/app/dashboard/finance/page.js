@@ -11,6 +11,7 @@ import {
   Search, X, Ban, Pencil, History, Sun, Moon
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
+import { phToday } from "@/app/lib/phDate";
 
 const EMPTY_FORM = {
   category: 'Tithe',
@@ -21,7 +22,7 @@ const EMPTY_FORM = {
   amount: '',
   type: 'income',
   status: 'Verified',
-  date: new Date().toISOString().split('T')[0],
+  date: phToday(),
   notes: '',
   church_id: '',
 };
@@ -181,7 +182,7 @@ export default function FinancePage() {
       amount:   tx.amount   || '',
       type:     tx.type     || 'income',
       status:   tx.status   || 'Verified',
-      date:     tx.date     || new Date().toISOString().split('T')[0],
+      date:     tx.date     || phToday(),
       notes:    tx.notes    || '',
       church_id: tx.church_id || '',
     });

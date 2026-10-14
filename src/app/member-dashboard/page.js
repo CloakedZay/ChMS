@@ -6,6 +6,8 @@ import { can } from '@/app/lib/permissions';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { verseOfDayIndex, nextLocalMidnight } from '@/app/lib/verseOfDay';
+import { formatEventTime } from '@/app/lib/eventTime';
+import { phToday } from '@/app/lib/phDate';
 import { CalendarDays, HandCoins, BookOpen, Search } from 'lucide-react';
 import UpcomingBirthdays from '@/app/components/UpcomingBirthdays';
 import ScriptureLink from '@/app/components/ScriptureLink';
@@ -28,6 +30,7 @@ export default function MemberDashboard() {
   const [memberCount, setMemberCount]       = useState(null);
   const [myMinistryCount, setMyMinistryCount] = useState(null);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [upcomingCount, setUpcomingCount]   = useState(0);
   const [totalFunds, setTotalFunds]         = useState(null);
   const [totalIncome, setTotalIncome]       = useState(null);
   const [totalExpense, setTotalExpense]     = useState(null);
@@ -54,9 +57,10 @@ export default function MemberDashboard() {
           .from('ministry_assignments').select('id', { count: 'exact', head: true });
         setMyMinistryCount(myMinCount || 0);
 
-        const { data: evts } = await supabase
-          .from('events').select('id, title, date, ministry, status')
-          .gte('date', new Date().toISOString().split('T')[0])
+        // Approved events from today (Philippine date) on; drafts stay hidden.
+        const { data: evts, count: evCount } = await supabase
+          .from('events').select('*', { count: 'exact' })
+          .eq('status', 'approved').gte('date', phToday())
           .order('date', { ascending: true }).limit(5);
 
         let trans = null;
@@ -69,6 +73,7 @@ export default function MemberDashboard() {
 
         setMemberCount(mCount || 0);
         setUpcomingEvents(evts || []);
+        setUpcomingCount(evCount || 0);
 
         if (trans) {
           const inc = trans.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
@@ -257,7 +262,7 @@ export default function MemberDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               { label: 'Total Members',   value: dataLoading ? '...' : memberCount,           icon: '👥', href: '/member-dashboard/members' },
-              { label: 'Upcoming Events', value: dataLoading ? '...' : upcomingEvents.length, icon: '📅', href: '/member-dashboard/events' },
+              { label: 'Upcoming Events', value: dataLoading ? '...' : upcomingCount, icon: '📅', href: '/member-dashboard/events' },
               { label: 'My Ministries',   value: dataLoading ? '...' : myMinistryCount ?? 0,  icon: '✝️', href: '/member-dashboard/ministries' },
             ].map((s) => (
               <Link
@@ -287,7 +292,7 @@ export default function MemberDashboard() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-white truncate">{ev.title}</p>
                           <p className="text-xs text-white/40 mt-0.5">
-                            {formatDate(ev.date)}{ev.ministry ? ` · ${ev.ministry}` : ''}
+                            {formatDate(ev.date)}{ev.start_time ? `, ${formatEventTime(ev.start_time)}` : ''}{ev.venue ? ` · ${ev.venue}` : ''}{ev.ministry ? ` · ${ev.ministry}` : ''}
                           </p>
                         </div>
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${EVENT_BADGE[ev.status] || EVENT_BADGE.planning}`}>

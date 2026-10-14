@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { Search, CalendarDays, Clock } from 'lucide-react';
+import { Search, CalendarDays, Clock, MapPin } from 'lucide-react';
+import { formatEventTime } from '@/app/lib/eventTime';
+import { phToday } from '@/app/lib/phDate';
 import BranchLabel from '@/app/components/BranchLabel';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
@@ -32,11 +34,10 @@ function textOn(hex) {
   return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '#173f35' : '#ffffff';
 }
 
-const todayStr = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
 function daysUntil(dateStr) {
   const a = new Date(dateStr + 'T00:00:00Z').getTime();
-  const b = new Date(todayStr() + 'T00:00:00Z').getTime();
+  const b = new Date(phToday() + 'T00:00:00Z').getTime();
   return Math.round((a - b) / 86400000);
 }
 
@@ -59,7 +60,8 @@ export default function MemberEventsPage() {
     async function fetchEvents() {
       setLoading(true);
       const [evts, mins] = await Promise.all([
-        supabase.from('events').select('*').order('date', { ascending: true }),
+        // Planning / pending events are drafts; members see them once approved (db/044).
+        supabase.from('events').select('*').in('status', ['approved', 'done']).order('date', { ascending: true }),
         supabase.from('ministries').select('name, color_code'),
       ]);
       setEvents(evts.data || []);
@@ -84,7 +86,7 @@ export default function MemberEventsPage() {
     return [...seen].sort((a, b) => a.localeCompare(b));
   }, [events]);
 
-  const today = todayStr();
+  const today = phToday();
   const filtered = events
     .filter((ev) => {
       const term = search.toLowerCase();
@@ -224,7 +226,14 @@ export default function MemberEventsPage() {
                   )}
                 </div>
 
-                <p className="text-xs text-white/50 mt-3">{formatDate(ev.date)}</p>
+                <p className="text-xs text-white/50 mt-3">
+                  {formatDate(ev.date)}{ev.start_time && ` · ${formatEventTime(ev.start_time)}`}
+                </p>
+                {ev.venue && (
+                  <p className="flex items-start gap-1.5 text-xs text-white/50 mt-1">
+                    <MapPin size={12} className="shrink-0 mt-px" /> {ev.venue}
+                  </p>
+                )}
                 {ev.description && (
                   <p className="text-xs text-white/40 leading-relaxed mt-2 line-clamp-3">{ev.description}</p>
                 )}

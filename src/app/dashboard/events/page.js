@@ -9,8 +9,10 @@ import { can } from "@/app/lib/permissions";
 import { notifyEventsChanged } from "@/app/lib/useEventNotices";
 import {
   Calendar, Plus, Search, MoreHorizontal,
-  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, Undo2, Send, Check
+  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, Undo2, Send, Check, MapPin
 } from "lucide-react";
+import { formatEventTime } from "@/app/lib/eventTime";
+import { phToday } from "@/app/lib/phDate";
 import BranchLabel from "@/app/components/BranchLabel";
 
 import Pagination, { usePaged } from "@/app/components/Pagination";
@@ -18,6 +20,8 @@ const EMPTY_FORM = {
   title: '',
   ministry: '',
   date: '',
+  start_time: '',
+  venue: '',
   budget: '',
   status: 'planning',
   description: '',
@@ -164,6 +168,8 @@ export default function EventsPage() {
       title:       event.title       || '',
       ministry:    event.ministry    || '',
       date:        event.date        || '',
+      start_time:  event.start_time?.slice(0, 5) || '',
+      venue:       event.venue       || '',
       budget:      event.budget      || '',
       status:      event.status      || 'planning',
       description: event.description || '',
@@ -183,18 +189,24 @@ export default function EventsPage() {
       return;
     }
     setSaving(true);
+    const { start_time, venue, ...rest } = form;
     const payload = {
-      ...form,
+      ...rest,
       budget: parseFloat(form.budget) || 0,
       church_id: isGlobal ? form.church_id : profile?.church_id,
       status: editingEvent ? editingEvent.status : 'planning',
     };
-    if (editingEvent) {
-      const { error } = await supabase.from('events').update(payload).eq('id', editingEvent.id);
-      if (error) alert('Error updating event: ' + error.message);
-    } else {
-      const { error } = await supabase.from('events').insert([payload]);
-      if (error) alert('Error saving event: ' + error.message);
+    // Time and venue only when set (or being cleared), so events still save
+    // before db/043 has been run.
+    if (start_time || editingEvent?.start_time) payload.start_time = start_time || null;
+    if (venue.trim() || editingEvent?.venue) payload.venue = venue.trim() || null;
+    const { error } = editingEvent
+      ? await supabase.from('events').update(payload).eq('id', editingEvent.id)
+      : await supabase.from('events').insert([payload]);
+    if (error) {
+      alert(/start_time|venue/.test(error.message) && /schema cache|does not exist|Could not find/i.test(error.message)
+        ? 'Time and venue need db/043_event_details.sql. Ask the administrator to run it, or clear those two fields for now.'
+        : `Error ${editingEvent ? 'updating' : 'saving'} event: ${error.message}`);
     }
     setSaving(false);
     setShowModal(false);
@@ -430,8 +442,17 @@ export default function EventsPage() {
                 </select>
               </Field>
 
-              <Field label="Date" required t={t}>
-                <input type="date" name="date" value={form.date} onChange={handleChange} required className={inputStyle(t)} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Date" required t={t}>
+                  <input type="date" name="date" value={form.date} onChange={handleChange} required className={inputStyle(t)} />
+                </Field>
+                <Field label="Start time" t={t}>
+                  <input type="time" name="start_time" value={form.start_time} onChange={handleChange} className={inputStyle(t)} />
+                </Field>
+              </div>
+
+              <Field label="Venue" t={t}>
+                <input type="text" name="venue" value={form.venue} onChange={handleChange} maxLength={200} placeholder="e.g. Main Sanctuary" className={inputStyle(t)} />
               </Field>
 
               <Field label="Budget (₱)" t={t}>
@@ -467,17 +488,30 @@ function inputStyle(t) {
   return `w-full ${t.inputBg} border ${t.inputBorder} ${t.inputText} rounded-xl px-4 py-2.5 text-sm outline-none transition-colors focus:border-blue-500 placeholder:text-slate-500`;
 }
 
-// Attendance opens on the event's date (Philippine time) once it's approved.
-const phToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 
 function EventCard({ event, branchName, onEdit, onDelete, attendance, onApprove, onSendBack, onSubmit, busy, t, dark }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const phase = event.status || "planning";
 
+  // Deleting an event also erases its attendance (db/041 cascades), so say
+  // how much would go before asking.
   async function handleDelete() {
-    if (!window.confirm(`Delete "${event.title}"?`)) return;
     setDeleting(true);
+    const head = { count: 'exact', head: true };
+    const [m, v] = await Promise.all([
+      supabase.from('event_attendance').select('event_id', head).eq('event_id', event.id),
+      supabase.from('event_visitors').select('event_id', head).eq('event_id', event.id),
+    ]);
+    const members = m.count || 0, visitors = v.count || 0;
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const who = [members && plural(members, 'member'), visitors && plural(visitors, 'visitor')].filter(Boolean).join(' and ');
+    const lost = who
+      ? `\n\nIts attendance will be lost too: ${who} marked present.`
+        + (visitors ? ' The visitors themselves stay on the Follow-up page.' : '')
+        + "\n\nThis can't be undone."
+      : '';
+    if (!window.confirm(`Delete "${event.title}"?${lost}`)) { setDeleting(false); return; }
     const { error } = await supabase.from('events').delete().eq('id', event.id);
     if (error) { alert('Error deleting event: ' + error.message); setDeleting(false); }
     else onDelete(event.id);
@@ -515,8 +549,17 @@ function EventCard({ event, branchName, onEdit, onDelete, attendance, onApprove,
       <div className="space-y-2 mb-6">
         <div className={`flex items-center gap-2 ${t.textSub}`}>
           <Calendar size={13} className={`${t.textMuted} shrink-0`} />
-          <span className="text-xs">{event.date ? new Date(event.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No date set'}</span>
+          <span className="text-xs">
+            {event.date ? new Date(event.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No date set'}
+            {event.start_time && ` · ${formatEventTime(event.start_time)}`}
+          </span>
         </div>
+        {event.venue && (
+          <div className={`flex items-center gap-2 ${t.textSub}`}>
+            <MapPin size={13} className={`${t.textMuted} shrink-0`} />
+            <span className="text-xs truncate">{event.venue}</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <span className={`text-[10px] font-bold ${t.textMuted} uppercase tracking-widest`}>Budget</span>
           <span className={`text-xs font-mono ${t.textPrimary}`}>₱{Number(event.budget || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
@@ -565,6 +608,7 @@ function EventCard({ event, branchName, onEdit, onDelete, attendance, onApprove,
             );
           })}
         </div>
+        {/* Attendance opens on the event's date (Philippine time) once it's approved. */}
         {attendance && ['approved', 'done'].includes(phase) && event.date && event.date <= phToday() && (
           <Link href={`/dashboard/attendance?event=${event.id}`}
             className="mt-4 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition-colors">

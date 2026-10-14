@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import BranchLabel, { branchLabelText } from "@/app/components/BranchLabel";
+import { phToday } from "@/app/lib/phDate";
 
 // Event statuses in order, for the "Events by Status" section shown to
 // levels without finance access.
@@ -167,10 +168,12 @@ export default function ReportsPage() {
           .from('events')
           .select('*', { count: 'exact', head: true });
 
+        // Upcoming = approved, from today (Philippine date) on.
         const { count: evUpcoming } = await supabase
           .from('events')
           .select('*', { count: 'exact', head: true })
-          .gte('date', new Date().toISOString().split('T')[0]);
+          .eq('status', 'approved')
+          .gte('date', phToday());
 
         const { data: evStatuses } = await supabase.from('events').select('status');
         const statusMap = {};
@@ -406,7 +409,7 @@ export default function ReportsPage() {
         newTab.location.href = blobUrl;
       } else {
         // Popup was blocked (or the user closed it while it generated) — fall back to a download.
-        doc.save(`church-report-${new Date().toISOString().split('T')[0]}.pdf`);
+        doc.save(`church-report-${phToday()}.pdf`);
       }
     } catch (err) {
       console.error('PDF export error:', err);
