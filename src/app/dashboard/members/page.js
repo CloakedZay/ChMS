@@ -14,6 +14,7 @@ import { levelBadge } from "@/app/lib/roleColors";
 import Pagination, { usePaged } from "@/app/components/Pagination";
 import DatePicker from "@/app/components/DatePicker";
 import { phToday } from "@/app/lib/phDate";
+import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 const EMPTY_FORM = {
   full_name: '',
   role: '',
@@ -160,9 +161,9 @@ export default function MembersPage() {
   async function toggleHelper(member) {
     setOpenMenuId(null);
     const on = !helpers.has(member.profile_id);
-    if (on && !window.confirm(`Make ${member.full_name} an attendance helper? They'll be able to tick attendance and add visitors for this branch's events — nothing else.`)) return;
+    if (on && !await confirmDialog(`Make ${member.full_name} an attendance helper? They'll be able to tick attendance and add visitors for this branch's events — nothing else.`)) return;
     const { error } = await supabase.rpc('set_attendance_helper', { p_member: member.id, p_on: on });
-    if (error) { alert(/does not exist|schema cache|Could not find/i.test(error.message) ? 'Run db/041_event_attendance.sql first.' : error.message); return; }
+    if (error) { alertDialog(/does not exist|schema cache|Could not find/i.test(error.message) ? 'Run db/041_event_attendance.sql first.' : error.message); return; }
     setHelpers((prev) => { const n = new Set(prev); if (on) n.add(member.profile_id); else n.delete(member.profile_id); return n; });
   }
 
@@ -216,10 +217,10 @@ export default function MembersPage() {
         .from('members')
         .update(payload)
         .eq('id', editingMember.id);
-      if (error) alert('Error updating member: ' + error.message);
+      if (error) alertDialog('Error updating member: ' + error.message);
     } else {
       const { error } = await supabase.from('members').insert([payload]);
-      if (error) alert('Error saving member: ' + error.message);
+      if (error) alertDialog('Error saving member: ' + error.message);
     }
 
     setSaving(false);
@@ -230,7 +231,7 @@ export default function MembersPage() {
   }
 
   async function handleArchive(member, archive) {
-    const confirmed = window.confirm(archive
+    const confirmed = await confirmDialog(archive
       ? `Archive "${member.full_name}"? They'll be hidden from the directory and counts, and can be restored later.`
       : `Restore "${member.full_name}" as an active member?`);
     if (!confirmed) return;
@@ -243,11 +244,11 @@ export default function MembersPage() {
       .select('id');
 
     if (error) {
-      alert('Error updating member: ' + error.message);
+      alertDialog('Error updating member: ' + error.message);
       return;
     }
     if (!data?.length) {
-      alert("You don't have permission to change this member.");
+      alertDialog("You don't have permission to change this member.");
       return;
     }
 
@@ -257,7 +258,7 @@ export default function MembersPage() {
   // Secretary: create a login for this member (server route, db/014).
   async function handleCreateLogin(member) {
     const loginName = member.email || 'a made-up username';
-    if (!window.confirm(`Create a login for ${member.full_name}? It will use ${loginName} and a temporary password that they change on first sign-in.`)) return;
+    if (!await confirmDialog(`Create a login for ${member.full_name}? It will use ${loginName} and a temporary password that they change on first sign-in.`)) return;
     setCreatingLoginId(member.id);
     try {
       const res = await authFetch('/api/members/create-login', {
@@ -266,12 +267,12 @@ export default function MembersPage() {
         body: JSON.stringify({ member_id: member.id }),
       });
       const data = await res.json();
-      if (!res.ok) { alert(data.error || 'Could not create the login.'); return; }
+      if (!res.ok) { alertDialog(data.error || 'Could not create the login.'); return; }
       setCopied(false);
       setNewLogin({ name: member.full_name, email: data.email, password: data.password });
       await fetchMembers();
     } catch (err) {
-      alert('Could not create the login: ' + err.message);
+      alertDialog('Could not create the login: ' + err.message);
     } finally {
       setCreatingLoginId(null);
     }
@@ -283,7 +284,7 @@ export default function MembersPage() {
       await navigator.clipboard.writeText(`FaithSync login\nUsername: ${newLogin.email}\nTemporary password: ${newLogin.password}`);
       setCopied(true);
     } catch {
-      alert('Could not copy — please write the details down instead.');
+      alertDialog('Could not copy — please write the details down instead.');
     }
   }
 
@@ -304,7 +305,7 @@ export default function MembersPage() {
 
   async function linkExisting(login) {
     const who = login.full_name || login.email;
-    if (!window.confirm(`Link ${who} (${login.email || 'no email'}) to the member record "${linkFor.full_name}"?`)) return;
+    if (!await confirmDialog(`Link ${who} (${login.email || 'no email'}) to the member record "${linkFor.full_name}"?`)) return;
     setLinkingId(login.id);
     const { data, error } = await supabase
       .from('members')
@@ -314,25 +315,25 @@ export default function MembersPage() {
       .select('id');
     setLinkingId(null);
     if (error) {
-      alert(error.code === '23505'
+      alertDialog(error.code === '23505'
         ? 'That login is already linked to another member record.'
         : 'Could not link: ' + error.message);
       return;
     }
-    if (!data?.length) { alert('Could not link — this member may already have a login.'); return; }
+    if (!data?.length) { alertDialog('Could not link — this member may already have a login.'); return; }
     setLinkFor(null);
     await fetchMembers();
   }
 
   async function unlinkLogin(member) {
     setOpenMenuId(null);
-    if (!window.confirm(`Unlink the login from "${member.full_name}"? The login itself keeps working; it just won't be connected to this member record.`)) return;
+    if (!await confirmDialog(`Unlink the login from "${member.full_name}"? The login itself keeps working; it just won't be connected to this member record.`)) return;
     const { data, error } = await supabase
       .from('members')
       .update({ profile_id: null })
       .eq('id', member.id)
       .select('id');
-    if (error || !data?.length) { alert('Could not unlink: ' + (error?.message || "you don't have permission.")); return; }
+    if (error || !data?.length) { alertDialog('Could not unlink: ' + (error?.message || "you don't have permission.")); return; }
     await fetchMembers();
   }
 
@@ -707,7 +708,7 @@ export default function MembersPage() {
                 {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
               </button>
               <button
-                onClick={() => { if (copied || window.confirm("Close? You won't see this password again.")) setNewLogin(null); }}
+                onClick={async () => { if (copied || await confirmDialog("Close? You won't see this password again.")) setNewLogin(null); }}
                 className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2.5 text-sm font-bold transition-all"
               >
                 Done

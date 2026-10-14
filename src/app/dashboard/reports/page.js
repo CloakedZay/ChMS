@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import BranchLabel, { branchLabelText } from "@/app/components/BranchLabel";
 import { phToday } from "@/app/lib/phDate";
+import { alertDialog } from "@/app/lib/dialog";
 
 // Event statuses in order, for the "Events by Status" section shown to
 // levels without finance access.
@@ -424,7 +425,7 @@ export default function ReportsPage() {
         );
         newTab.document.close();
       } else {
-        alert('Could not generate the PDF: ' + message);
+        alertDialog('Could not generate the PDF: ' + message);
       }
     } finally {
       setExporting(false);

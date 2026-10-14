@@ -13,6 +13,7 @@ import {
   Eye, EyeOff, HelpCircle, Users, Search,
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
+import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 function formatBytes(bytes) {
   if (!bytes) return "—";
@@ -172,7 +173,7 @@ export default function TrainingPage() {
       setNewModuleDesc("");
       setShowAddModule(false);
     } else {
-      alert("Error adding module: " + error.message);
+      alertDialog("Error adding module: " + error.message);
     }
     setAddingModule(false);
   }
@@ -180,7 +181,7 @@ export default function TrainingPage() {
   async function handleToggleActive(mod) {
     const { error } = await supabase.from("discipleship_modules").update({ is_active: !mod.is_active }).eq("id", mod.id);
     if (!error) setModules((prev) => prev.map((m) => (m.id === mod.id ? { ...m, is_active: !mod.is_active } : m)));
-    else alert("Error updating module: " + error.message);
+    else alertDialog("Error updating module: " + error.message);
   }
 
   // ── Question CRUD ──────────────────────────────────────────────────────────
@@ -199,16 +200,16 @@ export default function TrainingPage() {
       await refetchQuestions();
       setNewQuestionText((p) => ({ ...p, [moduleId]: "" }));
     } else {
-      alert("Error adding question: " + error.message);
+      alertDialog("Error adding question: " + error.message);
     }
     setAddingQuestion((p) => ({ ...p, [moduleId]: false }));
   }
 
   async function handleDeleteQuestion(q) {
-    if (!window.confirm("Delete this question?")) return;
+    if (!await confirmDialog("Delete this question?")) return;
     const { error } = await supabase.from("discipleship_questions").delete().eq("id", q.id);
     if (!error) setQuestions((prev) => prev.filter((x) => x.id !== q.id));
-    else alert("Error deleting question: " + error.message);
+    else alertDialog("Error deleting question: " + error.message);
   }
 
   // ── Handouts ───────────────────────────────────────────────────────────────
@@ -280,12 +281,12 @@ export default function TrainingPage() {
 
   async function handleDownload(handout) {
     const { data, error } = await supabase.storage.from("handouts").createSignedUrl(handout.file_path, 60);
-    if (error) { alert("Could not generate download link."); return; }
+    if (error) { alertDialog("Could not generate download link."); return; }
     window.open(data.signedUrl, "_blank");
   }
 
   async function handleDeleteHandout(handout, moduleId) {
-    if (!confirm(`Delete "${handout.file_name}"?`)) return;
+    if (!await confirmDialog(`Delete "${handout.file_name}"?`)) return;
     await supabase.storage.from("handouts").remove([handout.file_path]);
     await supabase.from("module_handouts").delete().eq("id", handout.id);
     await fetchHandouts(moduleId);
@@ -306,7 +307,7 @@ export default function TrainingPage() {
       .select("id");
     setReviewing((p) => ({ ...p, [progressId]: false }));
     if (error || !data?.length) {
-      alert("Could not save the review: " + (error?.message || "you don't have permission to review this answer."));
+      alertDialog("Could not save the review: " + (error?.message || "you don't have permission to review this answer."));
       return;
     }
     setSubmissions((prev) => prev.map((s) => (s.id === progressId ? { ...s, status, notes: note } : s)));

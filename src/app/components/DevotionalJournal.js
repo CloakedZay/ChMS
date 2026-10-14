@@ -9,6 +9,7 @@ import ScriptureLink from '@/app/components/ScriptureLink';
 import DatePicker from '@/app/components/DatePicker';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
+import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 // Devotional journal (db/027). Private: every person reads and writes only
 // their own entries; the database enforces it. Used by both dashboards.
 
@@ -110,9 +111,9 @@ export default function DevotionalJournal() {
   }
 
   async function remove(entry) {
-    if (!window.confirm(`Delete this entry${entry.title ? ` — "${entry.title}"` : ''}? This cannot be undone.`)) return;
+    if (!await confirmDialog(`Delete this entry${entry.title ? ` — "${entry.title}"` : ''}? This cannot be undone.`)) return;
     const { error } = await supabase.from('devotional_journal').delete().eq('id', entry.id);
-    if (error) { alert('Could not delete: ' + error.message); return; }
+    if (error) { alertDialog('Could not delete: ' + error.message); return; }
     setEntries((list) => list.filter((x) => x.id !== entry.id));
   }
 

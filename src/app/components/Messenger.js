@@ -9,6 +9,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
 import { ROLE_LABELS } from '@/app/lib/permissions';
 import { levelBadge } from '@/app/lib/roleColors';
+import { confirmDialog } from '@/app/lib/dialog';
 
 // Chat for both dashboards: one-to-one (db/029) and groups (db/030).
 // Chats are private to the people in them. Who can be added or messaged is
@@ -320,14 +321,14 @@ export default function Messenger() {
     }
   }
   async function removePerson(person) {
-    if (!window.confirm(`Remove ${person.display_name} from this group?`)) return;
+    if (!await confirmDialog(`Remove ${person.display_name} from this group?`)) return;
     if (await runInfo(() => supabase.rpc('remove_group_member', { gid: active.id, member: person.user_id }))) {
       loadMembers(active.id);
       loadConvos();
     }
   }
   async function leaveGroup() {
-    if (!window.confirm(`Leave “${activeItem?.name}”? You will stop receiving its messages.`)) return;
+    if (!await confirmDialog(`Leave “${activeItem?.name}”? You will stop receiving its messages.`)) return;
     if (await runInfo(() => supabase.rpc('remove_group_member', { gid: active.id, member: me }))) {
       setInfo(false); setActive(null); setThread([]); setMembers([]);
       loadConvos();

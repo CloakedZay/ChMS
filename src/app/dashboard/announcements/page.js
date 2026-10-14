@@ -11,6 +11,7 @@ import { todayManila, postedLabel } from '@/app/components/AnnouncementsBanner';
 import DatePicker from '@/app/components/DatePicker';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
+import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 // Announcements (db/031, db/038). Pastor: any branch or all branches.
 // Leader: own branch. Either can aim an announcement at one ministry's
 // members. Everyone else who opens this page can only read. The database
@@ -121,13 +122,13 @@ export default function AnnouncementsPage() {
 
   async function togglePin(a) {
     const { error } = await supabase.from('announcements').update({ is_pinned: !a.is_pinned }).eq('id', a.id);
-    if (error) alert(error.message); else load();
+    if (error) alertDialog(error.message); else load();
   }
 
   async function remove(a) {
-    if (!window.confirm(`Delete "${a.title}"? This cannot be undone.`)) return;
+    if (!await confirmDialog(`Delete "${a.title}"? This cannot be undone.`)) return;
     const { error } = await supabase.from('announcements').delete().eq('id', a.id);
-    if (error) alert(error.message); else setItems((list) => list.filter((x) => x.id !== a.id));
+    if (error) alertDialog(error.message); else setItems((list) => list.filter((x) => x.id !== a.id));
   }
 
   const label = `block text-xs font-semibold mb-1.5 ${t.sub}`;

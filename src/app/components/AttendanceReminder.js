@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ClipboardCheck, ArrowRight } from 'lucide-react';
 import { supabase } from '@/app/lib/supabase';
 import { useTheme } from '@/app/context/ThemeContext';
+import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
 // Staff Dashboard, Leaders and the Secretary: events of the last 14 days
 // whose attendance nobody took (db/051 attendance_missing). "Not needed"
@@ -27,11 +28,14 @@ export default function AttendanceReminder() {
   }, []);
 
   async function skip(ev) {
-    if (!window.confirm(`No attendance for "${ev.title}" (${day(ev.date)})? It won't be reminded again, and it won't count when checking who missed events.`)) return;
+    if (!await confirmDialog({
+      message: `No attendance for "${ev.title}" (${day(ev.date)})? It won't be reminded again, and it won't count when checking who missed events.`,
+      confirmText: 'Not needed',
+    })) return;
     setBusy(ev.id);
     const { error } = await supabase.rpc('skip_attendance', { p_event: ev.id });
     setBusy(null);
-    if (error) { alert(error.message); return; }
+    if (error) { alertDialog(error.message); return; }
     load();
   }
 

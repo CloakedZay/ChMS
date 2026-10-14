@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { Loader2, Link2, Unlink } from 'lucide-react';
+import { confirmDialog } from '@/app/lib/dialog';
 
 // Link a Google account to the signed-in login (step E2), so they can use
 // "Sign in with Google" instead of their username and password. Needs the
@@ -51,7 +52,7 @@ export default function GoogleAccountCard({ dark = true }) {
   }
 
   async function unlink() {
-    if (!window.confirm('Unlink your Google account? You will sign in with your username and password only.')) return;
+    if (!await confirmDialog('Unlink your Google account? You will sign in with your username and password only.')) return;
     setBusy(true);
     setError('');
     const { error: unlinkError } = await supabase.auth.unlinkIdentity(google);

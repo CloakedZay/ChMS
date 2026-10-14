@@ -8,6 +8,7 @@ import { ROLES, ROLE_LABELS, GLOBAL_ROLES } from "@/app/lib/permissions";
 import { levelBadge, levelDot } from "@/app/lib/roleColors";
 import { authFetch } from "@/app/lib/authFetch";
 import { Search, UserCog, Sun, Moon, Ban, CheckCircle2, KeyRound, Copy, Check } from "lucide-react";
+import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 // Admin sets each login's level and branch. The database enforces the same
 // rules (db/009, db/013): only an admin changes levels, branches or
@@ -89,7 +90,7 @@ export default function UsersPage() {
   // ── Save one change ───────────────────────────────────────────────────────
 
   async function saveChange(u, changes, question) {
-    if (!window.confirm(question)) return;
+    if (!await confirmDialog(question)) return;
     setSavingId(u.id);
     // .select() returns the saved row, so a change the database refused
     // (no matching rule) shows up as an empty result instead of passing silently.
@@ -101,7 +102,7 @@ export default function UsersPage() {
     setSavingId(null);
 
     if (error || !data?.length) {
-      alert('Could not save: ' + (error?.message || 'you do not have permission to change this user.'));
+      alertDialog('Could not save: ' + (error?.message || 'you do not have permission to change this user.'));
       return;
     }
     setUsers((prev) => prev.map((p) => (p.id === u.id ? { ...p, ...data[0] } : p)));
@@ -110,7 +111,7 @@ export default function UsersPage() {
   function handleLevelChange(u, role) {
     if (role === u.role) return;
     if (!GLOBAL_ROLES.includes(role) && !u.church_id) {
-      alert(`Pick a branch for ${displayName(u)} first. Only Admin and Pastor work without one.`);
+      alertDialog(`Pick a branch for ${displayName(u)} first. Only Admin and Pastor work without one.`);
       return;
     }
     saveChange(u, { role }, `Change ${displayName(u)} from ${ROLE_LABELS[u.role] || u.role} to ${ROLE_LABELS[role]}?`);
@@ -144,7 +145,7 @@ export default function UsersPage() {
 
   // Forgotten password: a new temporary one, changed at next sign-in.
   async function handleResetPassword(u) {
-    if (!window.confirm(`Reset ${displayName(u)}'s password? Their current password stops working, and they must choose a new one at their next sign-in.`)) return;
+    if (!await confirmDialog(`Reset ${displayName(u)}'s password? Their current password stops working, and they must choose a new one at their next sign-in.`)) return;
     setResetting(u.id);
     try {
       const res = await authFetch('/api/users/reset-password', {
@@ -153,11 +154,11 @@ export default function UsersPage() {
         body: JSON.stringify({ user_id: u.id }),
       });
       const data = await res.json();
-      if (!res.ok) { alert(data.error || 'Could not reset the password.'); return; }
+      if (!res.ok) { alertDialog(data.error || 'Could not reset the password.'); return; }
       setCopied(false);
       setNewPassword({ name: displayName(u), email: data.email, password: data.password });
     } catch (err) {
-      alert('Could not reset the password: ' + err.message);
+      alertDialog('Could not reset the password: ' + err.message);
     } finally {
       setResetting(null);
     }
@@ -169,7 +170,7 @@ export default function UsersPage() {
       await navigator.clipboard.writeText(`FaithSync login\nUsername: ${newPassword.email}\nTemporary password: ${newPassword.password}`);
       setCopied(true);
     } catch {
-      alert('Could not copy — please write the details down instead.');
+      alertDialog('Could not copy — please write the details down instead.');
     }
   }
 
@@ -438,7 +439,7 @@ export default function UsersPage() {
                 {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
               </button>
               <button
-                onClick={() => { if (copied || window.confirm("Close? You won't see this password again.")) setNewPassword(null); }}
+                onClick={async () => { if (copied || await confirmDialog("Close? You won't see this password again.")) setNewPassword(null); }}
                 className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2.5 text-sm font-bold transition-all"
               >
                 Done

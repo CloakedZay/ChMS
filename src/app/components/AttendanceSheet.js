@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, Search, UserPlus, X, Loader2, Users, UserRound, Phone, Lock } from 'lucide-react';
 import { supabase } from '@/app/lib/supabase';
+import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
 // The attendance sheet of one event (db/041). People sign a paper sheet at
 // the event; afterwards the Secretary or a helper ticks the members on it
@@ -283,9 +284,9 @@ function VisitorsBox({ t, eventId, canMark, visitors, onChange }) {
   }
 
   async function remove(v) {
-    if (!window.confirm(`Remove ${v.full_name} from this event?`)) return;
+    if (!await confirmDialog(`Remove ${v.full_name} from this event?`)) return;
     const { error: err } = await supabase.rpc('remove_event_visitor', { p_event: eventId, p_visitor: v.visitor_id });
-    if (err) alert(err.message); else onChange();
+    if (err) alertDialog(err.message); else onChange();
   }
 
   return (

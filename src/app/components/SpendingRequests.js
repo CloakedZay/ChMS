@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { Plus, X, Check, Ban, Loader2, HandCoins, Settings2, Receipt, Upload, FileText, Trash2, Undo2 } from 'lucide-react';
+import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
 // Spending requests (step F2, db/017 + db/018) and their liquidation
 // (step F3, db/019: receipts + amount actually spent, checked by Finance).
@@ -153,8 +154,8 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   async function submit(e) {
     e.preventDefault();
     const amount = parseFloat(form.amount);
-    if (!form.title.trim() || !(amount > 0)) { alert('Please give a title and an amount above zero.'); return; }
-    if (isPastor && !form.church_id) { alert('Please choose which branch this is for.'); return; }
+    if (!form.title.trim() || !(amount > 0)) { alertDialog('Please give a title and an amount above zero.'); return; }
+    if (isPastor && !form.church_id) { alertDialog('Please choose which branch this is for.'); return; }
     setSaving(true);
     const { error } = await supabase.from('expense_requests').insert({
       title: form.title.trim(),
@@ -165,7 +166,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       requested_by: userId,
     });
     setSaving(false);
-    if (error) { alert('Could not submit: ' + error.message); return; }
+    if (error) { alertDialog('Could not submit: ' + error.message); return; }
     setShowForm(false);
     setForm(EMPTY);
     setFilter('pending');
@@ -192,20 +193,20 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   }
 
   async function cancelRequest(r) {
-    if (!window.confirm(`Cancel your request "${r.title}"?`)) return;
+    if (!await confirmDialog(`Cancel your request "${r.title}"?`)) return;
     setBusyId(r.id);
     const { error } = await supabase.from('expense_requests').update({ status: 'cancelled' }).eq('id', r.id);
     setBusyId(null);
-    if (error) { alert('Could not cancel: ' + error.message); return; }
+    if (error) { alertDialog('Could not cancel: ' + error.message); return; }
     await refresh();
   }
 
   async function release(r) {
-    if (!window.confirm(`Release ${peso(r.amount)} for "${r.title}"? This records the expense in the ledger.`)) return;
+    if (!await confirmDialog(`Release ${peso(r.amount)} for "${r.title}"? This records the expense in the ledger.`)) return;
     setBusyId(r.id);
     const { error } = await supabase.from('expense_requests').update({ status: 'released' }).eq('id', r.id);
     setBusyId(null);
-    if (error) { alert('Could not release: ' + error.message); return; }
+    if (error) { alertDialog('Could not release: ' + error.message); return; }
     await refresh();
     onReleased?.();
   }
@@ -213,7 +214,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   // ── Liquidation ─────────────────────────────────────────────────────────
   async function openReceipt(rc) {
     const { data, error } = await supabase.storage.from('receipts').createSignedUrl(rc.file_path, 120);
-    if (error) { alert('Could not open the receipt: ' + error.message); return; }
+    if (error) { alertDialog('Could not open the receipt: ' + error.message); return; }
     window.open(data.signedUrl, '_blank');
   }
 
@@ -249,7 +250,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   }
 
   async function removeReceipt(rc) {
-    if (!window.confirm(`Remove ${rc.file_name}?`)) return;
+    if (!await confirmDialog(`Remove ${rc.file_name}?`)) return;
     const { error } = await supabase.from('expense_receipts').delete().eq('id', rc.id);
     if (error) { setLiqError('Could not remove: ' + error.message); return; }
     await supabase.storage.from('receipts').remove([rc.file_path]);
@@ -307,11 +308,11 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
 
   async function saveLimit(churchId) {
     const value = parseFloat(limitDraft[churchId]);
-    if (!(value > 0)) { alert('Enter an amount above zero.'); return; }
+    if (!(value > 0)) { alertDialog('Enter an amount above zero.'); return; }
     const { data, error } = await supabase.from('finance_settings')
       .update({ approval_limit: value, updated_at: new Date().toISOString() })
       .eq('church_id', churchId).select('church_id');
-    if (error || !data?.length) { alert('Could not save the limit: ' + (error?.message || 'not allowed.')); return; }
+    if (error || !data?.length) { alertDialog('Could not save the limit: ' + (error?.message || 'not allowed.')); return; }
     setLimits((l) => ({ ...l, [churchId]: value }));
     setLimitDraft((d) => ({ ...d, [churchId]: undefined }));
   }

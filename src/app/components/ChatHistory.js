@@ -2,6 +2,7 @@
 
 import { MessageSquarePlus, MessageSquare, Trash2 } from 'lucide-react';
 import { useTheme } from '@/app/context/ThemeContext';
+import { confirmDialog } from '@/app/lib/dialog';
 
 // The chat list beside the assistant: "New chat" and the person's saved
 // chats (useAssistantChats). A side column on wider screens; a compact bar
@@ -69,7 +70,7 @@ export default function ChatHistory({ hist, onNew, onOpen, disabled = false }) {
                     </span>
                   </button>
                   <button type="button" disabled={disabled}
-                    onClick={() => { if (window.confirm(`Delete the chat “${c.title}”?`)) hist.remove(c.id).then(() => { if (hist.activeId === c.id) onNew(); }); }}
+                    onClick={async () => { if (await confirmDialog(`Delete the chat “${c.title}”?`)) hist.remove(c.id).then(() => { if (hist.activeId === c.id) onNew(); }); }}
                     aria-label={`Delete ${c.title}`} title="Delete chat"
                     className={`absolute right-1.5 top-2 w-6 h-6 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 ${t.muted} hover:text-rose-500`}>
                     <Trash2 size={13} />

@@ -13,6 +13,7 @@ import {
 import BranchLabel from "@/app/components/BranchLabel";
 import ChatHistory from "@/app/components/ChatHistory";
 import { useAssistantChats } from "@/app/lib/useAssistantChats";
+import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 const GLOBAL_ROLES = ["admin", "pastor"];
 
@@ -385,7 +386,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit, canShare })
         body: JSON.stringify({ id: doc.id, staff_only: !doc.staff_only }),
       });
       if (res.ok) setDocuments((prev) => prev.map((d) => d.id === doc.id ? { ...d, staff_only: !d.staff_only } : d));
-      else alert((await res.json()).error || "Could not change it. Has db/039 been run?");
+      else alertDialog((await res.json()).error || "Could not change it. Has db/039 been run?");
     } finally {
       setBusyId(null);
     }
@@ -395,7 +396,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit, canShare })
   // the branch picked above.
   async function toggleShared(doc) {
     const shared = !doc.church_id;
-    if (!confirm(shared
+    if (!await confirmDialog(shared
       ? `Use "${doc.title}" in this branch only? The other branches' assistants will stop using it.`
       : `Use "${doc.title}" in every branch? All branches' assistants will answer from it, and only the Pastor can change or delete it.`)) return;
     setBusyId(doc.id);
@@ -406,7 +407,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit, canShare })
         body: JSON.stringify({ id: doc.id, all_branches: !shared, church_id: churchId }),
       });
       if (res.ok) setDocuments((prev) => prev.map((d) => d.id === doc.id ? { ...d, church_id: shared ? churchId : null } : d));
-      else alert((await res.json()).error || "Could not change it.");
+      else alertDialog((await res.json()).error || "Could not change it.");
     } finally {
       setBusyId(null);
     }
@@ -414,7 +415,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit, canShare })
 
   async function handleDelete(doc) {
     const where = doc.church_id ? "" : " Every branch uses it.";
-    if (!confirm(`Delete "${doc.title}"?${where} This can't be undone.`)) return;
+    if (!await confirmDialog(`Delete "${doc.title}"?${where} This can't be undone.`)) return;
     setBusyId(doc.id);
     try {
       await authFetch(`/api/chatbot/documents?id=${encodeURIComponent(doc.id)}`, { method: "DELETE" });
@@ -616,7 +617,7 @@ function SearchIndexCard({ t, churchId, canEdit, refreshKey }) {
   useEffect(() => { loadStatus(); }, [refreshKey]);
 
   async function rebuild() {
-    if (!window.confirm("Rebuild the assistant's search index from all documents and discipleship handouts? This can take a minute.")) return;
+    if (!await confirmDialog("Rebuild the assistant's search index from all documents and discipleship handouts? This can take a minute.")) return;
     setBusy(true);
     setError("");
     setReport(null);

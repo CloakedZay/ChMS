@@ -11,6 +11,7 @@ import {
 import BranchLabel from '@/app/components/BranchLabel';
 import LessonAsk from '@/app/components/LessonAsk';
 import RelatedReading from '@/app/components/RelatedReading';
+import { alertDialog } from '@/app/lib/dialog';
 
 const ANSWER_STATUS = {
   approved: { label: 'Approved',       cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
@@ -86,7 +87,7 @@ export default function DiscipleshipPage() {
     const { data, error } = await supabase.storage
       .from('handouts')
       .createSignedUrl(handout.file_path, 60);
-    if (error) { alert('Could not generate download link.'); return; }
+    if (error) { alertDialog('Could not generate download link.'); return; }
     recordModuleView(handout.module_id, 'handout');
     window.open(data.signedUrl, '_blank');
   }

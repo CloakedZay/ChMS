@@ -20,6 +20,7 @@ import BranchLabel from "@/app/components/BranchLabel";
 import EventCalendar from "@/app/components/EventCalendar";
 
 import Pagination, { usePaged } from "@/app/components/Pagination";
+import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 const EMPTY_FORM = {
   title: '',
   date: '',
@@ -210,16 +211,16 @@ export default function EventsPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (isGlobal && !form.church_id) {
-      alert('Please select which branch this event belongs to.');
+      alertDialog('Please select which branch this event belongs to.');
       return;
     }
     if (!isGlobal && !profile?.church_id) {
-      alert('Your account has no branch yet, so you can’t add events. Ask the Admin to set your branch.');
+      alertDialog('Your account has no branch yet, so you can’t add events. Ask the Admin to set your branch.');
       return;
     }
     const dates = !editingEvent && form.repeat === 'weekly' ? weeklyDates(form.date, form.until) : [form.date];
     if (!editingEvent && form.repeat === 'weekly' && dates.length < 2) {
-      alert('Pick an end date at least a week after the first date, or choose "Does not repeat".');
+      alertDialog('Pick an end date at least a week after the first date, or choose "Does not repeat".');
       return;
     }
     setSaving(true);
@@ -254,7 +255,7 @@ export default function EventsPage() {
     }
     if (error) {
       const missing = /schema cache|does not exist|Could not find/i.test(error.message);
-      alert(missing && /series_id/.test(error.message)
+      alertDialog(missing && /series_id/.test(error.message)
         ? 'Repeating events need db/049_event_series.sql. Ask the administrator to run it.'
         : missing && /start_time|venue/.test(error.message)
           ? 'Time and venue need db/043_event_details.sql. Ask the administrator to run it, or clear those two fields for now.'
@@ -285,15 +286,15 @@ export default function EventsPage() {
     setActing(true);
     const { error } = await supabase.from('events').update(changes).in('id', sameStep(ev));
     setActing(false);
-    if (error) { alert(error.message); return false; }
+    if (error) { alertDialog(error.message); return false; }
     await fetchEvents();
     notifyEventsChanged();
     return true;
   }
 
-  function approve(ev) {
-    if (!ev.date) { alert(`Set the date of "${ev.title}" before approving it.`); openEdit(ev); return; }
-    if (ev.series_id && !window.confirm(`Approve "${ev.title}"${datesNote(ev)}?`)) return;
+  async function approve(ev) {
+    if (!ev.date) { alertDialog(`Set the date of "${ev.title}" before approving it.`); openEdit(ev); return; }
+    if (ev.series_id && !await confirmDialog(`Approve "${ev.title}"${datesNote(ev)}?`)) return;
     setStatus(ev, { status: 'approved' });
   }
 
@@ -302,8 +303,8 @@ export default function EventsPage() {
     if (await setStatus(sendBack, { status: 'planning', review_note: backNote.trim() })) setSendBack(null);
   }
 
-  function submitForApproval(ev) {
-    if (!window.confirm(`Send "${ev.title}"${datesNote(ev)} to the Leaders for approval?`)) return;
+  async function submitForApproval(ev) {
+    if (!await confirmDialog(`Send "${ev.title}"${datesNote(ev)} to the Leaders for approval?`)) return;
     setStatus(ev, { status: 'pending' });
   }
 
@@ -329,7 +330,7 @@ export default function EventsPage() {
     setActing(true);
     const { error } = await supabase.from('events').delete().in('id', scope === 'all' ? later : [event.id]);
     setActing(false);
-    if (error) { alert('Error deleting event: ' + error.message); return; }
+    if (error) { alertDialog('Error deleting event: ' + error.message); return; }
     setToDelete(null);
     await fetchEvents();
     notifyEventsChanged();
@@ -343,7 +344,7 @@ export default function EventsPage() {
       .update({ status: 'cancelled', cancel_note: cancelNote.trim() || null }).eq('id', cancelFor.id);
     setActing(false);
     if (error) {
-      alert(/cancel_note|events_status_check|check constraint/i.test(error.message)
+      alertDialog(/cancel_note|events_status_check|check constraint/i.test(error.message)
         ? 'Cancelling needs db/051_event_cancel_and_reminders.sql. Ask the administrator to run it.'
         : error.message);
       return;
@@ -354,12 +355,12 @@ export default function EventsPage() {
   }
 
   async function restore(ev) {
-    if (!window.confirm(`Restore "${ev.title}" on ${shortDate(ev.date)}? Members will see it as on again.`)) return;
+    if (!await confirmDialog(`Restore "${ev.title}" on ${shortDate(ev.date)}? Members will see it as on again.`)) return;
     // Just this date (cancelling is per date too), not the whole series.
     setActing(true);
     const { error } = await supabase.from('events').update({ status: 'approved' }).eq('id', ev.id);
     setActing(false);
-    if (error) { alert(error.message); return; }
+    if (error) { alertDialog(error.message); return; }
     await fetchEvents();
     notifyEventsChanged();
   }

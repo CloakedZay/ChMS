@@ -13,6 +13,7 @@ import {
 import BranchLabel from "@/app/components/BranchLabel";
 import { phToday } from "@/app/lib/phDate";
 import DatePicker from "@/app/components/DatePicker";
+import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 const EMPTY_FORM = {
   category: 'Tithe',
@@ -212,15 +213,15 @@ export default function FinancePage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (isGlobal && !form.church_id) {
-      alert('Please select which branch this entry belongs to.');
+      alertDialog('Please select which branch this entry belongs to.');
       return;
     }
     if (form.category === 'Other' && !form.otherCategory.trim()) {
-      alert('Please specify the category.');
+      alertDialog('Please specify the category.');
       return;
     }
     if (form.category === 'Ministry' && !form.ministryName.trim()) {
-      alert('Please specify which ministry.');
+      alertDialog('Please specify which ministry.');
       return;
     }
     setSaving(true);
@@ -233,10 +234,10 @@ export default function FinancePage() {
     const payload = { ...rest, category: finalCategory, amount: parseFloat(form.amount) || 0, member: showMember ? (form.member || 'Anonymous') : '', church_id: isGlobal ? form.church_id : profile?.church_id };
     if (editingTx) {
       const { error } = await supabase.from('transactions').update(payload).eq('id', editingTx.id);
-      if (error) alert('Error updating: ' + error.message);
+      if (error) alertDialog('Error updating: ' + error.message);
     } else {
       const { error } = await supabase.from('transactions').insert([payload]);
-      if (error) alert('Error saving: ' + error.message);
+      if (error) alertDialog('Error saving: ' + error.message);
     }
     setSaving(false);
     setShowModal(false);
@@ -247,10 +248,10 @@ export default function FinancePage() {
 
   // Entries are never deleted, only voided, so the record stays traceable.
   async function handleVoid(tx) {
-    if (!window.confirm('Void this entry? It stays in the ledger but no longer counts in any total, and it can\'t be edited afterwards.')) return;
+    if (!await confirmDialog('Void this entry? It stays in the ledger but no longer counts in any total, and it can\'t be edited afterwards.')) return;
     const { data, error } = await supabase.from('transactions').update({ status: VOID }).eq('id', tx.id).select('id');
-    if (error) alert('Error voiding: ' + error.message);
-    else if (!data?.length) alert('You don\'t have permission to void this entry.');
+    if (error) alertDialog('Error voiding: ' + error.message);
+    else if (!data?.length) alertDialog('You don\'t have permission to void this entry.');
     else setTransactions((prev) => prev.map((t) => t.id === tx.id ? { ...t, status: VOID } : t));
   }
 

@@ -9,6 +9,7 @@ import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import { BookOpen, Upload, Trash2, Loader2, Plus, X, Sun, Moon, Sparkles, Clock } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import ScriptureLink from "@/app/components/ScriptureLink";
+import { confirmDialog } from "@/app/lib/dialog";
 
 function T(dark) {
   return {
@@ -116,7 +117,7 @@ export default function BibleVersesPage() {
   }
 
   async function handleDelete(id) {
-    const confirmed = window.confirm('Delete this verse?');
+    const confirmed = await confirmDialog('Delete this verse?');
     if (!confirmed) return;
     setDeletingId(id);
     try {
@@ -128,7 +129,7 @@ export default function BibleVersesPage() {
   }
 
   async function handleClearAll() {
-    const confirmed = window.confirm(`Delete all ${verses.length} verses? This cannot be undone.`);
+    const confirmed = await confirmDialog(`Delete all ${verses.length} verses? This cannot be undone.`);
     if (!confirmed) return;
     setClearing(true);
     try {

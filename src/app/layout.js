@@ -3,6 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/app/context/AuthContext";
 import { ThemeProvider } from "@/app/context/ThemeContext";
 import SessionWatcher from "@/app/lib/SessionWatcher";
+import DialogHost from "@/app/components/DialogHost";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -32,6 +33,8 @@ export default function RootLayout({ children }) {
         <AuthProvider>
           <ThemeProvider>
             {children}
+            {/* The app's own confirm / alert pop-ups (lib/dialog.js) */}
+            <DialogHost />
           </ThemeProvider>
         </AuthProvider>
       </body>
