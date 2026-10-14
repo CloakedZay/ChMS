@@ -8,6 +8,7 @@ import { supabase } from '@/app/lib/supabase';
 import { verseOfDayIndex, nextLocalMidnight } from '@/app/lib/verseOfDay';
 import { formatEventTime } from '@/app/lib/eventTime';
 import { phToday } from '@/app/lib/phDate';
+import { collapseSeries } from '@/app/lib/eventSeries';
 import { CalendarDays, HandCoins, BookOpen } from 'lucide-react';
 import UpcomingBirthdays from '@/app/components/UpcomingBirthdays';
 import ScriptureLink from '@/app/components/ScriptureLink';
@@ -49,10 +50,12 @@ export default function MemberDashboard() {
         setMyMinistryCount(myMinCount || 0);
 
         // Approved events from today (Philippine date) on; drafts stay hidden.
-        const { data: evts, count: evCount } = await supabase
-          .from('events').select('*', { count: 'exact' })
+        // A weekly event counts once, at its next date (db/049).
+        const { data: allUpcoming } = await supabase
+          .from('events').select('*')
           .eq('status', 'approved').gte('date', phToday())
-          .order('date', { ascending: true }).limit(5);
+          .order('date', { ascending: true });
+        const upcoming = collapseSeries(allUpcoming || []);
 
         let trans = null;
         if (showFinance) {
@@ -62,8 +65,8 @@ export default function MemberDashboard() {
           trans = data?.filter((t) => t.status !== 'Void');
         }
 
-        setUpcomingEvents(evts || []);
-        setUpcomingCount(evCount || 0);
+        setUpcomingEvents(upcoming.slice(0, 5));
+        setUpcomingCount(upcoming.length);
 
         if (trans) {
           const inc = trans.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);

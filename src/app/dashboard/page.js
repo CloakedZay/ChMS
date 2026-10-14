@@ -22,6 +22,7 @@ import { useFollowUpReminder, REMINDER_DAYS, MISSED_EVENTS } from "@/app/lib/use
 import { useEventNotices } from "@/app/lib/useEventNotices";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
+import { collapseSeries } from "@/app/lib/eventSeries";
 import Link from "next/link";
 
 // ─── Theme token maps ──────────────────────────────────────────────────────────
@@ -143,9 +144,11 @@ export default function DashboardPage() {
         const { data: allTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status').order('date', { ascending: false });
         const trans = allTrans?.filter((t) => t.status !== 'Void');
         // Upcoming = approved, from today (Philippine date) on. Planning and
-        // pending events aren't happening yet.
-        const { data: evts, count: evCount } = await supabase.from('events').select('*', { count: 'exact' })
-          .eq('status', 'approved').gte('date', phToday()).order('date', { ascending: true }).limit(4);
+        // pending events aren't happening yet. A weekly event counts once,
+        // at its next date (db/049).
+        const { data: allUpcoming } = await supabase.from('events').select('*')
+          .eq('status', 'approved').gte('date', phToday()).order('date', { ascending: true });
+        const upcoming = collapseSeries(allUpcoming || []);
 
         setMemberCount(mCount || 0);
         setActiveMembers(aCount || 0);
@@ -159,8 +162,8 @@ export default function DashboardPage() {
         setAttendance(taken.length && possible
           ? { rate: Math.round((taken.reduce((a, e) => a + e.members_present, 0) / possible) * 100), events: taken.length }
           : null);
-        setUpcomingEvents(evts || []);
-        setUpcomingCount(evCount || 0);
+        setUpcomingEvents(upcoming.slice(0, 4));
+        setUpcomingCount(upcoming.length);
         setRecentMembers(latestMembers || []);
 
         if (trans) {
@@ -414,7 +417,7 @@ export default function DashboardPage() {
                           {eventNotices.pending.length} event{eventNotices.pending.length === 1 ? '' : 's'} waiting for your approval
                         </p>
                         <p className={`text-[10px] ${t.textSub} mt-0.5 line-clamp-2`}>
-                          {eventNotices.pending.map((e) => e.title).join(', ')}
+                          {eventNotices.pending.map((e) => (e.dates > 1 ? `${e.title} (${e.dates} dates)` : e.title)).join(', ')}
                         </p>
                       </div>
                     </Link>
@@ -431,7 +434,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-xs font-bold truncate ${t.textPrimary}`}>
-                          {r.status === 'approved' ? `“${r.title}” was approved` : `“${r.title}” was sent back`}
+                          {`“${r.title}”${r.dates > 1 ? ` (${r.dates} dates)` : ''} was ${r.status === 'approved' ? 'approved' : 'sent back'}`}
                         </p>
                         <p className={`text-[10px] ${t.textSub} mt-0.5 line-clamp-2`}>
                           {r.status === 'approved' ? 'The Pastor approved your event.' : r.review_note || 'The Pastor sent it back to planning.'}

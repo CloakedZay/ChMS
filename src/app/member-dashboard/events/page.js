@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { Search, CalendarDays, Clock, MapPin } from 'lucide-react';
+import { Search, CalendarDays, Clock, MapPin, Repeat } from 'lucide-react';
 import { formatEventTime } from '@/app/lib/eventTime';
 import { phToday } from '@/app/lib/phDate';
+import { groupSeries, seriesLabel } from '@/app/lib/eventSeries';
 import BranchLabel from '@/app/components/BranchLabel';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
@@ -87,12 +88,13 @@ export default function MemberEventsPage() {
   }, [events]);
 
   const today = phToday();
-  const filtered = events
+  // A weekly event (db/049) is one card: its next date.
+  const filtered = groupSeries(events
     .filter((ev) => {
       const term = search.toLowerCase();
       const matchesText = ev.title?.toLowerCase().includes(term) || ev.ministry?.toLowerCase().includes(term);
       return matchesText && (ministryFilter === 'all' || ev.ministry === ministryFilter);
-    })
+    }), today)
     // upcoming first (soonest), then past (most recent first), then undated
     .sort((a, b) => {
       const rank = (e) => (!e.date ? 2 : e.date >= today ? 0 : 1);
@@ -232,6 +234,11 @@ export default function MemberEventsPage() {
                 {ev.venue && (
                   <p className="flex items-start gap-1.5 text-xs text-white/50 mt-1">
                     <MapPin size={12} className="shrink-0 mt-px" /> {ev.venue}
+                  </p>
+                )}
+                {ev.series && (
+                  <p className="flex items-start gap-1.5 text-xs text-white/50 mt-1">
+                    <Repeat size={12} className="shrink-0 mt-px" /> {seriesLabel(ev)}
                   </p>
                 )}
                 {ev.description && (

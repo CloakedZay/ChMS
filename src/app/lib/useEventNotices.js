@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { collapseSeries } from '@/app/lib/eventSeries';
 
 // Event approval notices (db/042) for the staff dashboard:
 //   pending  the Pastor: events waiting for approval
@@ -11,6 +12,7 @@ import { supabase } from '@/app/lib/supabase';
 // 'done' (complete_past_events). Refreshes when the tab regains focus,
 // every 15 minutes, and when the Events page fires
 // 'faithsync-events-changed'.
+// A weekly event (db/049) is one notice, with `dates` = how many dates.
 
 export function notifyEventsChanged() {
   window.dispatchEvent(new Event('faithsync-events-changed'));
@@ -28,14 +30,14 @@ export function useEventNotices(userId, role, enabled = true) {
       await supabase.rpc('complete_past_events');   // not set up yet → ignored
       const [waiting, mine] = await Promise.all([
         role === 'pastor'
-          ? supabase.from('events').select('id, title, date, church_id').eq('status', 'pending').order('date')
+          ? supabase.from('events').select('*').eq('status', 'pending').order('date')
           : Promise.resolve({ data: [] }),
-        supabase.from('events').select('id, title, status, review_note, reviewed_at')
+        supabase.from('events').select('*')
           .eq('created_by', userId).eq('review_seen', false).order('reviewed_at', { ascending: false }),
       ]);
       if (cancelled) return;
-      setPending(waiting.error ? [] : waiting.data || []);
-      setReviews(mine.error ? [] : mine.data || []);   // db/042 not run → no notices
+      setPending(waiting.error ? [] : collapseSeries(waiting.data || []));
+      setReviews(mine.error ? [] : collapseSeries(mine.data || []));   // db/042 not run → no notices
     }
 
     refresh();
@@ -53,7 +55,7 @@ export function useEventNotices(userId, role, enabled = true) {
   // "Got it" on the Pastor's decisions.
   const dismiss = useCallback(async (ids) => {
     await supabase.rpc('mark_event_reviews_seen', { p_ids: ids || null });
-    setReviews((list) => (ids ? list.filter((r) => !ids.includes(r.id)) : []));
+    setReviews((list) => (ids ? list.filter((r) => !r.ids.some((id) => ids.includes(id))) : []));
     notifyEventsChanged();
   }, []);
 
