@@ -9,7 +9,7 @@ import { can } from "@/app/lib/permissions";
 import { notifyEventsChanged } from "@/app/lib/useEventNotices";
 import {
   Calendar, Plus, Search, MoreHorizontal,
-  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, Undo2, Send, Check, MapPin, Repeat, ArrowLeft
+  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, Undo2, Send, Check, MapPin, Repeat, ArrowLeft, Ban, RotateCcw, LayoutGrid
 } from "lucide-react";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
@@ -17,6 +17,7 @@ import DatePicker from "@/app/components/DatePicker";
 import TimePicker from "@/app/components/TimePicker";
 import { weeklyDates, lastSeriesDate, weekdayOf, groupSeries, collapseSeries, seriesLabel, MAX_SERIES_DATES } from "@/app/lib/eventSeries";
 import BranchLabel from "@/app/components/BranchLabel";
+import EventCalendar from "@/app/components/EventCalendar";
 
 import Pagination, { usePaged } from "@/app/components/Pagination";
 const EMPTY_FORM = {
@@ -24,7 +25,6 @@ const EMPTY_FORM = {
   date: '',
   start_time: '',
   venue: '',
-  budget: '',
   status: 'planning',
   description: '',
   church_id: '',
@@ -39,9 +39,13 @@ const STATUS_COLORS = {
   pending:  "bg-orange-500/10 text-orange-400 border-orange-500/20",
   planning: "bg-blue-500/10 text-blue-400 border-blue-500/20",
   done:     "bg-slate-500/10 text-slate-400 border-slate-500/20",
+  cancelled: "bg-red-500/10 text-red-400 border-red-500/20",
 };
 
-const FILTERS = ["all", "planning", "pending", "approved", "done"];
+const FILTERS = ["all", "planning", "pending", "approved", "done", "cancelled"];
+
+// Short level names for "Added by … (Secretary)".
+const LEVEL = { admin: 'Admin', pastor: 'Pastor', leader: 'Leader', secretary: 'Secretary', finance: 'Finance' };
 const GLOBAL_ROLES = ["admin", "pastor"];
 // The Secretary may still edit their own event while it's in one of these;
 // approving is a Leader's job (db/050).
@@ -108,7 +112,13 @@ export default function EventsPage() {
   const [form, setForm]             = useState(EMPTY_FORM);
   const [applyLater, setApplyLater] = useState(false);  // edit: also the series' later dates
   const [seriesView, setSeriesView] = useState(null);   // series_id: show all its dates
+  // Cards or month calendar; remembered on this browser (read after load).
+  const [view, setView] = useState('cards');
+  const [selectedId, setSelectedId] = useState(null);   // event opened from the calendar
   const [toDelete, setToDelete]     = useState(null);   // { event, later, counts }
+  const [cancelFor, setCancelFor]   = useState(null);   // event being cancelled (db/051)
+  const [cancelNote, setCancelNote] = useState("");
+  const [people, setPeople]         = useState({});     // login id → { full_name, email, role }
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
   const today = phToday();
@@ -149,11 +159,18 @@ export default function EventsPage() {
     const { data } = await supabase.from('events').select('*').order('date', { ascending: true });
     if (data) setEvents(data);
     setLoading(false);
+    // Names for "Added by / Approved by / Cancelled by".
+    const ids = [...new Set((data || []).flatMap((e) => [e.created_by, e.approved_by, e.cancelled_by]).filter(Boolean))];
+    if (ids.length) {
+      const { data: logins } = await supabase.from('profiles').select('id, full_name, email, role').in('id', ids);
+      setPeople(Object.fromEntries((logins || []).map((p) => [p.id, p])));
+    }
   }
 
   useEffect(() => {
     async function init() {
       const p = await fetchProfile();
+      try { if (localStorage.getItem('faithsync-events-view') === 'calendar') setView('calendar'); } catch { /* storage blocked */ }
       await fetchChurches();
       await fetchEvents();
       if (p && !GLOBAL_ROLES.includes(p.role)) {
@@ -176,7 +193,6 @@ export default function EventsPage() {
       date:        event.date        || '',
       start_time:  event.start_time?.slice(0, 5) || '',
       venue:       event.venue       || '',
-      budget:      event.budget      || '',
       status:      event.status      || 'planning',
       description: event.description || '',
       church_id:   event.church_id   || '',
@@ -197,6 +213,10 @@ export default function EventsPage() {
       alert('Please select which branch this event belongs to.');
       return;
     }
+    if (!isGlobal && !profile?.church_id) {
+      alert('Your account has no branch yet, so you can’t add events. Ask the Admin to set your branch.');
+      return;
+    }
     const dates = !editingEvent && form.repeat === 'weekly' ? weeklyDates(form.date, form.until) : [form.date];
     if (!editingEvent && form.repeat === 'weekly' && dates.length < 2) {
       alert('Pick an end date at least a week after the first date, or choose "Does not repeat".');
@@ -206,7 +226,6 @@ export default function EventsPage() {
     const { start_time, venue, repeat: _repeat, until: _until, ...rest } = form;
     const payload = {
       ...rest,
-      budget: parseFloat(form.budget) || 0,
       church_id: isGlobal ? form.church_id : profile?.church_id,
       // A Leader's events are approved on save; the Secretary's go straight
       // to the Leaders for approval (db/050).
@@ -240,8 +259,10 @@ export default function EventsPage() {
         : missing && /start_time|venue/.test(error.message)
           ? 'Time and venue need db/043_event_details.sql. Ask the administrator to run it, or clear those two fields for now.'
           : `Error ${editingEvent ? 'updating' : 'saving'} event: ${error.message}`);
+      setSaving(false);
+      return;
     }
-    if (!editingEvent && !error) notifyEventsChanged();
+    if (!editingEvent) notifyEventsChanged();
     setSaving(false);
     setShowModal(false);
     setEditingEvent(null);
@@ -314,6 +335,50 @@ export default function EventsPage() {
     notifyEventsChanged();
   }
 
+  // ── Cancel / restore (db/051): kept on the calendar, marked Cancelled ──
+  async function confirmCancel(e) {
+    e.preventDefault();
+    setActing(true);
+    const { error } = await supabase.from('events')
+      .update({ status: 'cancelled', cancel_note: cancelNote.trim() || null }).eq('id', cancelFor.id);
+    setActing(false);
+    if (error) {
+      alert(/cancel_note|events_status_check|check constraint/i.test(error.message)
+        ? 'Cancelling needs db/051_event_cancel_and_reminders.sql. Ask the administrator to run it.'
+        : error.message);
+      return;
+    }
+    setCancelFor(null);
+    await fetchEvents();
+    notifyEventsChanged();
+  }
+
+  async function restore(ev) {
+    if (!window.confirm(`Restore "${ev.title}" on ${shortDate(ev.date)}? Members will see it as on again.`)) return;
+    // Just this date (cancelling is per date too), not the whole series.
+    setActing(true);
+    const { error } = await supabase.from('events').update({ status: 'approved' }).eq('id', ev.id);
+    setActing(false);
+    if (error) { alert(error.message); return; }
+    await fetchEvents();
+    notifyEventsChanged();
+  }
+
+  // "Added by Maria (Secretary) · Approved by Juan (Leader)"
+  function whoLine(ev) {
+    const name = (id) => {
+      const p = people[id];
+      if (!p) return null;
+      const n = p.full_name?.trim() || p.email?.split('@')[0] || 'someone';
+      return LEVEL[p.role] ? `${n} (${LEVEL[p.role]})` : n;
+    };
+    const parts = [];
+    if (name(ev.created_by)) parts.push(`Added by ${name(ev.created_by)}`);
+    if (ev.approved_by && ev.approved_by !== ev.created_by && name(ev.approved_by)) parts.push(`Approved by ${name(ev.approved_by)}`);
+    if (ev.status === 'cancelled' && name(ev.cancelled_by)) parts.push(`Cancelled by ${name(ev.cancelled_by)}`);
+    return parts.join(' · ');
+  }
+
   async function dismissReviews() {
     await supabase.rpc('mark_event_reviews_seen', { p_ids: null });
     await fetchEvents();
@@ -342,6 +407,40 @@ export default function EventsPage() {
     pending:  events.filter((e) => e.status === "pending").length,
     done:     events.filter((e) => e.status === "done").length,
   };
+
+  function switchView(v) {
+    setView(v);
+    try { localStorage.setItem('faithsync-events-view', v); } catch { /* storage blocked — fine */ }
+  }
+
+  // The same card, buttons included, in the list and when an event is
+  // opened from the calendar (there it closes before another dialog opens).
+  function cardProps(event, inModal = false) {
+    const wrap = (fn) => (fn && inModal ? (...args) => { setSelectedId(null); fn(...args); } : fn);
+    return {
+      event,
+      branchName: isGlobal ? churchName(event.church_id) : null,
+      onEdit: wrap(canEditEvent(event) ? openEdit : null),
+      onDelete: wrap(canEditEvent(event) ? openDelete : null),
+      attendance: canSeeAttendance,
+      onShowSeries: event.series ? wrap(() => { setSeriesView(event.series_id); switchView('cards'); }) : null,
+      onApprove: wrap(canManageAll && (event.status === 'pending' || (event.status === 'planning' && event.created_by === user?.id)) ? approve : null),
+      onSendBack: wrap(canManageAll && event.status === 'pending' ? (ev) => { setSendBack(ev); setBackNote(''); } : null),
+      onSubmit: wrap(canSubmit && !canManageAll && event.created_by === user?.id && event.status === 'planning' ? submitForApproval : null),
+      onCancel: wrap(canManageAll && event.status === 'approved' ? (ev) => { setCancelFor(ev); setCancelNote(''); } : null),
+      onRestore: wrap(canManageAll && event.status === 'cancelled' ? restore : null),
+      byline: whoLine(event),
+      busy: acting, t, dark,
+    };
+  }
+
+  // The event opened from the calendar, with its weekly series attached.
+  const selected = (() => {
+    const ev = events.find((e) => e.id === selectedId);
+    if (!ev?.series_id) return ev || null;
+    const dates = events.filter((e) => e.series_id === ev.series_id).map((e) => e.date).sort();
+    return { ...ev, series: { count: dates.length, first: dates[0], last: dates[dates.length - 1] } };
+  })();
 
   // Long lists are shown 9 at a time (components/Pagination).
   const pg = usePaged(filtered, 9, `${search}|${activeFilter}|${seriesView}`);
@@ -436,6 +535,14 @@ export default function EventsPage() {
             </button>
           ))}
         </div>
+        <div className={`flex gap-1 p-1 rounded-xl border ${t.cardBorder} ${t.cardBg} shrink-0 self-start`} role="tablist" aria-label="View">
+          {[['cards', 'Cards', LayoutGrid], ['calendar', 'Calendar', CalendarDays]].map(([key, label, Icon]) => (
+            <button key={key} role="tab" aria-selected={view === key} onClick={() => switchView(key)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${view === key ? 'bg-blue-600 text-white' : t.filterInactive.split(' ').filter((c) => c.startsWith('text-') || c.startsWith('hover:')).join(' ')}`}>
+              <Icon size={13} /> {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {viewedSeries && (
@@ -452,6 +559,9 @@ export default function EventsPage() {
 
       {loading ? (
         <p className={`${t.textMuted} text-center py-20 text-sm`}>Loading events...</p>
+      ) : view === 'calendar' ? (
+        // Every date (weekly events on each of their days), same filters.
+        <EventCalendar events={matching} onSelect={(e) => setSelectedId(e.id)} dark={dark} />
       ) : filtered.length === 0 ? (
         <div className="text-center py-20">
           <CalendarDays className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
@@ -460,16 +570,25 @@ export default function EventsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {pg.items.map((event) => (
-            <EventCard key={event.id} event={event} branchName={isGlobal ? churchName(event.church_id) : null} onEdit={canEditEvent(event) ? openEdit : null} onDelete={canManageAll ? openDelete : null} attendance={canSeeAttendance}
-              onShowSeries={event.series ? () => setSeriesView(event.series_id) : null}
-              onApprove={canManageAll && (event.status === 'pending' || (event.status === 'planning' && event.created_by === user?.id)) ? approve : null}
-              onSendBack={canManageAll && event.status === 'pending' ? (ev) => { setSendBack(ev); setBackNote(''); } : null}
-              onSubmit={canSubmit && !canManageAll && event.created_by === user?.id && event.status === 'planning' ? submitForApproval : null}
-              busy={acting} t={t} dark={dark} />
+            <EventCard key={event.id} {...cardProps(event)} />
           ))}
         </div>
       )}
-      {!loading && <Pagination {...pg} label="events" />}
+      {!loading && view === 'cards' && <Pagination {...pg} label="events" />}
+
+      {/* An event opened from the calendar: its card, with the usual buttons */}
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setSelectedId(null); }}>
+          <div role="dialog" aria-modal="true" aria-label={selected.title} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <button onClick={() => setSelectedId(null)} aria-label="Close"
+              className="absolute -top-3 -right-1 z-10 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><X size={16} /></button>
+            <div className={`${t.modalBg} rounded-3xl`}>
+              <EventCard {...cardProps(selected, true)} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {toDelete && (() => {
         const { event, later, scope, counts } = toDelete;
@@ -513,6 +632,29 @@ export default function EventsPage() {
         );
       })()}
 
+      {cancelFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onMouseDown={(e) => { if (e.target === e.currentTarget && !acting) setCancelFor(null); }}>
+          <form onSubmit={confirmCancel} role="dialog" aria-modal="true" aria-label="Cancel event"
+            className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
+            <h2 className={`text-lg font-black ${t.textPrimary}`}>Cancel “{cancelFor.title}”?</h2>
+            <p className={`text-xs ${t.textSub} mt-1 mb-4`}>
+              {shortDate(cancelFor.date)}. Members will still see it, marked <b>Cancelled</b>, with your reason. You can restore it later.
+              {cancelFor.series_id && ' Only this date is cancelled; the other dates of the weekly event stay on.'}
+            </p>
+            <textarea value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} maxLength={500} rows={3} autoFocus
+              placeholder="Reason (optional) — e.g. Moved to next Sunday because of the typhoon."
+              className={`${inputStyle(t)} resize-none`} />
+            <div className="flex gap-3 pt-4">
+              <button type="button" onClick={() => setCancelFor(null)} disabled={acting} className={`flex-1 ${t.cancelBtn} rounded-xl py-2.5 text-sm font-semibold`}>Keep it</button>
+              <button type="submit" disabled={acting} className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-bold">
+                {acting ? 'Cancelling…' : 'Cancel event'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {sendBack && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
           onMouseDown={(e) => { if (e.target === e.currentTarget && !acting) setSendBack(null); }}>
@@ -521,7 +663,7 @@ export default function EventsPage() {
             <h2 className={`text-lg font-black ${t.textPrimary}`}>Send back to planning</h2>
             <p className={`text-xs ${t.textSub} mt-1 mb-4`}>“{sendBack.title}” — tell them what to change. They&apos;ll see this, then they can fix it and submit again.</p>
             <textarea value={backNote} onChange={(e) => setBackNote(e.target.value)} required maxLength={1000} rows={4} autoFocus
-              placeholder="e.g. Please lower the budget to ₱2,000 and choose a Saturday."
+              placeholder="e.g. Please move it to Saturday and add the venue."
               className={`${inputStyle(t)} resize-none`} />
             <div className="flex gap-3 pt-4">
               <button type="button" onClick={() => setSendBack(null)} disabled={acting} className={`flex-1 ${t.cancelBtn} rounded-xl py-2.5 text-sm font-semibold`}>Cancel</button>
@@ -599,18 +741,14 @@ export default function EventsPage() {
                 <label className={`flex items-start gap-2.5 text-xs ${t.textSub} cursor-pointer`}>
                   <input type="checkbox" checked={applyLater} onChange={(e) => setApplyLater(e.target.checked)} className="mt-0.5 accent-blue-600" />
                   <span>
-                    <span className={`font-bold ${t.textPrimary}`}>Also change the later dates</span> — title, time, venue,
-                    budget and description for {shortDate(editingEvent.date)} and every later date of this weekly event. The date itself changes only here.
+                    <span className={`font-bold ${t.textPrimary}`}>Also change the later dates</span> — title, time, venue
+                    and description for {shortDate(editingEvent.date)} and every later date of this weekly event. The date itself changes only here.
                   </span>
                 </label>
               )}
 
               <Field label="Venue" t={t}>
                 <input type="text" name="venue" value={form.venue} onChange={handleChange} maxLength={200} placeholder="e.g. Main Sanctuary" className={inputStyle(t)} />
-              </Field>
-
-              <Field label="Budget (₱)" t={t}>
-                <input type="number" name="budget" value={form.budget} onChange={handleChange} placeholder="e.g. 3000" min="0" className={inputStyle(t)} onWheel={(e) => e.target.blur()} />
               </Field>
 
               <Field label="Description" t={t}>
@@ -622,6 +760,11 @@ export default function EventsPage() {
                   {canManageAll
                     ? <>Your events are <b>Approved</b> as soon as you save them, and members see them right away.</>
                     : <>It goes to the <b>Leaders</b> for approval when you save it. You can still change it until they approve it.</>}
+                </p>
+              )}
+              {editingEvent?.status === 'planning' && canSubmit && !canManageAll && (
+                <p className={`text-[11px] ${A(dark, 'orange')}`}>
+                  This event was sent back. After saving your changes, press <b>Submit for approval</b> on its card to send it to the Leaders again.
                 </p>
               )}
 
@@ -644,9 +787,10 @@ function inputStyle(t) {
 }
 
 
-function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, attendance, onApprove, onSendBack, onSubmit, busy, t, dark }) {
+function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel, onRestore, byline, attendance, onApprove, onSendBack, onSubmit, busy, t, dark }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const phase = event.status || "planning";
+  const cancelled = phase === 'cancelled';
 
   const steps = [
     { key: "planning", label: "Planning", Icon: CircleDot },
@@ -659,13 +803,15 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, attendan
     <div className={`${t.cardBg} border ${t.cardBorder} p-6 rounded-3xl backdrop-blur-sm hover:border-blue-500/40 transition-all group relative`}>
       <div className="flex justify-between items-start mb-4">
         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[phase] || STATUS_COLORS.planning}`}>{phase}</span>
-        {(onEdit || onDelete) && <div className="relative">
+        {(onEdit || onDelete || onCancel || onRestore) && <div className="relative">
           <button onClick={() => setMenuOpen(!menuOpen)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${t.menuHover}`}><MoreHorizontal size={16} /></button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className={`absolute right-0 top-8 z-20 ${t.menuBg} border rounded-xl shadow-xl w-36 overflow-hidden`}>
+              <div className={`absolute right-0 top-8 z-20 ${t.menuBg} border rounded-xl shadow-xl w-40 overflow-hidden`}>
                 {onEdit && <button onClick={() => { setMenuOpen(false); onEdit(event); }} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}><Pencil size={13} /> Edit</button>}
+                {onCancel && <button onClick={() => { setMenuOpen(false); onCancel(event); }} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}><Ban size={13} /> Cancel event</button>}
+                {onRestore && <button onClick={() => { setMenuOpen(false); onRestore(event); }} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}><RotateCcw size={13} /> Restore</button>}
                 {onDelete && <button onClick={() => { setMenuOpen(false); onDelete(event); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 size={13} /> Delete</button>}
               </div>
             </>
@@ -673,7 +819,7 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, attendan
         </div>}
       </div>
 
-      <h3 className={`text-base font-black ${t.textPrimary} mb-1 group-hover:text-blue-400 transition-colors leading-snug`}>{event.title}</h3>
+      <h3 className={`text-base font-black ${t.textPrimary} mb-1 group-hover:text-blue-400 transition-colors leading-snug ${cancelled ? 'line-through opacity-60' : ''}`}>{event.title}</h3>
       {/* Older events may still name a ministry (new ones don't, db/050). */}
       {event.ministry && <p className="text-blue-400 text-[10px] font-bold uppercase tracking-wider mb-1">{event.ministry}</p>}
       {branchName ? <p className={`${t.textMuted} text-[10px] font-bold uppercase tracking-wider mb-4`}>{branchName}</p> : <div className="mb-4" />}
@@ -703,11 +849,13 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, attendan
             </span>
           </div>
         )}
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-bold ${t.textMuted} uppercase tracking-widest`}>Budget</span>
-          <span className={`text-xs font-mono ${t.textPrimary}`}>₱{Number(event.budget || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
-        </div>
         {event.description && <p className={`text-xs ${t.textMuted} leading-relaxed line-clamp-2`}>{event.description}</p>}
+        {cancelled && (
+          <p className={`text-xs rounded-xl px-3 py-2 bg-red-500/10 border border-red-500/20 ${t.textSub}`}>
+            <span className="font-bold text-red-400">Cancelled{event.cancel_note ? ':' : ''}</span> {event.cancel_note}
+          </p>
+        )}
+        {byline && <p className={`text-[11px] ${t.textMuted}`}>{byline}</p>}
         {phase === 'planning' && event.review_note && (
           <p className={`text-xs rounded-xl px-3 py-2 bg-orange-500/10 border border-orange-500/20 ${t.textSub}`}>
             <span className={`font-bold ${A(dark, 'orange')}`}>Sent back:</span> {event.review_note}
@@ -739,7 +887,9 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, attendan
       )}
 
       <div className={`pt-4 border-t ${t.divider}`}>
-        <div className="flex items-center justify-between">
+        {cancelled ? (
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-red-400"><Ban size={12} /> Cancelled — no attendance</p>
+        ) : <div className="flex items-center justify-between">
           {steps.map((step, i) => {
             const reached = stepIndex >= ["planning", "pending", "approved", "done"].indexOf(step.key === "approved" ? "approved" : step.key);
             return (
@@ -750,7 +900,7 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, attendan
               </div>
             );
           })}
-        </div>
+        </div>}
         {/* Attendance opens on the event's date (Philippine time) once it's approved. */}
         {attendance && ['approved', 'done'].includes(phase) && event.date && event.date <= phToday() && (
           <Link href={`/dashboard/attendance?event=${event.id}`}

@@ -34,7 +34,10 @@ export function groupSeries(events, today) {
   const pick = new Map();
   bySeries.forEach((list, id) => {
     const sorted = [...list].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const next = sorted.find((e) => e.date && e.date >= today) || sorted[sorted.length - 1];
+    // The next date that's still on; a cancelled one only if nothing else is left.
+    const next = sorted.find((e) => e.date && e.date >= today && e.status !== 'cancelled')
+      || sorted.find((e) => e.date && e.date >= today)
+      || sorted[sorted.length - 1];
     pick.set(id, {
       ...next,
       series: { count: sorted.length, first: sorted[0].date, last: sorted[sorted.length - 1].date, ids: sorted.map((e) => e.id) },

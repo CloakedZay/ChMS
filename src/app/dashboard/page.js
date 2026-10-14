@@ -15,9 +15,11 @@ import { can } from "@/app/lib/permissions";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import BranchLabel from "@/app/components/BranchLabel";
 import UpcomingBirthdays from "@/app/components/UpcomingBirthdays";
+import CalendarWidget from "@/app/components/CalendarWidget";
 import ScriptureLink from "@/app/components/ScriptureLink";
 import AnnouncementsBanner from "@/app/components/AnnouncementsBanner";
 import FollowUpReminder from "@/app/components/FollowUpReminder";
+import AttendanceReminder from "@/app/components/AttendanceReminder";
 import { useFollowUpReminder, REMINDER_DAYS, MISSED_EVENTS } from "@/app/lib/useFollowUpReminder";
 import { useEventNotices } from "@/app/lib/useEventNotices";
 import { formatEventTime } from "@/app/lib/eventTime";
@@ -503,7 +505,7 @@ export default function DashboardPage() {
 
       {/* ── OVERVIEW ── */}
       <div className="space-y-8">
-        {/* Top: announcements, reminder and verse on the left; birthday box in the top-right corner */}
+        {/* Left: announcements, reminders, verse, stats and lists; right: a sidebar */}
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-6 lg:items-start space-y-8 lg:space-y-0">
         <div className="min-w-0 space-y-8">
         {/* Announcements — always first */}
@@ -511,6 +513,9 @@ export default function DashboardPage() {
 
         {/* Follow-up reminder (Pastor, Leader, Secretary) */}
         <FollowUpReminder due={followUp.due} snoozed={followUp.snoozed} onSnooze={followUp.snooze} />
+
+        {/* Attendance not taken (Leader, Secretary; db/051) */}
+        {['leader', 'secretary'].includes(role) && <AttendanceReminder />}
 
         <div className={`${card} p-6 flex items-start gap-4`}>
           <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
@@ -529,19 +534,6 @@ export default function DashboardPage() {
               <p className={`text-sm ${t.textMuted}`}>No verses uploaded yet. Upload the verses PDF to start showing a daily verse.</p>
             )}
           </div>
-        </div>
-        </div>
-
-        {/* Upcoming birthdays — compact box, top right */}
-        <UpcomingBirthdays
-          compact
-          cardClass={`${card} p-4`}
-          titleClass={t.textPrimary}
-          textClass={t.textPrimary}
-          subClass={t.textMuted}
-          rowClass={`${t.innerCard} border ${t.innerBorder}`}
-          accentClass={A(dark, "purple")}
-        />
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
@@ -633,6 +625,30 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+        </div>
+        </div>
+
+        {/* Right: upcoming birthdays and this month's events, beside everything */}
+        <div className="space-y-6 lg:sticky lg:top-6">
+        <UpcomingBirthdays
+          compact
+          cardClass={`${card} p-4`}
+          titleClass={t.textPrimary}
+          textClass={t.textPrimary}
+          subClass={t.textMuted}
+          rowClass={`${t.innerCard} border ${t.innerBorder}`}
+          accentClass={A(dark, "purple")}
+        />
+        <CalendarWidget
+          href="/dashboard/events"
+          cardClass={`${card} p-4`}
+          titleClass={t.textPrimary}
+          subClass={t.textMuted}
+          rowClass={`${t.innerCard} border ${t.innerBorder}`}
+          hoverClass={t.hoverRow}
+          accentClass={A(dark, "blue")}
+        />
+        </div>
         </div>
       </div>
     </div>

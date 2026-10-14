@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { Search, CalendarDays, Clock, MapPin, Repeat } from 'lucide-react';
+import { Search, CalendarDays, Clock, MapPin, Repeat, LayoutGrid, X } from 'lucide-react';
 import { formatEventTime } from '@/app/lib/eventTime';
 import { phToday } from '@/app/lib/phDate';
 import { groupSeries, seriesLabel } from '@/app/lib/eventSeries';
 import BranchLabel from '@/app/components/BranchLabel';
+import EventCalendar from '@/app/components/EventCalendar';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 const STATUS_COLORS = {
@@ -14,6 +15,7 @@ const STATUS_COLORS = {
   pending:  'bg-orange-500/10 text-orange-400 border-orange-500/20',
   planning: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   done:     'bg-slate-500/10 text-slate-400 border-slate-500/20',
+  cancelled: 'bg-red-500/10 text-red-400 border-red-500/20',
 };
 
 // Each event takes its ministry's color (set on the Ministries page); events
@@ -56,18 +58,22 @@ export default function MemberEventsPage() {
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [ministryFilter, setMinistryFilter] = useState('all');
+  const [view, setView]           = useState('cards');   // or 'calendar'; remembered on this browser
+  const [openId, setOpenId]       = useState(null);      // event opened from the calendar
 
   useEffect(() => {
     async function fetchEvents() {
       setLoading(true);
       const [evts, mins] = await Promise.all([
         // Planning / pending events are drafts; members see them once approved (db/044).
-        supabase.from('events').select('*').in('status', ['approved', 'done']).order('date', { ascending: true }),
+        // Cancelled ones stay listed, marked, so nobody turns up for nothing (db/051).
+        supabase.from('events').select('*').in('status', ['approved', 'done', 'cancelled']).order('date', { ascending: true }),
         supabase.from('ministries').select('name, color_code'),
       ]);
       setEvents(evts.data || []);
       setMinistries(mins.data || []);
       setLoading(false);
+      try { if (localStorage.getItem('faithsync-events-view') === 'calendar') setView('calendar'); } catch { /* storage blocked */ }
     }
     fetchEvents();
   }, []);
@@ -88,13 +94,13 @@ export default function MemberEventsPage() {
   }, [events]);
 
   const today = phToday();
-  // A weekly event (db/049) is one card: its next date.
-  const filtered = groupSeries(events
-    .filter((ev) => {
-      const term = search.toLowerCase();
-      const matchesText = ev.title?.toLowerCase().includes(term) || ev.ministry?.toLowerCase().includes(term);
-      return matchesText && (ministryFilter === 'all' || ev.ministry === ministryFilter);
-    }), today)
+  const matching = events.filter((ev) => {
+    const term = search.toLowerCase();
+    const matchesText = ev.title?.toLowerCase().includes(term) || ev.ministry?.toLowerCase().includes(term);
+    return matchesText && (ministryFilter === 'all' || ev.ministry === ministryFilter);
+  });
+  // A weekly event (db/049) is one card: its next date. The calendar shows every date.
+  const filtered = groupSeries(matching, today)
     // upcoming first (soonest), then past (most recent first), then undated
     .sort((a, b) => {
       const rank = (e) => (!e.date ? 2 : e.date >= today ? 0 : 1);
@@ -102,6 +108,17 @@ export default function MemberEventsPage() {
       if (rank(a) === 1) return b.date.localeCompare(a.date);
       return (a.date || '').localeCompare(b.date || '');
     });
+
+  function switchView(v) {
+    setView(v);
+    try { localStorage.setItem('faithsync-events-view', v); } catch { /* storage blocked — fine */ }
+  }
+  const opened = (() => {
+    const ev = events.find((e) => e.id === openId);
+    if (!ev?.series_id) return ev || null;
+    const dates = events.filter((e) => e.series_id === ev.series_id).map((e) => e.date).sort();
+    return { ...ev, series: { count: dates.length, first: dates[0], last: dates[dates.length - 1] } };
+  })();
 
   const formatDate = (d) => d
     ? new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -118,7 +135,8 @@ export default function MemberEventsPage() {
         <p className="text-slate-500 text-sm mt-0.5">Church activities and ministry projects, color-coded by ministry</p>
       </div>
 
-      <div className="relative mb-4 max-w-md">
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+      <div className="relative flex-1 max-w-md">
         <Search className="absolute left-3 top-2.5 w-4 h-4 text-white/30" />
         <input
           type="text"
@@ -127,6 +145,15 @@ export default function MemberEventsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-[#1b2420] border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors"
         />
+      </div>
+        <div className="flex gap-1 p-1 rounded-xl border border-white/10 bg-[#1b2420] self-start sm:ml-auto" role="tablist" aria-label="View">
+          {[['cards', 'Cards', LayoutGrid], ['calendar', 'Calendar', CalendarDays]].map(([key, label, Icon]) => (
+            <button key={key} role="tab" aria-selected={view === key} onClick={() => switchView(key)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${view === key ? 'bg-blue-600 text-white' : 'text-white/50 hover:text-white'}`}>
+              <Icon size={13} /> {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Ministry filter chips — each in its ministry's color */}
@@ -169,6 +196,9 @@ export default function MemberEventsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {[0, 1, 2].map((i) => <div key={i} className="skeleton h-48 w-full rounded-3xl" />)}
         </div>
+      ) : view === 'calendar' ? (
+        <EventCalendar events={matching} onSelect={(e) => setOpenId(e.id)} dark
+          legend={[['approved', 'Coming up'], ['done', 'Done'], ['cancelled', 'Cancelled']]} />
       ) : filtered.length === 0 ? (
         <div className="text-center py-20">
           <CalendarDays className="w-8 h-8 text-slate-700 mx-auto mb-2" />
@@ -184,7 +214,7 @@ export default function MemberEventsPage() {
             return (
               <div
                 key={ev.id}
-                className={`relative overflow-hidden bg-[#1b2420] border border-white/10 rounded-3xl p-6 pt-7 transition-all hover:-translate-y-0.5 hover:shadow-lg ${past ? 'opacity-70' : ''}`}
+                className={`relative overflow-hidden bg-[#1b2420] border border-white/10 rounded-3xl p-6 pt-7 transition-all hover:-translate-y-0.5 hover:shadow-lg ${past || ev.status === 'cancelled' ? 'opacity-70' : ''}`}
                 style={{ backgroundImage: `linear-gradient(135deg, ${color}14, transparent 55%)` }}
               >
                 <span className="absolute inset-x-0 top-0 h-1.5" style={{ backgroundColor: color }} aria-hidden="true" />
@@ -209,7 +239,7 @@ export default function MemberEventsPage() {
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[ev.status] || STATUS_COLORS.planning}`}>
                       {ev.status || 'planning'}
                     </span>
-                    <h3 className="text-base font-black text-white mt-2 leading-snug">{ev.title}</h3>
+                    <h3 className={`text-base font-black text-white mt-2 leading-snug ${ev.status === 'cancelled' ? 'line-through' : ''}`}>{ev.title}</h3>
                   </div>
                 </div>
 
@@ -236,6 +266,11 @@ export default function MemberEventsPage() {
                     <MapPin size={12} className="shrink-0 mt-px" /> {ev.venue}
                   </p>
                 )}
+                {ev.status === 'cancelled' && (
+                  <p className="text-xs mt-2 rounded-xl px-3 py-2 bg-red-500/10 border border-red-500/20 text-white/70">
+                    <span className="font-bold text-red-400">Cancelled{ev.cancel_note ? ':' : ''}</span> {ev.cancel_note}
+                  </p>
+                )}
                 {ev.series && (
                   <p className="flex items-start gap-1.5 text-xs text-white/50 mt-1">
                     <Repeat size={12} className="shrink-0 mt-px" /> {seriesLabel(ev)}
@@ -249,7 +284,36 @@ export default function MemberEventsPage() {
           })}
         </div>
       )}
-      {!loading && <Pagination {...pg} label="events" />}
+      {!loading && view === 'cards' && <Pagination {...pg} label="events" />}
+
+      {/* An event opened from the calendar */}
+      {opened && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setOpenId(null); }}>
+          <div role="dialog" aria-modal="true" aria-label={opened.title}
+            className="w-full max-w-md bg-[#1b2420] border border-white/10 rounded-3xl p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[opened.status] || STATUS_COLORS.approved}`}>
+                {opened.status}
+              </span>
+              <button onClick={() => setOpenId(null)} aria-label="Close" className="text-white/50 hover:text-white"><X size={18} /></button>
+            </div>
+            <h2 className={`text-lg font-black text-white mt-3 ${opened.status === 'cancelled' ? 'line-through' : ''}`}>{opened.title}</h2>
+            {opened.ministry && <p className="text-[11px] font-semibold text-white/50 mt-0.5">{opened.ministry}</p>}
+            <p className="text-sm text-white/70 mt-3 flex items-center gap-2">
+              <CalendarDays size={14} className="shrink-0" /> {formatDate(opened.date)}{opened.start_time && ` · ${formatEventTime(opened.start_time)}`}
+            </p>
+            {opened.venue && <p className="text-sm text-white/70 mt-1.5 flex items-center gap-2"><MapPin size={14} className="shrink-0" /> {opened.venue}</p>}
+            {opened.series && <p className="text-sm text-white/70 mt-1.5 flex items-center gap-2"><Repeat size={14} className="shrink-0" /> {seriesLabel(opened)}</p>}
+            {opened.status === 'cancelled' && (
+              <p className="text-xs mt-3 rounded-xl px-3 py-2 bg-red-500/10 border border-red-500/20 text-white/70">
+                <span className="font-bold text-red-400">Cancelled{opened.cancel_note ? ':' : ''}</span> {opened.cancel_note}
+              </p>
+            )}
+            {opened.description && <p className="text-sm text-white/60 leading-relaxed mt-3 whitespace-pre-wrap">{opened.description}</p>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

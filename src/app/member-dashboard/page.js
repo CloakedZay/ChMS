@@ -11,6 +11,7 @@ import { phToday } from '@/app/lib/phDate';
 import { collapseSeries } from '@/app/lib/eventSeries';
 import { CalendarDays, HandCoins, BookOpen } from 'lucide-react';
 import UpcomingBirthdays from '@/app/components/UpcomingBirthdays';
+import CalendarWidget from '@/app/components/CalendarWidget';
 import ScriptureLink from '@/app/components/ScriptureLink';
 import AnnouncementsBanner from '@/app/components/AnnouncementsBanner';
 
@@ -144,7 +145,7 @@ export default function MemberDashboard() {
           <AnnouncementsBanner />
         </div>
 
-        {/* Top: search + verse on the left, birthday box in the top-right corner */}
+        {/* Left: verse, stats and lists; right: a sidebar */}
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-6 lg:items-start mb-8">
         <div className="min-w-0">
 
@@ -168,23 +169,8 @@ export default function MemberDashboard() {
           )}
         </div>
 
-        </div>
 
-        {/* Upcoming birthdays — compact box, top right */}
-        <div className="mt-6 lg:mt-0">
-          <UpcomingBirthdays
-            compact
-            cardClass="bg-[#1b2420] rounded-3xl p-4 border border-white/10"
-            titleClass="text-white"
-            textClass="text-white"
-            subClass="text-white/40"
-            rowClass="bg-white/[0.03] border border-white/5"
-            accentClass="text-blue-400"
-          />
-        </div>
-        </div>
-
-        <div className="space-y-6">
+        <div className="space-y-6 mt-6">
 
           {/* Stats — each redirects to its module */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -258,6 +244,30 @@ export default function MemberDashboard() {
             </Link>}
 
           </div>
+        </div>
+        </div>
+
+        {/* Right: upcoming birthdays and this month's events, beside everything */}
+        <div className="mt-6 lg:mt-0 space-y-6 lg:sticky lg:top-6">
+          <UpcomingBirthdays
+            compact
+            cardClass="bg-[#1b2420] rounded-3xl p-4 border border-white/10"
+            titleClass="text-white"
+            textClass="text-white"
+            subClass="text-white/40"
+            rowClass="bg-white/[0.03] border border-white/5"
+            accentClass="text-blue-400"
+          />
+          <CalendarWidget
+            href="/member-dashboard/events"
+            cardClass="bg-[#1b2420] rounded-3xl p-4 border border-white/10"
+            titleClass="text-white"
+            subClass="text-white/40"
+            rowClass="bg-white/[0.03] border border-white/5"
+            hoverClass="hover:bg-white/[0.06]"
+            accentClass="text-blue-400"
+          />
+        </div>
         </div>
       </div>
     </div>
