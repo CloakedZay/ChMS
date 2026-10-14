@@ -128,7 +128,7 @@ export default function AttendanceSheet({ eventId, dark, onBack }) {
         </div>
         {!canMark && people !== null && !error && (
           <p className={`mt-4 text-xs flex items-center gap-1.5 ${t.muted}`}>
-            <Lock size={13} /> View only — attendance is taken by the Pastor, Leaders, the Secretary, the ministry&apos;s head and attendance helpers.
+            <Lock size={13} /> View only — attendance is taken by the Pastor, Leaders, the Secretary and attendance helpers.
           </p>
         )}
       </div>

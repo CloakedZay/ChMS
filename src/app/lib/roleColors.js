@@ -2,7 +2,6 @@
 // (Users, Members, Messages), so a person's level reads at a glance:
 //
 //   Admin  brick red    Pastor    gold      Leader  forest green
-//   Ministry Head steel blue
 //   Finance teal        Secretary plum      Member  stone gray
 //   Volunteer terracotta
 //
@@ -25,11 +24,6 @@ const LEVELS = {
     light: 'bg-[#173f35]/10 text-[#173f35] border-[#173f35]/25',
     dark:  'bg-[#6aa183]/15 text-[#8fcaa8] border-[#6aa183]/35',
     dot:   'bg-[#2f6b57]',
-  },
-  ministry_head: {
-    light: 'bg-[#3b6e9e]/10 text-[#2c5a85] border-[#3b6e9e]/30',
-    dark:  'bg-[#7fb0de]/15 text-[#a6c9ea] border-[#7fb0de]/35',
-    dot:   'bg-[#3b6e9e]',
   },
   finance: {
     light: 'bg-[#2b7a78]/10 text-[#1f5f5d] border-[#2b7a78]/30',

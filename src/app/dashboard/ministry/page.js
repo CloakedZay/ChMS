@@ -11,7 +11,6 @@ import {
   Trash2, Loader2, Users, CalendarClock, Link2, BookOpen,
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
-import NotHeadNotice from "@/app/components/NotHeadNotice";
 
 // Real ministries per branch (step M1, db/022). The database decides who
 // may do what; this page only shows the matching buttons:
@@ -88,9 +87,8 @@ export default function MinistriesPage() {
     const [m, a, mem, lead, ch, mods, qs] = await Promise.all([
       supabase.from("ministries").select("*").order("name"),
       supabase.from("ministry_assignments").select("id, ministry_id, member_id, role, assigned_at"),
-      // A Ministry Head can't read member records (phone / email) — names only (db/038).
-      supabase.from(role === "ministry_head" ? "member_directory" : "members").select("id, full_name, status, church_id").order("full_name"),
-      supabase.from("profiles").select("id, full_name, email, church_id, role").in("role", ["leader", "ministry_head"]),
+      supabase.from("members").select("id, full_name, status, church_id").order("full_name"),
+      supabase.from("profiles").select("id, full_name, email, church_id, role").eq("role", "leader"),
       supabase.from("churches").select("id, name").order("name"),
       supabase.from("discipleship_modules").select("id, title, is_active, order_index, ministry_id").not("ministry_id", "is", null).order("order_index"),
       supabase.from("discipleship_questions").select("module_id"),
@@ -129,7 +127,7 @@ export default function MinistriesPage() {
   const active = shown.filter((m) => m.is_active);
   const off = shown.filter((m) => !m.is_active);
   const peopleIn = (ministryId) => assignments.filter((a) => a.ministry_id === ministryId);
-  const canAssign = (m) => isPastor || ((role === "leader" || role === "ministry_head") && m.leader_id && m.leader_id === user?.id);
+  const canAssign = (m) => isPastor || (role === "leader" && m.leader_id && m.leader_id === user?.id);
 
   // ── Ministry add / edit (Pastor) ────────────────────────────────────────
   function openNew() {
@@ -396,8 +394,6 @@ export default function MinistriesPage() {
         </div>
       </div>
 
-      {/* A Ministry Head who heads nothing yet: say what to ask for */}
-      {!loading && role === "ministry_head" && !ministries.some((m) => m.leader_id === user?.id) && <NotHeadNotice />}
 
       {isGlobal && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">

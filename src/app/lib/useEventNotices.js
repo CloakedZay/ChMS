@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { collapseSeries } from '@/app/lib/eventSeries';
 
-// Event approval notices (db/042) for the staff dashboard:
-//   pending  the Pastor: events waiting for approval
-//   reviews  whoever filed events: the Pastor's decisions they haven't
+// Event approval notices (db/042, db/050) for the staff dashboard:
+//   pending  Leaders: the Secretary's events waiting for approval
+//   reviews  whoever filed events: the Leaders' decisions they haven't
 //            dismissed yet (approved, or sent back with a reason)
 // Also turns approved events whose date has passed into
 // 'done' (complete_past_events). Refreshes when the tab regains focus,
@@ -29,7 +29,7 @@ export function useEventNotices(userId, role, enabled = true) {
     async function refresh() {
       await supabase.rpc('complete_past_events');   // not set up yet → ignored
       const [waiting, mine] = await Promise.all([
-        role === 'pastor'
+        role === 'leader'
           ? supabase.from('events').select('*').eq('status', 'pending').order('date')
           : Promise.resolve({ data: [] }),
         supabase.from('events').select('*')
@@ -52,7 +52,7 @@ export function useEventNotices(userId, role, enabled = true) {
     };
   }, [userId, role, enabled]);
 
-  // "Got it" on the Pastor's decisions.
+  // "Got it" on the Leaders' decisions.
   const dismiss = useCallback(async (ids) => {
     await supabase.rpc('mark_event_reviews_seen', { p_ids: ids || null });
     setReviews((list) => (ids ? list.filter((r) => !r.ids.some((id) => ids.includes(id))) : []));

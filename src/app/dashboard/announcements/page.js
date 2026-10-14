@@ -12,9 +12,9 @@ import DatePicker from '@/app/components/DatePicker';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 // Announcements (db/031, db/038). Pastor: any branch or all branches.
-// Leader: own branch. Ministry Head: only the ministries they head. Any of
-// them can aim an announcement at one ministry's members. Everyone else who
-// opens this page can only read. The database enforces the same rules.
+// Leader: own branch. Either can aim an announcement at one ministry's
+// members. Everyone else who opens this page can only read. The database
+// enforces the same rules.
 
 const EMPTY = { title: '', body: '', church_id: '', ministry_id: '', is_pinned: false, expires_on: '' };
 
@@ -23,7 +23,6 @@ export default function AnnouncementsPage() {
   const { dark } = useTheme();
   const canEdit = can(role, 'announcements', 'edit');
   const isPastor = role === 'pastor';
-  const isHead = role === 'ministry_head';
 
   const [items, setItems] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -72,18 +71,16 @@ export default function AnnouncementsPage() {
 
   const branchName = (id) => (id ? branches.find((b) => b.id === id)?.name || 'One branch' : 'All branches');
   const ministryName = (id) => ministries.find((m) => m.id === id)?.name || 'One ministry';
-  const headed = ministries.filter((m) => m.leader_id === user?.id);
   // Which rows this person may change (the database checks it too).
   const canEditRow = (a) => isPastor
-    || (role === 'leader' && a.church_id && a.church_id === myChurch)
-    || (isHead && a.ministry_id && headed.some((m) => m.id === a.ministry_id));
-  // Ministries the form offers: a Ministry Head's own; otherwise the chosen branch's.
+    || (role === 'leader' && a.church_id && a.church_id === myChurch);
+  // Ministries the form offers: the chosen branch's.
   const formChurch = isPastor ? form.church_id : myChurch;
-  const ministryChoices = isHead ? headed : ministries.filter((m) => m.church_id === formChurch);
+  const ministryChoices = ministries.filter((m) => m.church_id === formChurch);
   const today = todayManila();
 
   function openNew() {
-    setForm({ ...EMPTY, church_id: isPastor ? '' : myChurch || '', ministry_id: isHead ? headed[0]?.id || '' : '' });
+    setForm({ ...EMPTY, church_id: isPastor ? '' : myChurch || '', ministry_id: '' });
     setFormError('');
     setEditing({});
   }
@@ -100,8 +97,7 @@ export default function AnnouncementsPage() {
   async function save(e) {
     e.preventDefault();
     if (!form.title.trim()) { setFormError('Give the announcement a title.'); return; }
-    if (isHead && !form.ministry_id) { setFormError('Choose which of your ministries this is for.'); return; }
-    if (!isPastor && !isHead && !myChurch) { setFormError('Your account has no branch, so you can’t post. Ask the admin to set your branch.'); return; }
+    if (!isPastor && !myChurch) { setFormError('Your account has no branch, so you can’t post. Ask the admin to set your branch.'); return; }
     const chosenMinistry = ministries.find((m) => m.id === form.ministry_id) || null;
     const row = {
       title: form.title.trim(),
@@ -149,7 +145,6 @@ export default function AnnouncementsPage() {
           <p className={`text-sm mt-1 ${t.sub}`}>
             Shown at the top of everyone&apos;s overview. Pinned ones stay first.
             {canEdit && (isPastor ? ' You can post to one branch, all branches, or one ministry.'
-              : isHead ? ' You can post to the members of the ministries you head.'
               : ' You can post to your own branch or one of its ministries.')}
           </p>
         </div>
@@ -247,8 +242,8 @@ export default function AnnouncementsPage() {
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className={label} htmlFor={isHead ? 'a-ministry' : 'a-branch'}>Show to</label>
-                  {isHead ? null : isPastor ? (
+                  <label className={label} htmlFor="a-branch">Show to</label>
+                  {isPastor ? (
                     <select id="a-branch" name="church_id" value={form.church_id}
                       onChange={(e) => setForm((f) => ({ ...f, church_id: e.target.value, ministry_id: '' }))} className={field}>
                       <option value="">All branches</option>
@@ -257,11 +252,10 @@ export default function AnnouncementsPage() {
                   ) : (
                     <p className={`${field} opacity-80`}>{branchName(myChurch)}</p>
                   )}
-                  {(isHead || formChurch) && (
+                  {formChurch && (
                     <select id="a-ministry" name="ministry_id" value={form.ministry_id} onChange={change} className={field}
                       aria-label="Ministry">
-                      {!isHead && <option value="">Everyone in the branch</option>}
-                      {isHead && headed.length === 0 && <option value="">You don’t head a ministry yet</option>}
+                      <option value="">Everyone in the branch</option>
                       {ministryChoices.map((m) => <option key={m.id} value={m.id}>Only {m.name} members</option>)}
                     </select>
                   )}

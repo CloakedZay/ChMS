@@ -21,7 +21,6 @@ import BranchLabel from "@/app/components/BranchLabel";
 import Pagination, { usePaged } from "@/app/components/Pagination";
 const EMPTY_FORM = {
   title: '',
-  ministry: '',
   date: '',
   start_time: '',
   venue: '',
@@ -35,8 +34,6 @@ const EMPTY_FORM = {
 
 const shortDate = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 
-// The ministry list comes from each branch's real ministries (db/022).
-
 const STATUS_COLORS = {
   approved: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   pending:  "bg-orange-500/10 text-orange-400 border-orange-500/20",
@@ -46,9 +43,9 @@ const STATUS_COLORS = {
 
 const FILTERS = ["all", "planning", "pending", "approved", "done"];
 const GLOBAL_ROLES = ["admin", "pastor"];
-// A leader may still edit their own event while it's in one of these;
-// approving is the Pastor's job.
-const LEADER_STATUSES = ["planning", "pending"];
+// The Secretary may still edit their own event while it's in one of these;
+// approving is a Leader's job (db/050).
+const SUBMITTED_STATUSES = ["planning", "pending"];
 
 // ─── Theme token map — same pattern as DashboardPage.js ────────────────────
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
@@ -109,7 +106,6 @@ export default function EventsPage() {
   const [backNote, setBackNote]     = useState("");
   const [acting, setActing]         = useState(false);
   const [form, setForm]             = useState(EMPTY_FORM);
-  const [ministries, setMinistries] = useState([]);
   const [applyLater, setApplyLater] = useState(false);  // edit: also the series' later dates
   const [seriesView, setSeriesView] = useState(null);   // series_id: show all its dates
   const [toDelete, setToDelete]     = useState(null);   // { event, later, counts }
@@ -117,14 +113,16 @@ export default function EventsPage() {
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
   const today = phToday();
 
-  // Pastor manages every event; a leader adds events and edits their own
-  // until they're approved. Everyone else only views (same as db/007).
+  // db/050: Leaders add events (approved on save), approve the Secretary's
+  // and manage every event of their branch. The Secretary adds events for a
+  // Leader to approve and edits their own until then. The Pastor, Admin and
+  // everyone else only view. Anyone who adds events may give a past date.
   const canManageAll = can(role, 'events', 'approve');
   const canSubmit    = can(role, 'events', 'submit');
   const canSeeAttendance = can(role, 'attendance', 'view');   // db/041
   const canEditEvent = (ev) =>
     canManageAll ||
-    (canSubmit && ev.created_by === user?.id && LEADER_STATUSES.includes(ev.status));
+    (canSubmit && ev.created_by === user?.id && SUBMITTED_STATUSES.includes(ev.status));
 
   async function fetchProfile() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -143,8 +141,6 @@ export default function EventsPage() {
     const { data, error } = await supabase.from('churches').select('id, name').order('name', { ascending: true });
     if (error) { console.error('Error fetching churches:', error.message); return; }
     if (data) setChurches(data);
-    const { data: list } = await supabase.from('ministries').select('name, church_id, leader_id').eq('is_active', true).order('name');
-    setMinistries(list || []);
   }
 
   async function fetchEvents() {
@@ -177,7 +173,6 @@ export default function EventsPage() {
     setEditingEvent(event);
     setForm({
       title:       event.title       || '',
-      ministry:    event.ministry    || '',
       date:        event.date        || '',
       start_time:  event.start_time?.slice(0, 5) || '',
       venue:       event.venue       || '',
@@ -202,10 +197,6 @@ export default function EventsPage() {
       alert('Please select which branch this event belongs to.');
       return;
     }
-    if (!canManageAll && form.date < today && form.date !== editingEvent?.date) {
-      alert('Pick today or a later date. Only the Pastor can add an event that already happened.');
-      return;
-    }
     const dates = !editingEvent && form.repeat === 'weekly' ? weeklyDates(form.date, form.until) : [form.date];
     if (!editingEvent && form.repeat === 'weekly' && dates.length < 2) {
       alert('Pick an end date at least a week after the first date, or choose "Does not repeat".');
@@ -217,8 +208,9 @@ export default function EventsPage() {
       ...rest,
       budget: parseFloat(form.budget) || 0,
       church_id: isGlobal ? form.church_id : profile?.church_id,
-      // The Pastor's events are approved on save (db/049); others start as Planning.
-      status: editingEvent ? editingEvent.status : canManageAll ? 'approved' : 'planning',
+      // A Leader's events are approved on save; the Secretary's go straight
+      // to the Leaders for approval (db/050).
+      status: editingEvent ? editingEvent.status : canManageAll ? 'approved' : 'pending',
     };
     // Time and venue only when set (or being cleared), so events still save
     // before db/043 has been run.
@@ -290,7 +282,7 @@ export default function EventsPage() {
   }
 
   function submitForApproval(ev) {
-    if (!window.confirm(`Send "${ev.title}"${datesNote(ev)} to the Pastor for approval?`)) return;
+    if (!window.confirm(`Send "${ev.title}"${datesNote(ev)} to the Leaders for approval?`)) return;
     setStatus(ev, { status: 'pending' });
   }
 
@@ -339,13 +331,6 @@ export default function EventsPage() {
   const filtered = seriesView ? matching : groupSeries(matching, phToday());
   const viewedSeries = seriesView ? events.find((e) => e.series_id === seriesView) : null;
 
-  // Ministries of the branch the event belongs to.
-  const eventChurch = isGlobal ? form.church_id : profile?.church_id;
-  // A Ministry Head can only file events for the ministries they head (db/038).
-  const branchMinistries = ministries
-    .filter((m) => m.church_id === eventChurch && (role !== 'ministry_head' || m.leader_id === user?.id))
-    .map((m) => m.name);
-
   // One line per weekly event, not per date.
   const waiting = canManageAll ? collapseSeries(events.filter((e) => e.status === 'pending')) : [];
   const myReviews = collapseSeries(events.filter((e) => e.created_by === user?.id && e.review_seen === false));
@@ -389,7 +374,7 @@ export default function EventsPage() {
         </div>
       </div>
 
-      {/* The Pastor: events waiting for approval */}
+      {/* Leaders: the Secretary's events waiting for approval */}
       {waiting.length > 0 && activeFilter !== 'pending' && (
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-5 py-4">
           <p className={`text-sm ${t.textPrimary} flex-1`}>
@@ -400,7 +385,7 @@ export default function EventsPage() {
         </div>
       )}
 
-      {/* Whoever filed events: the Pastor's decisions */}
+      {/* Whoever filed events: the Leaders' decisions */}
       {myReviews.length > 0 && (
         <div className={`mb-6 rounded-2xl border ${t.cardBorder} ${t.cardBg} px-5 py-4`}>
           <ul className="space-y-2">
@@ -410,7 +395,7 @@ export default function EventsPage() {
                   ? <CheckCircle2 size={16} className={`${A(dark, 'emerald')} shrink-0 mt-0.5`} />
                   : <Undo2 size={16} className={`${A(dark, 'orange')} shrink-0 mt-0.5`} />}
                 <span className={t.textPrimary}>
-                  <b>{withDates(e)}</b> {e.status === 'approved' ? 'was approved by the Pastor.' : 'was sent back to planning.'}
+                  <b>{withDates(e)}</b> {e.status === 'approved' ? 'was approved by a Leader.' : 'was sent back to planning.'}
                   {e.status !== 'approved' && e.review_note && <span className={t.textSub}> Reason: “{e.review_note}”</span>}
                 </span>
               </li>
@@ -570,21 +555,10 @@ export default function EventsPage() {
                 </Field>
               )}
 
-              <Field label="Ministry" t={t}>
-                <select name="ministry" value={form.ministry} onChange={handleChange} className={inputStyle(t)}>
-                  <option value="">{eventChurch ? 'Select a ministry' : 'Choose the branch first'}</option>
-                  {branchMinistries.map((name) => <option key={name} value={name}>{name}</option>)}
-                  {/* An older event may name a ministry that isn't in the list. */}
-                  {form.ministry && !branchMinistries.includes(form.ministry) && <option value={form.ministry}>{form.ministry}</option>}
-                </select>
-              </Field>
-
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Date" required t={t}>
-                  {/* Past dates: only the Pastor (to record an event that already
-                      happened); an event being edited keeps its own date. */}
+                  {/* Past dates are allowed: to record an event that already happened. */}
                   <DatePicker name="date" value={form.date} onChange={handleChange} required ariaLabel="Date"
-                    isDisabled={canManageAll ? undefined : (d) => d < today && d !== editingEvent?.date}
                     className={inputStyle(t)} />
                 </Field>
                 <Field label="Start time" t={t}>
@@ -625,7 +599,7 @@ export default function EventsPage() {
                 <label className={`flex items-start gap-2.5 text-xs ${t.textSub} cursor-pointer`}>
                   <input type="checkbox" checked={applyLater} onChange={(e) => setApplyLater(e.target.checked)} className="mt-0.5 accent-blue-600" />
                   <span>
-                    <span className={`font-bold ${t.textPrimary}`}>Also change the later dates</span> — title, ministry, time, venue,
+                    <span className={`font-bold ${t.textPrimary}`}>Also change the later dates</span> — title, time, venue,
                     budget and description for {shortDate(editingEvent.date)} and every later date of this weekly event. The date itself changes only here.
                   </span>
                 </label>
@@ -647,7 +621,7 @@ export default function EventsPage() {
                 <p className={`text-[11px] ${t.textSub}`}>
                   {canManageAll
                     ? <>Your events are <b>Approved</b> as soon as you save them, and members see them right away.</>
-                    : <>New events start as <b>Planning</b>. When it’s ready, press “Submit for approval” on its card.</>}
+                    : <>It goes to the <b>Leaders</b> for approval when you save it. You can still change it until they approve it.</>}
                 </p>
               )}
 
@@ -700,7 +674,8 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, attendan
       </div>
 
       <h3 className={`text-base font-black ${t.textPrimary} mb-1 group-hover:text-blue-400 transition-colors leading-snug`}>{event.title}</h3>
-      <p className="text-blue-400 text-[10px] font-bold uppercase tracking-wider mb-1">{event.ministry || 'No ministry assigned'}</p>
+      {/* Older events may still name a ministry (new ones don't, db/050). */}
+      {event.ministry && <p className="text-blue-400 text-[10px] font-bold uppercase tracking-wider mb-1">{event.ministry}</p>}
       {branchName ? <p className={`${t.textMuted} text-[10px] font-bold uppercase tracking-wider mb-4`}>{branchName}</p> : <div className="mb-4" />}
 
       <div className="space-y-2 mb-6">
