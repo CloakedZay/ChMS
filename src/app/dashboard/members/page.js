@@ -15,6 +15,7 @@ import Pagination, { usePaged } from "@/app/components/Pagination";
 import DatePicker from "@/app/components/DatePicker";
 import { phToday } from "@/app/lib/phDate";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
+import { friendlyError } from '@/app/lib/errors';
 const EMPTY_FORM = {
   full_name: '',
   role: '',
@@ -254,7 +255,7 @@ export default function MembersPage() {
     setSaving(false);
     // Keep the form open with what was typed, so it can just be saved again.
     if (error) {
-      alertDialog((editingMember ? 'Error updating member: ' : 'Error saving member: ') + error.message);
+      alertDialog((editingMember ? 'Error updating member: ' : 'Error saving member: ') + friendlyError(error));
       return;
     }
     setShowModal(false);
@@ -284,7 +285,7 @@ export default function MembersPage() {
       .select('id');
 
     if (error) {
-      alertDialog('Error updating member: ' + error.message);
+      alertDialog('Error updating member: ' + friendlyError(error));
       return;
     }
     if (!data?.length) {
@@ -312,7 +313,7 @@ export default function MembersPage() {
       setNewLogin({ name: member.full_name, email: data.email, password: data.password });
       await fetchMembers();
     } catch (err) {
-      alertDialog('Could not create the login: ' + err.message);
+      alertDialog('Could not create the login: ' + friendlyError(err));
     } finally {
       setCreatingLoginId(null);
     }
@@ -358,7 +359,7 @@ export default function MembersPage() {
     if (error) {
       alertDialog(error.code === '23505'
         ? 'That login is already linked to another member record.'
-        : 'Could not link: ' + error.message);
+        : 'Could not link: ' + friendlyError(error));
       return;
     }
     if (!data?.length) { alertDialog('Could not link — this member may already have a login.'); return; }
@@ -374,7 +375,7 @@ export default function MembersPage() {
       .update({ profile_id: null })
       .eq('id', member.id)
       .select('id');
-    if (error || !data?.length) { alertDialog('Could not unlink: ' + (error?.message || "you don't have permission.")); return; }
+    if (error || !data?.length) { alertDialog('Could not unlink: ' + (error ? friendlyError(error) : "you don't have permission.")); return; }
     await fetchMembers();
   }
 

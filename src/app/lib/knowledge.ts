@@ -3,6 +3,7 @@ import { chunkText } from "@/app/lib/nlp";
 import { embedPassages, toVector } from "@/app/lib/embeddings";
 import { extractText, canExtract } from "@/app/lib/extractText";
 
+import { friendlyError } from "@/app/lib/errors";
 // Builds the assistant's search index (knowledge_chunks, db/035) from
 // chatbot documents and discipleship handouts. Runs on the server as the
 // signed-in Pastor / Leader, so the database rules decide what they may
@@ -100,9 +101,9 @@ export async function reindexAll(db: SupabaseClient, churchId: string | null, in
       if (r.skipped) report.skipped.push(`${d.title}: ${r.skipped}`);
       else { report.documents += 1; report.chunks += r.chunks; report.semantic &&= r.semantic; }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "failed";
+      const raw = err instanceof Error ? err.message : "";
       // Not theirs to index (another branch, or a module they can't edit).
-      if (!/row-level security/i.test(msg)) report.failed.push(`${d.title}: ${msg}`);
+      if (!/row-level security/i.test(raw)) report.failed.push(`${d.title}: ${friendlyError(err, "could not be indexed")}`);
     }
   }
 
@@ -113,9 +114,9 @@ export async function reindexAll(db: SupabaseClient, churchId: string | null, in
       if (r.skipped) report.skipped.push(`${h.file_name}: ${r.skipped}`);
       else { report.handouts += 1; report.chunks += r.chunks; report.semantic &&= r.semantic; }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "failed";
+      const raw = err instanceof Error ? err.message : "";
       // Not theirs to index (another branch, or a module they can't edit).
-      if (!/row-level security/i.test(msg)) report.failed.push(`${h.file_name}: ${msg}`);
+      if (!/row-level security/i.test(raw)) report.failed.push(`${h.file_name}: ${friendlyError(err, "could not be indexed")}`);
     }
   }
   return report;

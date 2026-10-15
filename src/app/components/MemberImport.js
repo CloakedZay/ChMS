@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { X, Upload, Download, Loader2, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 
+import { friendlyError, UserError } from '@/app/lib/errors';
 // Secretary: add many members at once from an Excel (.xlsx) file, using
 // the template in public/templates (Members sheet + a Choices sheet).
 // The file is read in the browser, every row is checked and shown in a
@@ -38,7 +39,7 @@ const nameKey = (v) => norm(v).toLowerCase();
 
 async function readRows(file) {
   if (!file.name.toLowerCase().endsWith('.xlsx')) {
-    throw new Error('Please choose the Excel file (.xlsx) made from the template. Older .xls files: open in Excel and "Save As" Excel Workbook (.xlsx) first.');
+    throw new UserError('Please choose the Excel file (.xlsx) made from the template. Older .xls files: open in Excel and "Save As" Excel Workbook (.xlsx) first.');
   }
   const { readSheet } = await import('read-excel-file/browser');
   return readSheet(file);   // the first sheet — "Members" in the template
@@ -97,7 +98,7 @@ function checkRows(rows, existingNames) {
     if (i >= 0) col[field] = i;
   }
   if (col.full_name === undefined) {
-    throw new Error('The first row must have the column headings, including "Full name". Use the template.');
+    throw new UserError('The first row must have the column headings, including "Full name". Use the template.');
   }
 
   const seen = new Set();
@@ -161,13 +162,13 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
     setReading(true);
     try {
       const raw = await readRows(file);
-      if (raw.length - 1 > MAX_ROWS) throw new Error(`That file has more than ${MAX_ROWS} rows. Please split it.`);
+      if (raw.length - 1 > MAX_ROWS) throw new UserError(`That file has more than ${MAX_ROWS} rows. Please split it.`);
       const existing = new Set(existingMembers.map((m) => nameKey(m.full_name)));
       const checked = checkRows(raw, existing);
-      if (!checked.length) throw new Error('No member rows found under the headings.');
+      if (!checked.length) throw new UserError('No member rows found under the headings.');
       setRows(checked);
     } catch (err) {
-      setError(err.message || 'Could not read that file.');
+      setError(friendlyError(err, 'Could not read that file. Please use the Excel template.'));
     } finally {
       setReading(false);
     }
@@ -199,7 +200,7 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
           ...(withBirthdays ? { birth_date: r.birth_date || null } : {}),
         })))
         .select('id');
-      if (insertError) chunk.forEach((r) => failed.push({ line: r.line, reason: insertError.message }));
+      if (insertError) chunk.forEach((r) => failed.push({ line: r.line, reason: friendlyError(insertError) }));
       else added += data?.length || 0;
     }
     setImporting(false);

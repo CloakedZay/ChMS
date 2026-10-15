@@ -21,6 +21,7 @@ import EventCalendar from "@/app/components/EventCalendar";
 
 import Pagination, { usePaged } from "@/app/components/Pagination";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
+import { friendlyError } from '@/app/lib/errors';
 const EMPTY_FORM = {
   title: '',
   date: '',
@@ -267,7 +268,7 @@ export default function EventsPage() {
         ? 'Repeating events need db/049_event_series.sql. Ask the administrator to run it.'
         : missing && /start_time|venue/.test(error.message)
           ? 'Time and venue need db/043_event_details.sql. Ask the administrator to run it, or clear those two fields for now.'
-          : `Error ${editingEvent ? 'updating' : 'saving'} event: ${error.message}`);
+          : `Error ${editingEvent ? 'updating' : 'saving'} event: ${friendlyError(error)}`);
       setSaving(false);
       return;
     }
@@ -295,7 +296,7 @@ export default function EventsPage() {
     setActing(true);
     const { error } = await supabase.rpc('pastor_review_events', { p_ids: sameStep(ev), p_approve: approveIt, p_note: note || null });
     setActing(false);
-    if (error) { alertDialog(error.message); return false; }
+    if (error) { alertDialog(friendlyError(error)); return false; }
     await fetchEvents();
     notifyEventsChanged();
     return true;
@@ -305,7 +306,7 @@ export default function EventsPage() {
     setActing(true);
     const { error } = await supabase.from('events').update(changes).in('id', sameStep(ev));
     setActing(false);
-    if (error) { alertDialog(error.message); return false; }
+    if (error) { alertDialog(friendlyError(error)); return false; }
     await fetchEvents();
     notifyEventsChanged();
     return true;
@@ -353,7 +354,7 @@ export default function EventsPage() {
     setActing(true);
     const { error } = await supabase.from('events').delete().in('id', scope === 'all' ? later : [event.id]);
     setActing(false);
-    if (error) { alertDialog('Error deleting event: ' + error.message); return; }
+    if (error) { alertDialog('Error deleting event: ' + friendlyError(error)); return; }
     setToDelete(null);
     await fetchEvents();
     notifyEventsChanged();
@@ -369,7 +370,7 @@ export default function EventsPage() {
     if (error) {
       alertDialog(/cancel_note|events_status_check|check constraint/i.test(error.message)
         ? 'Cancelling needs db/051_event_cancel_and_reminders.sql. Ask the administrator to run it.'
-        : error.message);
+        : friendlyError(error));
       return;
     }
     setCancelFor(null);
@@ -383,7 +384,7 @@ export default function EventsPage() {
     setActing(true);
     const { error } = await supabase.from('events').update({ status: 'approved' }).eq('id', ev.id);
     setActing(false);
-    if (error) { alertDialog(error.message); return; }
+    if (error) { alertDialog(friendlyError(error)); return; }
     await fetchEvents();
     notifyEventsChanged();
   }

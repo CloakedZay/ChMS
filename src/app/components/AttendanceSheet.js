@@ -5,6 +5,7 @@ import { ArrowLeft, Check, Search, UserPlus, X, Loader2, Users, UserRound, Phone
 import { supabase } from '@/app/lib/supabase';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
+import { friendlyError } from '@/app/lib/errors';
 // The attendance sheet of one event (db/041). People sign a paper sheet at
 // the event; afterwards the Secretary or a helper ticks the members on it
 // (the branch's whole member list is already here) and types in only the
@@ -44,7 +45,7 @@ async function fetchSheet(eventId) {
     return {
       error: missingSetup(sheet.error.message)
         ? 'Attendance has not been set up yet. Ask the administrator to run db/041_event_attendance.sql.'
-        : sheet.error.message,
+        : friendlyError(sheet.error),
     };
   }
   return { event, canMark: !!mark, people: sheet.data || [], visitors: vis.data || [] };
@@ -83,7 +84,7 @@ export default function AttendanceSheet({ eventId, dark, onBack }) {
     const { error: e } = await supabase.rpc('set_attendance', { p_event: eventId, p_members: ids, p_present: present });
     setBusy((b) => { const n = { ...b }; ids.forEach((id) => delete n[id]); return n; });
     if (e) {
-      setError(`Couldn't save: ${e.message}`);
+      setError(`Couldn't save: ${friendlyError(e)}`);
       setPeople((list) => list.map((p) => (ids.includes(p.member_id) ? { ...p, present: !present } : p)));
     }
   }
@@ -297,7 +298,7 @@ function VisitorsBox({ t, eventId, canMark, visitors, onChange }) {
       ? { p_event: eventId, p_visitor: (existing || samePhone).visitor_id }
       : { p_event: eventId, p_name: name, p_phone: phone || null, p_invited_by: invitedBy || null, p_new_person: samePhone === false });
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(friendlyError(err)); return; }
     reset();
     nameRef.current?.focus();
     onChange();
@@ -306,7 +307,7 @@ function VisitorsBox({ t, eventId, canMark, visitors, onChange }) {
   async function remove(v) {
     if (!await confirmDialog(`Remove ${v.full_name} from this event?`)) return;
     const { error: err } = await supabase.rpc('remove_event_visitor', { p_event: eventId, p_visitor: v.visitor_id });
-    if (err) alertDialog(err.message); else onChange();
+    if (err) alertDialog(friendlyError(err)); else onChange();
   }
 
   return (
@@ -443,12 +444,12 @@ function SheetPhotos({ t, eventId, canMark }) {
       const path = `${eventId}/${crypto.randomUUID()}-${safe}`;
       const { error: upErr } = await supabase.storage.from(SHEET_BUCKET)
         .upload(path, body, { contentType: jpeg ? 'image/jpeg' : file.type, upsert: false });
-      if (upErr) { setError(`Couldn't upload ${file.name}: ${upErr.message}`); continue; }
+      if (upErr) { setError(`Couldn't upload ${file.name}: ${friendlyError(upErr)}`); continue; }
       const { error: rowErr } = await supabase.from('event_sheet_photos')
         .insert({ event_id: eventId, file_path: path, file_name: file.name, file_size: body.size });
       if (rowErr) {
         await supabase.storage.from(SHEET_BUCKET).remove([path]);
-        setError(`Couldn't save ${file.name}: ${rowErr.message}`);
+        setError(`Couldn't save ${file.name}: ${friendlyError(rowErr)}`);
       }
     }
     setUploading(false);
@@ -458,7 +459,7 @@ function SheetPhotos({ t, eventId, canMark }) {
   async function remove(photo) {
     if (!await confirmDialog({ message: `Remove this photo of the sign-in sheet (${photo.file_name})?`, confirmText: 'Remove' })) return;
     const { error: e } = await supabase.from('event_sheet_photos').delete().eq('id', photo.id);
-    if (e) { setError(e.message); return; }
+    if (e) { setError(friendlyError(e)); return; }
     await supabase.storage.from(SHEET_BUCKET).remove([photo.file_path]);
     reload();
   }

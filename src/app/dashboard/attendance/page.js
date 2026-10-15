@@ -9,6 +9,7 @@ import BranchLabel from '@/app/components/BranchLabel';
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import AttendanceSheet, { AttendanceEventList, attendanceTheme } from '@/app/components/AttendanceSheet';
 
+import { friendlyError } from '@/app/lib/errors';
 // Event attendance (db/041). The list of events to take attendance for;
 // opening one shows its sheet. /dashboard/attendance?event=12 opens that
 // event directly (the Events page links here).
@@ -22,7 +23,7 @@ async function fetchEvents(branch) {
     events: [],
     error: /does not exist|schema cache|Could not find/i.test(error.message)
       ? 'Attendance has not been set up yet. Ask the administrator to run db/041_event_attendance.sql.'
-      : error.message,
+      : friendlyError(error),
   };
 }
 

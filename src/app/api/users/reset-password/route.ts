@@ -3,6 +3,7 @@ import { randomInt } from "crypto";
 import { getCaller } from "@/app/lib/apiAuth";
 import { getAdminClient } from "@/app/lib/supabaseAdmin";
 
+import { friendlyError } from "@/app/lib/errors";
 export const runtime = "nodejs";
 
 // No look-alike characters (0/O, 1/l/I), so it can be read out or written down.
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     .select("id");
   if (flagErr || !flagged?.length) {
     return NextResponse.json(
-      { error: `Could not reset the password. ${flagErr?.message || "You don't have permission to change this user."}` },
+      { error: `Could not reset the password. ${flagErr ? friendlyError(flagErr) : "You don't have permission to change this user."}` },
       { status: 403 }
     );
   }
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
   if (pwErr) {
     // Put the flag back so they aren't asked to change a password that didn't change.
     await caller.db.from("profiles").update({ must_change_password: false }).eq("id", userId);
-    return NextResponse.json({ error: `Could not reset the password: ${pwErr.message}` }, { status: 500 });
+    return NextResponse.json({ error: `Could not reset the password. ${friendlyError(pwErr)}` }, { status: 500 });
   }
 
   return NextResponse.json({ email: target.user.email, password });

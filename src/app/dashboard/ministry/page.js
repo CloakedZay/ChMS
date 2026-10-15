@@ -13,6 +13,7 @@ import {
 import BranchLabel from "@/app/components/BranchLabel";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
+import { friendlyError } from '@/app/lib/errors';
 // Real ministries per branch (step M1, db/022). The database decides who
 // may do what; this page only shows the matching buttons:
 //   Pastor            add / edit / switch off ministries; add or remove
@@ -167,7 +168,7 @@ export default function MinistriesPage() {
       : await supabase.from("ministries").insert(payload);
     setSaving(false);
     if (error) {
-      setFormError(error.code === "23505" ? "This branch already has a ministry with that name." : "Could not save: " + error.message);
+      setFormError(error.code === "23505" ? "This branch already has a ministry with that name." : "Could not save: " + friendlyError(error));
       return;
     }
     setEditing(null);
@@ -182,7 +183,7 @@ export default function MinistriesPage() {
     const { error } = await supabase.from("ministry_assignments").insert({ ministry_id: m.id, member_id: Number(memberId), role: "member" });
     setBusy(null);
     if (error) {
-      alertDialog(error.code === "23505" ? "Already in this ministry." : "Could not add: " + error.message);
+      alertDialog(error.code === "23505" ? "Already in this ministry." : "Could not add: " + friendlyError(error));
       return;
     }
     setAddPick((p) => ({ ...p, [m.id]: "" }));
@@ -195,7 +196,7 @@ export default function MinistriesPage() {
     setBusy(a.id);
     const { data, error } = await supabase.from("ministry_assignments").delete().eq("id", a.id).select("id");
     setBusy(null);
-    if (error || !data?.length) { alertDialog("Could not remove: " + (error?.message || "you don't have permission.")); return; }
+    if (error || !data?.length) { alertDialog("Could not remove: " + (error ? friendlyError(error) : "you don't have permission.")); return; }
     await refresh();
   }
 
@@ -207,7 +208,7 @@ export default function MinistriesPage() {
     const next = modules.filter((x) => x.ministry_id === m.id).reduce((n, x) => Math.max(n, x.order_index || 0), 0) + 1;
     const { error } = await supabase.from("discipleship_modules").insert({ title, ministry_id: m.id, order_index: next, is_active: true });
     setBusy(null);
-    if (error) { alertDialog("Could not add the module: " + error.message); return; }
+    if (error) { alertDialog("Could not add the module: " + friendlyError(error)); return; }
     setNewModule((p) => ({ ...p, [m.id]: "" }));
     await refresh();
   }

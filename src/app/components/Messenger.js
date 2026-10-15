@@ -12,6 +12,7 @@ import { levelBadge } from '@/app/lib/roleColors';
 import { confirmDialog } from '@/app/lib/dialog';
 import PersonProfile from '@/app/components/PersonProfile';
 
+import { friendlyError } from '@/app/lib/errors';
 // Chat for both dashboards: one-to-one (db/029) and groups (db/030).
 // Chats are private to the people in them. Who can be added or messaged is
 // decided by the database (chat_contacts: your own church, plus every Admin
@@ -139,7 +140,7 @@ export default function Messenger() {
     if (d.error) {
       setSetupError(isMissing(d.error.message)
         ? 'Messages have not been set up yet. Ask the administrator to run db/029_messages.sql.'
-        : d.error.message);
+        : friendlyError(d.error));
       setDms([]);
     } else {
       setSetupError('');
@@ -280,7 +281,7 @@ export default function Messenger() {
       : await supabase.from('group_messages').insert([{ group_id: active.id, body }])
           .select('id, sender_id, body, created_at').single();
     setSending(false);
-    if (error) { setSendError(error.message); return; }
+    if (error) { setSendError(friendlyError(error)); return; }
     setDraft('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
     setThread((list) => (list.some((m) => m.id === data.id) ? list : [...list, data]));
@@ -318,7 +319,7 @@ export default function Messenger() {
     setCreateError('');
     const { data, error } = await supabase.rpc('create_chat_group', { group_name: groupName.trim(), member_ids: selected });
     setCreating(false);
-    if (error) { setCreateError(error.message); return; }
+    if (error) { setCreateError(friendlyError(error)); return; }
     await loadConvos();
     openThread('group', data);
   }
@@ -335,7 +336,7 @@ export default function Messenger() {
     setInfoError('');
     const { error } = await fn();
     setInfoBusy(false);
-    if (error) { setInfoError(error.message); return false; }
+    if (error) { setInfoError(friendlyError(error)); return false; }
     return true;
   }
   async function saveRename() {

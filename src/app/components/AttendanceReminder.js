@@ -7,6 +7,7 @@ import { supabase } from '@/app/lib/supabase';
 import { useTheme } from '@/app/context/ThemeContext';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
+import { friendlyError } from '@/app/lib/errors';
 // Staff Dashboard, Leaders and the Secretary: events of the last 14 days
 // whose attendance nobody took (db/051 attendance_missing). "Not needed"
 // takes one off the list for good — e.g. a meeting nobody signs in at.
@@ -35,7 +36,7 @@ export default function AttendanceReminder() {
     setBusy(ev.id);
     const { error } = await supabase.rpc('skip_attendance', { p_event: ev.id });
     setBusy(null);
-    if (error) { alertDialog(error.message); return; }
+    if (error) { alertDialog(friendlyError(error)); return; }
     load();
   }
 

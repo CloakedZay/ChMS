@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCaller, resolveChurchId, CONTENT_ROLES, AI_DOCUMENT_VIEWERS, GLOBAL_ROLES } from "@/app/lib/apiAuth";
 import { reindexAll } from "@/app/lib/knowledge";
 
+import { friendlyError } from "@/app/lib/errors";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   ]);
   if (all.error) {
     const missing = /does not exist|schema cache/i.test(all.error.message);
-    return NextResponse.json({ ready: false, error: missing ? "not-set-up" : all.error.message });
+    return NextResponse.json({ ready: false, error: missing ? "not-set-up" : friendlyError(all.error) });
   }
   return NextResponse.json({ ready: true, passages: all.count || 0, withMeaning: withMeaning.count || 0 });
 }
@@ -37,6 +38,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, ...report });
   } catch (err) {
     console.error("Rebuilding the search index failed:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Rebuild failed" }, { status: 500 });
+    return NextResponse.json({ error: friendlyError(err, "Rebuild failed. Please try again.") }, { status: 500 });
   }
 }

@@ -10,6 +10,7 @@ import { homePathFor } from '@/app/lib/permissions';
 import { Eye, EyeOff, KeyRound } from 'lucide-react';
 import GoogleAccountCard from '@/app/components/GoogleAccountCard';
 
+import { friendlyError } from '@/app/lib/errors';
 // First sign-in for a login the Secretary created (db/014): the member
 // replaces the temporary password with their own, then goes to their
 // dashboard. Anyone else can use it to change their password too; they
@@ -62,7 +63,7 @@ export default function ChangePasswordPage() {
     if (pwError) {
       setError(pwError.message.includes('different')
         ? 'Choose a password different from the temporary one.'
-        : pwError.message);
+        : friendlyError(pwError));
       setSaving(false);
       return;
     }
@@ -72,7 +73,7 @@ export default function ChangePasswordPage() {
       .update({ must_change_password: false })
       .eq('id', user.id);
     if (flagError) {
-      setError('Your password was changed, but something else went wrong: ' + flagError.message);
+      setError('Your password was changed, but something else went wrong: ' + friendlyError(flagError));
       setSaving(false);
       return;
     }

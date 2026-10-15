@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCaller, HANDOUT_ROLES } from "@/app/lib/apiAuth";
 import { getHandout, indexHandout } from "@/app/lib/knowledge";
 
+import { friendlyError } from "@/app/lib/errors";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -22,6 +23,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, ...result });
   } catch (err) {
     console.error("Indexing handout failed:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Could not index the handout" }, { status: 500 });
+    return NextResponse.json({ error: friendlyError(err, "Could not index the handout.") }, { status: 500 });
   }
 }

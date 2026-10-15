@@ -10,6 +10,7 @@ import { authFetch } from "@/app/lib/authFetch";
 import { Search, UserCog, Sun, Moon, Ban, CheckCircle2, KeyRound, Copy, Check } from "lucide-react";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
+import { friendlyError } from '@/app/lib/errors';
 // Admin sets each login's level and branch. The database enforces the same
 // rules (db/009, db/013): only an admin changes levels, branches or
 // disables a login, and nobody changes their own level or disables
@@ -102,7 +103,7 @@ export default function UsersPage() {
     setSavingId(null);
 
     if (error || !data?.length) {
-      alertDialog('Could not save: ' + (error?.message || 'you do not have permission to change this user.'));
+      alertDialog('Could not save: ' + (error ? friendlyError(error) : 'you do not have permission to change this user.'));
       return;
     }
     setUsers((prev) => prev.map((p) => (p.id === u.id ? { ...p, ...data[0] } : p)));
@@ -158,7 +159,7 @@ export default function UsersPage() {
       setCopied(false);
       setNewPassword({ name: displayName(u), email: data.email, password: data.password });
     } catch (err) {
-      alertDialog('Could not reset the password: ' + err.message);
+      alertDialog('Could not reset the password: ' + friendlyError(err));
     } finally {
       setResetting(null);
     }

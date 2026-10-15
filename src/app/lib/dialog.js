@@ -3,7 +3,7 @@
 // root layout, draws them.
 //
 //   if (!await confirmDialog('Delete "Prayer"? This can’t be undone.')) return;
-//   alertDialog('Could not save: ' + error.message);
+//   alertDialog('Could not save: ' + friendlyError(error));
 //
 // Either takes a message, or { title, message, confirmText, cancelText,
 // danger }. Without them, the button and its color come from the message's

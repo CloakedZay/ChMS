@@ -13,6 +13,7 @@ import GoogleAccountCard from '@/app/components/GoogleAccountCard';
 import DatePicker from '@/app/components/DatePicker';
 import { phToday } from '@/app/lib/phDate';
 
+import { friendlyError } from '@/app/lib/errors';
 // "My profile" for everyone — the member portal and the staff dashboard.
 //   * display name (profiles.full_name — the user's own row)
 //   * birthday — on the member record if the login has one, otherwise on
@@ -59,14 +60,14 @@ export default function ProfileSettings() {
     const { error } = await supabase.from('profiles').update({ full_name: name }).eq('id', user.id);
     setSavingName(false);
     if (!error) setSavedName(name);
-    flash(setNameMsg, error ? error.message : '✓ Name saved');
+    flash(setNameMsg, error ? friendlyError(error) : '✓ Name saved');
   }
 
   async function saveBirthday() {
     setSavingBday(true);
     const { error } = await supabase.rpc('set_my_birthday', { b: birthday || null, show: showBday });
     setSavingBday(false);
-    flash(setBdayMsg, error ? error.message : '✓ Birthday saved');
+    flash(setBdayMsg, error ? friendlyError(error) : '✓ Birthday saved');
   }
 
   const t = dark

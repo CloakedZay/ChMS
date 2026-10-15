@@ -3,6 +3,7 @@ import { extractText } from "@/app/lib/extractText";
 import { indexDocument } from "@/app/lib/knowledge";
 import { getCaller, resolveChurchId, CONTENT_ROLES, AI_DOCUMENT_VIEWERS } from "@/app/lib/apiAuth";
 
+import { friendlyError } from "@/app/lib/errors";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -12,9 +13,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Documents with no branch are shared by every branch (db/045); only the
 // Pastor may add, move or change them.
 const SHARE_ROLE = "pastor";
-const needsSetup = (msg: string) => /null value in column "(church_id|doc_type)"/i.test(msg)
+const needsSetup = (err: { message: string }) => /null value in column "(church_id|doc_type)"/i.test(err.message)
   ? "This needs db/045_shared_documents.sql. Ask the administrator to run it."
-  : msg;
+  : friendlyError(err);
 
 // List a church's documents, plus the ones shared by all branches
 export async function GET(req: NextRequest) {
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: friendlyError(error) }, { status: 500 });
   }
 
   return NextResponse.json({ documents: data || [] });
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
     try {
       content = (await extractText(Buffer.from(await file.arrayBuffer()), file.name, file.type)).trim();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not read file.";
+      const message = friendlyError(err, "Could not read the file.");
       return NextResponse.json({ error: message }, { status: 400 });
     }
 
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
     }).select("id, title, church_id, content, is_active").single();
 
     if (error) {
-      return NextResponse.json({ error: needsSetup(error.message) }, { status: 500 });
+      return NextResponse.json({ error: needsSetup(error) }, { status: 500 });
     }
 
     // Add it to the assistant's search index. The upload still counts if
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
     try {
       indexed = await indexDocument(caller.db, saved);
     } catch (err) {
-      indexWarning = err instanceof Error ? err.message : "Could not add it to the search index.";
+      indexWarning = friendlyError(err, "Could not add it to the search index.");
       console.error("Indexing document failed:", err);
     }
 
@@ -149,7 +150,7 @@ export async function PATCH(req: NextRequest) {
     .select("id");
 
   if (error) {
-    return NextResponse.json({ error: needsSetup(error.message) }, { status: 500 });
+    return NextResponse.json({ error: needsSetup(error) }, { status: 500 });
   }
   if (!data?.length) {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
@@ -175,7 +176,7 @@ export async function DELETE(req: NextRequest) {
     .select("id");
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: friendlyError(error) }, { status: 500 });
   }
   if (!data?.length) {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });

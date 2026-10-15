@@ -16,6 +16,7 @@ import { phToday } from "@/app/lib/phDate";
 import { alertDialog } from "@/app/lib/dialog";
 import { countsInTotals } from "@/app/lib/financeTotals";
 
+import { friendlyError } from '@/app/lib/errors';
 // Event statuses in order, for the "Events by Status" section shown to
 // levels without finance access.
 const EVENT_STATUSES = [
@@ -415,18 +416,17 @@ export default function ReportsPage() {
       }
     } catch (err) {
       console.error('PDF export error:', err);
-      const message = err instanceof Error ? err.message : String(err);
       // Report the error inside the tab the user is now looking at, rather
       // than alert()-ing the original (now-backgrounded) tab where it's
       // easy to miss.
       if (newTab && !newTab.closed) {
         newTab.document.open();
         newTab.document.write(
-          `<title>Export failed</title><body style="font:14px -apple-system,sans-serif;padding:48px;color:#b91c1c">Could not generate the report.<br><br><code>${message.replace(/</g, '&lt;')}</code></body>`
+          `<title>Export failed</title><body style="font:14px -apple-system,sans-serif;padding:48px;color:#b91c1c">Could not generate the report. Please close this tab and try again.</body>`
         );
         newTab.document.close();
       } else {
-        alertDialog('Could not generate the PDF: ' + message);
+        alertDialog('Could not generate the PDF. ' + friendlyError(err, 'Please try again.'));
       }
     } finally {
       setExporting(false);

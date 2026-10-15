@@ -15,6 +15,7 @@ import {
 import BranchLabel from "@/app/components/BranchLabel";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
+import { friendlyError } from '@/app/lib/errors';
 function formatBytes(bytes) {
   if (!bytes) return "—";
   if (bytes < 1024) return bytes + " B";
@@ -173,7 +174,7 @@ export default function TrainingPage() {
       setNewModuleDesc("");
       setShowAddModule(false);
     } else {
-      alertDialog("Error adding module: " + error.message);
+      alertDialog("Error adding module: " + friendlyError(error));
     }
     setAddingModule(false);
   }
@@ -181,7 +182,7 @@ export default function TrainingPage() {
   async function handleToggleActive(mod) {
     const { error } = await supabase.from("discipleship_modules").update({ is_active: !mod.is_active }).eq("id", mod.id);
     if (!error) setModules((prev) => prev.map((m) => (m.id === mod.id ? { ...m, is_active: !mod.is_active } : m)));
-    else alertDialog("Error updating module: " + error.message);
+    else alertDialog("Error updating module: " + friendlyError(error));
   }
 
   // ── Question CRUD ──────────────────────────────────────────────────────────
@@ -200,7 +201,7 @@ export default function TrainingPage() {
       await refetchQuestions();
       setNewQuestionText((p) => ({ ...p, [moduleId]: "" }));
     } else {
-      alertDialog("Error adding question: " + error.message);
+      alertDialog("Error adding question: " + friendlyError(error));
     }
     setAddingQuestion((p) => ({ ...p, [moduleId]: false }));
   }
@@ -209,7 +210,7 @@ export default function TrainingPage() {
     if (!await confirmDialog("Delete this question?")) return;
     const { error } = await supabase.from("discipleship_questions").delete().eq("id", q.id);
     if (!error) setQuestions((prev) => prev.filter((x) => x.id !== q.id));
-    else alertDialog("Error deleting question: " + error.message);
+    else alertDialog("Error deleting question: " + friendlyError(error));
   }
 
   // ── Handouts ───────────────────────────────────────────────────────────────
@@ -273,7 +274,7 @@ export default function TrainingPage() {
       if (fileInputRefs.current[moduleId]) fileInputRefs.current[moduleId].value = "";
     } catch (err) {
       console.error("Upload error:", err);
-      setUploadError((p) => ({ ...p, [moduleId]: err.message || "Upload failed." }));
+      setUploadError((p) => ({ ...p, [moduleId]: friendlyError(err, "Upload failed. Please try again.") }));
     } finally {
       setUploading((p) => ({ ...p, [moduleId]: false }));
     }
@@ -307,7 +308,7 @@ export default function TrainingPage() {
       .select("id");
     setReviewing((p) => ({ ...p, [progressId]: false }));
     if (error || !data?.length) {
-      alertDialog("Could not save the review: " + (error?.message || "you don't have permission to review this answer."));
+      alertDialog("Could not save the review: " + (error ? friendlyError(error) : "you don't have permission to review this answer."));
       return;
     }
     setSubmissions((prev) => prev.map((s) => (s.id === progressId ? { ...s, status, notes: note } : s)));

@@ -3,6 +3,7 @@ import { randomInt } from "crypto";
 import { getCaller } from "@/app/lib/apiAuth";
 import { getAdminClient } from "@/app/lib/supabaseAdmin";
 
+import { friendlyError } from "@/app/lib/errors";
 export const runtime = "nodejs";
 
 // Made-up login names for members without an email. Nothing is ever sent
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: taken
           ? `A login with ${email} already exists. Link that login to this member instead.`
-          : `Could not create the login: ${createErr?.message}` },
+          : `Could not create the login. ${friendlyError(createErr)}` },
       { status: taken ? 409 : 500 }
     );
   }
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
     await admin.from("profiles").delete().eq("id", userId);
     await admin.auth.admin.deleteUser(userId);
     return NextResponse.json(
-      { error: `Could not link the new login, so it was removed. ${(profileErr || linkErr)?.message || "The member may have been linked by someone else just now."}` },
+      { error: `Could not link the new login, so it was removed. ${profileErr || linkErr ? friendlyError(profileErr || linkErr) : "The member may have been linked by someone else just now."}` },
       { status: 500 }
     );
   }

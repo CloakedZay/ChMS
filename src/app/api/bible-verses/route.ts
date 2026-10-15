@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripPageMarkers } from "@/app/lib/pdfText";
 import { getCaller, CONTENT_ROLES } from "@/app/lib/apiAuth";
 
+import { UserError, friendlyError } from "@/app/lib/errors";
 export const runtime = "nodejs";
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
@@ -21,7 +22,7 @@ async function extractText(file: File): Promise<string> {
     }
   }
 
-  throw new Error("Unsupported file type. Please upload a PDF file.");
+  throw new UserError("Unsupported file type. Please upload a PDF file.");
 }
 
 // Split raw extracted text into { reference, verse_text } entries.
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
     .order("id", { ascending: true });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: friendlyError(error) }, { status: 500 });
   }
 
   return NextResponse.json({ verses: data || [] });
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
         reference: reference.trim(),
         verse_text: verse_text.trim(),
       });
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) return NextResponse.json({ error: friendlyError(error) }, { status: 500 });
       return NextResponse.json({ success: true });
     }
 
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest) {
     try {
       text = await extractText(file);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not read file.";
+      const message = friendlyError(err, "Could not read the file.");
       return NextResponse.json({ error: message }, { status: 400 });
     }
 
@@ -134,7 +135,7 @@ export async function POST(req: NextRequest) {
 
     const { error } = await caller.db.from("bible_verses").insert(verses);
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: friendlyError(error) }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, count: verses.length });
@@ -154,7 +155,7 @@ export async function DELETE(req: NextRequest) {
 
   if (all === "true") {
     const { error } = await caller.db.from("bible_verses").delete().gt("id", 0);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return NextResponse.json({ error: friendlyError(error) }, { status: 500 });
     return NextResponse.json({ success: true });
   }
 
@@ -164,7 +165,7 @@ export async function DELETE(req: NextRequest) {
 
   const { error } = await caller.db.from("bible_verses").delete().eq("id", id);
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: friendlyError(error) }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

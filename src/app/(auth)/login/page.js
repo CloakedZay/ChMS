@@ -7,6 +7,7 @@ import { homePathFor } from '@/app/lib/permissions';
 import { DISABLED_MESSAGE, DISABLED_FLAG } from '@/app/lib/disabledLogin';
 import { Eye, EyeOff, Sun, Moon } from 'lucide-react';
 
+import { friendlyError } from '@/app/lib/errors';
 function useTheme() {
   const [dark, setDark] = useState(false);
   useEffect(() => {
@@ -84,7 +85,7 @@ export default function LoginPage() {
     if (oauthError) {
       setError(/not enabled|unsupported provider/i.test(oauthError.message)
         ? 'Google sign-in is not set up yet. Please use your username and password.'
-        : oauthError.message);
+        : friendlyError(oauthError));
     }
   }
 

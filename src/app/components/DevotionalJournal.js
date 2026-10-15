@@ -10,6 +10,7 @@ import DatePicker from '@/app/components/DatePicker';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
+import { friendlyError } from '@/app/lib/errors';
 // Devotional journal (db/027). Private: every person reads and writes only
 // their own entries; the database enforces it. Used by both dashboards.
 
@@ -58,7 +59,7 @@ export default function DevotionalJournal() {
     if (error) {
       setLoadError(/does not exist|schema cache/i.test(error.message)
         ? 'The journal has not been set up yet. Ask the administrator to run db/027_devotional_journal.sql.'
-        : error.message);
+        : friendlyError(error));
       setEntries([]);
       return;
     }
@@ -105,7 +106,7 @@ export default function DevotionalJournal() {
       ? await supabase.from('devotional_journal').update(clean).eq('id', editing.id)
       : await supabase.from('devotional_journal').insert([clean]);
     setSaving(false);
-    if (error) { setFormError(error.message); return; }
+    if (error) { setFormError(friendlyError(error)); return; }
     setEditing(null);
     load();
   }
@@ -113,7 +114,7 @@ export default function DevotionalJournal() {
   async function remove(entry) {
     if (!await confirmDialog(`Delete this entry${entry.title ? ` — "${entry.title}"` : ''}? This cannot be undone.`)) return;
     const { error } = await supabase.from('devotional_journal').delete().eq('id', entry.id);
-    if (error) { alertDialog('Could not delete: ' + error.message); return; }
+    if (error) { alertDialog('Could not delete: ' + friendlyError(error)); return; }
     setEntries((list) => list.filter((x) => x.id !== entry.id));
   }
 

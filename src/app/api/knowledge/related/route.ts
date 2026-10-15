@@ -4,6 +4,7 @@ import { searchPassages } from "@/app/lib/assistantSearch";
 import { embedPassages } from "@/app/lib/embeddings";
 import { pickAnswer, splitSentences } from "@/app/lib/nlp";
 
+import { friendlyError } from "@/app/lib/errors";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
   const { results, analysis, vector, error } = await searchPassages(caller.db, query, { moduleId, count: 6 });
   if (error) {
     const missing = /search_knowledge|does not exist|schema cache|p_module/i.test(error);
-    return NextResponse.json({ passages: [], setup: missing ? "Run db/035 and db/037 in Supabase." : error });
+    return NextResponse.json({ passages: [], setup: missing ? "Run db/035 and db/037 in Supabase." : friendlyError({ message: error }) });
   }
 
   // Lesson questions are long ("Explain in your own words…"), so they share

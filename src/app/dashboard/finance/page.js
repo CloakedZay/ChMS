@@ -17,6 +17,7 @@ import DatePicker from "@/app/components/DatePicker";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 import { countsInTotals } from "@/app/lib/financeTotals";
 
+import { friendlyError } from '@/app/lib/errors';
 const EMPTY_FORM = {
   category: 'Tithe',
   otherCategory: '',
@@ -269,7 +270,7 @@ function Finance() {
     setSaving(false);
     // Keep the form open with what was typed, so it can just be saved again.
     if (error) {
-      alertDialog((editingTx ? 'Error updating: ' : 'Error saving: ') + error.message);
+      alertDialog((editingTx ? 'Error updating: ' : 'Error saving: ') + friendlyError(error));
       return;
     }
     setShowModal(false);
@@ -282,7 +283,7 @@ function Finance() {
   async function handleVoid(tx) {
     if (!await confirmDialog('Void this entry? It stays in the ledger but no longer counts in any total, and it can\'t be edited afterwards.')) return;
     const { data, error } = await supabase.from('transactions').update({ status: VOID }).eq('id', tx.id).select('id');
-    if (error) alertDialog('Error voiding: ' + error.message);
+    if (error) alertDialog('Error voiding: ' + friendlyError(error));
     else if (!data?.length) alertDialog('You don\'t have permission to void this entry.');
     else setTransactions((prev) => prev.map((t) => t.id === tx.id ? { ...t, status: VOID } : t));
   }

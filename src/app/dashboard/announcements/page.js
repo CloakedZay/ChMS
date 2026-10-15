@@ -12,6 +12,7 @@ import DatePicker from '@/app/components/DatePicker';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
+import { friendlyError } from '@/app/lib/errors';
 // Announcements (db/031, db/038). Pastor: any branch or all branches.
 // Leader: own branch. Either can aim an announcement at one ministry's
 // members. Everyone else who opens this page can only read. The database
@@ -52,7 +53,7 @@ export default function AnnouncementsPage() {
     if (error) {
       setLoadError(/does not exist|schema cache/i.test(error.message)
         ? 'Announcements have not been set up yet. Ask the administrator to run db/031_announcements.sql.'
-        : error.message);
+        : friendlyError(error));
       setItems([]);
       return;
     }
@@ -115,20 +116,20 @@ export default function AnnouncementsPage() {
       ? await supabase.from('announcements').update(row).eq('id', editing.id)
       : await supabase.from('announcements').insert([row]);
     setSaving(false);
-    if (error) { setFormError(error.message); return; }
+    if (error) { setFormError(friendlyError(error)); return; }
     setEditing(null);
     load();
   }
 
   async function togglePin(a) {
     const { error } = await supabase.from('announcements').update({ is_pinned: !a.is_pinned }).eq('id', a.id);
-    if (error) alertDialog(error.message); else load();
+    if (error) alertDialog(friendlyError(error)); else load();
   }
 
   async function remove(a) {
     if (!await confirmDialog(`Delete "${a.title}"? This cannot be undone.`)) return;
     const { error } = await supabase.from('announcements').delete().eq('id', a.id);
-    if (error) alertDialog(error.message); else setItems((list) => list.filter((x) => x.id !== a.id));
+    if (error) alertDialog(friendlyError(error)); else setItems((list) => list.filter((x) => x.id !== a.id));
   }
 
   const label = `block text-xs font-semibold mb-1.5 ${t.sub}`;

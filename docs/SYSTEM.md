@@ -129,6 +129,7 @@ Branch scope: the **Admin and Pastor** see all branches (with a branch picker); 
 | **Server routes** | Need the signed-in user's token (so they can't be triggered from another site), check the caller's level, and read data as the caller so the database rules still apply. The service key never reaches the browser. |
 | **Files** | Private storage buckets; files open through links that expire. Who may upload, open or delete follows the same rules as the record (e.g. receipts: the requester and Finance of that branch). |
 | **Privacy** | Members never see other members' status or phone numbers; the Admin sees member names only; visitors and sign-in sheet photos are deleted 6 months after the last visit / the event; the activity log hides member phone, email and birthday values. |
+| **Error messages** | `lib/errors.js` turns database and server errors into plain sentences ("You don't have permission to do this.", "This already exists."); table, column and rule names never reach the screen. The technical detail goes to the browser console or the server log. Reasons written for users by FaithSync's own database functions are shown as they are. |
 | **Audit** | `activity_log` records who added, changed, archived, voided or deleted what, and when (finance hidden from the Admin). |
 
 **Known gaps** (planned): security headers (CSP, frame blocking, HSTS), automatic logout after inactivity, two-step login for staff, and three early read rules that also let signed-out visitors read Bible verses and training module titles / questions.

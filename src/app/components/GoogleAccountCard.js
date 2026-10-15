@@ -5,6 +5,7 @@ import { supabase } from '@/app/lib/supabase';
 import { Loader2, Link2, Unlink } from 'lucide-react';
 import { confirmDialog } from '@/app/lib/dialog';
 
+import { friendlyError } from '@/app/lib/errors';
 // Link a Google account to the signed-in login (step E2), so they can use
 // "Sign in with Google" instead of their username and password. Needs the
 // Google provider and "manual linking" turned on in Supabase → Auth.
@@ -16,7 +17,7 @@ function friendly(message = '') {
   if (/manual linking/i.test(message)) return 'Linking Google accounts is not turned on yet. Please tell the church admin.';
   if (/provider is not enabled|unsupported provider/i.test(message)) return 'Google sign-in is not set up yet. Please tell the church admin.';
   if (/already linked|already exists|identity_already_exists/i.test(message)) return 'That Google account is already linked to another FaithSync login.';
-  return message || 'Something went wrong. Please try again.';
+  return friendlyError({ message });
 }
 
 export default function GoogleAccountCard({ dark = true }) {

@@ -15,6 +15,7 @@ import { notifyFollowUpChanged, MISSED_EVENTS } from '@/app/lib/useFollowUpRemin
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
+import { friendlyError } from '@/app/lib/errors';
 // Member inactivity and follow-up (db/032).
 // "Last seen" = the later of a member's last sign-in and last page visit,
 // for members whose record is linked to a login. A member is flagged when
@@ -106,7 +107,7 @@ export default function FollowUpPage() {
     if (error) {
       setLoadError(/does not exist|schema cache|Could not find/i.test(error.message)
         ? 'Follow-up has not been set up yet. Ask the administrator to run db/032_member_followups.sql.'
-        : error.message);
+        : friendlyError(error));
       setRows([]);
       return;
     }
@@ -132,13 +133,13 @@ export default function FollowUpPage() {
     })) return;
     if (!await confirmDialog(`Add ${v.full_name} as a member? Their ${v.visits} visit${v.visits === 1 ? '' : 's'} will count as attendance, and they'll leave the visitor list.`)) return;
     const { error } = await supabase.rpc('make_visitor_member', { p_visitor: v.visitor_id });
-    if (error) alertDialog(error.message); else { load(); loadVisitors(); }
+    if (error) alertDialog(friendlyError(error)); else { load(); loadVisitors(); }
   }
 
   async function removeVisitor(v) {
     if (!await confirmDialog(`Delete ${v.full_name} and their phone number from the visitor list? Their visits are removed from the attendance counts too.`)) return;
     const { error } = await supabase.from('visitors').delete().eq('id', v.visitor_id);
-    if (error) alertDialog(error.message); else loadVisitors();
+    if (error) alertDialog(friendlyError(error)); else loadVisitors();
   }
 
   async function loadHistory(memberId) {
@@ -193,10 +194,10 @@ export default function FollowUpPage() {
     const { error } = await supabase.from('member_followups')
       .insert([{ member_id: logFor.member_id, outcome, note: note.trim() || null }]);
     setSaving(false);
-    if (error) { setFormError(error.message); return; }
+    if (error) { setFormError(friendlyError(error)); return; }
     if (offerActive && alsoActive) {
       const { error: e2 } = await supabase.from('members').update({ status: 'active' }).eq('id', logFor.member_id);
-      if (e2) alertDialog(`The follow-up was saved, but ${logFor.full_name} couldn't be marked Active: ${e2.message}`);
+      if (e2) alertDialog(`The follow-up was saved, but ${logFor.full_name} couldn't be marked Active: ${friendlyError(e2)}`);
     }
     const id = logFor.member_id;
     setLogFor(null);
@@ -209,7 +210,7 @@ export default function FollowUpPage() {
     if (status === p.member_status) return;
     if (!await confirmDialog(`Mark ${p.full_name} as ${status}?`)) return;
     const { error } = await supabase.from('members').update({ status }).eq('id', p.member_id);
-    if (error) alertDialog(error.message); else { load(); notifyFollowUpChanged(); }
+    if (error) alertDialog(friendlyError(error)); else { load(); notifyFollowUpChanged(); }
   }
 
   function toggleHistory(id) {

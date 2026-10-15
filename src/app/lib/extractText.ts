@@ -1,5 +1,6 @@
 import { stripPageMarkers } from "@/app/lib/pdfText";
 
+import { UserError } from "@/app/lib/errors";
 // Pull the plain text out of an uploaded file (PDF, Word .docx or .txt).
 // Shared by assistant documents and discipleship handouts. Scanned PDFs
 // (pictures of pages) contain no text and come back empty.
@@ -30,7 +31,7 @@ export async function extractText(buffer: Buffer, fileName: string, mimeType = "
     return buffer.toString("utf-8");
   }
 
-  throw new Error("Unsupported file type. Please upload a PDF, DOCX, or TXT file.");
+  throw new UserError("Unsupported file type. Please upload a PDF, DOCX, or TXT file.");
 }
 
 export function canExtract(fileName: string): boolean {

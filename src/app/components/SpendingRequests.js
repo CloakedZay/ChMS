@@ -5,6 +5,7 @@ import { supabase } from '@/app/lib/supabase';
 import { Plus, X, Check, Ban, Loader2, HandCoins, Settings2, Receipt, Upload, FileText, Trash2, Undo2 } from 'lucide-react';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
+import { friendlyError } from '@/app/lib/errors';
 // Spending requests (step F2, db/017 + db/018) and their liquidation
 // (step F3, db/019: receipts + amount actually spent, checked by Finance).
 // Lives on the Finance page.
@@ -176,7 +177,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       requested_by: userId,
     });
     setSaving(false);
-    if (error) { alertDialog('Could not submit: ' + error.message); return; }
+    if (error) { alertDialog('Could not submit: ' + friendlyError(error)); return; }
     setShowForm(false);
     setForm(EMPTY);
     setFilter('pending');
@@ -197,7 +198,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       request_id: r.id, decision, note: note.trim() || null, approver_id: userId,
     });
     setBusyId(null);
-    if (error) { setNoteError('Could not save your decision: ' + error.message); return; }
+    if (error) { setNoteError('Could not save your decision: ' + friendlyError(error)); return; }
     setDeciding(null);
     await refresh();
   }
@@ -207,7 +208,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
     setBusyId(r.id);
     const { error } = await supabase.from('expense_requests').update({ status: 'cancelled' }).eq('id', r.id);
     setBusyId(null);
-    if (error) { alertDialog('Could not cancel: ' + error.message); return; }
+    if (error) { alertDialog('Could not cancel: ' + friendlyError(error)); return; }
     await refresh();
   }
 
@@ -216,7 +217,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
     setBusyId(r.id);
     const { error } = await supabase.from('expense_requests').update({ status: 'released' }).eq('id', r.id);
     setBusyId(null);
-    if (error) { alertDialog('Could not release: ' + error.message); return; }
+    if (error) { alertDialog('Could not release: ' + friendlyError(error)); return; }
     await refresh();
     onReleased?.();
   }
@@ -224,7 +225,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   // ── Liquidation ─────────────────────────────────────────────────────────
   async function openReceipt(rc) {
     const { data, error } = await supabase.storage.from('receipts').createSignedUrl(rc.file_path, 120);
-    if (error) { alertDialog('Could not open the receipt: ' + error.message); return; }
+    if (error) { alertDialog('Could not open the receipt: ' + friendlyError(error)); return; }
     window.open(data.signedUrl, '_blank');
   }
 
@@ -246,13 +247,13 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       const safe = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-80);
       const path = `${r.id}/${crypto.randomUUID()}-${safe}`;
       const { error: upErr } = await supabase.storage.from('receipts').upload(path, file, { contentType: file.type, upsert: false });
-      if (upErr) { setLiqError(`Could not upload ${file.name}: ${upErr.message}`); continue; }
+      if (upErr) { setLiqError(`Could not upload ${file.name}: ${friendlyError(upErr)}`); continue; }
       const { error: rowErr } = await supabase.from('expense_receipts').insert({
         request_id: r.id, file_path: path, file_name: file.name, file_size: file.size, uploaded_by: userId,
       });
       if (rowErr) {
         await supabase.storage.from('receipts').remove([path]);
-        setLiqError(`Could not save ${file.name}: ${rowErr.message}`);
+        setLiqError(`Could not save ${file.name}: ${friendlyError(rowErr)}`);
       }
     }
     setUploading(false);
@@ -262,7 +263,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   async function removeReceipt(rc) {
     if (!await confirmDialog(`Remove ${rc.file_name}?`)) return;
     const { error } = await supabase.from('expense_receipts').delete().eq('id', rc.id);
-    if (error) { setLiqError('Could not remove: ' + error.message); return; }
+    if (error) { setLiqError('Could not remove: ' + friendlyError(error)); return; }
     await supabase.storage.from('receipts').remove([rc.file_path]);
     await refresh();
   }
@@ -277,7 +278,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       .update({ status: 'liquidating', spent_amount: amount, liquidation_note: liqNote.trim() || null })
       .eq('id', r.id);
     setBusyId(null);
-    if (error) { setLiqError('Could not submit: ' + error.message); return; }
+    if (error) { setLiqError('Could not submit: ' + friendlyError(error)); return; }
     setLiquidating(null);
     setFilter('liquidating');
     await refresh();
@@ -297,7 +298,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       .update({ status: 'liquidated', change_returned: changeReceived })
       .eq('id', r.id);
     setBusyId(null);
-    if (error) { setCheckError('Could not accept: ' + error.message); return; }
+    if (error) { setCheckError('Could not accept: ' + friendlyError(error)); return; }
     setChecking(null);
     await refresh();
     if (changeReceived) onReleased?.();
@@ -311,7 +312,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       .update({ status: 'released', liquidation_feedback: sendBackReason.trim() })
       .eq('id', r.id);
     setBusyId(null);
-    if (error) { setCheckError('Could not send back: ' + error.message); return; }
+    if (error) { setCheckError('Could not send back: ' + friendlyError(error)); return; }
     setChecking(null);
     await refresh();
   }
@@ -322,7 +323,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
     const { data, error } = await supabase.from('finance_settings')
       .update({ approval_limit: value, updated_at: new Date().toISOString() })
       .eq('church_id', churchId).select('church_id');
-    if (error || !data?.length) { alertDialog('Could not save the limit: ' + (error?.message || 'not allowed.')); return; }
+    if (error || !data?.length) { alertDialog('Could not save the limit: ' + (error ? friendlyError(error) : 'not allowed.')); return; }
     setLimits((l) => ({ ...l, [churchId]: value }));
     setLimitDraft((d) => ({ ...d, [churchId]: undefined }));
   }
