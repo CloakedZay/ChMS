@@ -17,6 +17,8 @@ import { alertDialog } from "@/app/lib/dialog";
 import { countsInTotals } from "@/app/lib/financeTotals";
 
 import { friendlyError } from '@/app/lib/errors';
+import { peso, pesoPdf } from "@/app/lib/format";
+import { baseTheme } from '@/app/lib/theme';
 // Event statuses in order, for the "Events by Status" section shown to
 // levels without finance access.
 const EVENT_STATUSES = [
@@ -36,21 +38,14 @@ const FUND_COLORS = {
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-600",
-    textMuted:   dark ? "text-slate-400"       : "text-slate-600",
-    textFaint:   dark ? "text-slate-600"       : "text-slate-500",
-    divider:     dark ? "border-slate-800"     : "border-slate-300",
-    dashed:      dark ? "border-slate-800"     : "border-slate-400",
-    trackBg:     dark ? "bg-slate-800"         : "bg-slate-300",
-    deepCard:    dark ? "bg-slate-900/60"      : "bg-slate-200",
-    rowBg:       dark ? "bg-slate-900/40"      : "bg-slate-100",
-    rowHover:    dark ? "hover:bg-slate-900/70" : "hover:bg-slate-200",
-    toolbarBtn:  dark ? "bg-[#1b2420] hover:bg-slate-800 text-white border-slate-700" : "bg-slate-50 hover:bg-slate-200 text-slate-900 border-slate-300",
-    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    ...baseTheme(dark),
+    textMuted:  dark ? "text-slate-400"       : "text-slate-600",
+    textFaint:  dark ? "text-slate-600"       : "text-slate-500",
+    divider:    dark ? "border-slate-800"     : "border-slate-300",
+    trackBg:    dark ? "bg-slate-800"         : "bg-slate-300",
+    rowBg:      dark ? "bg-slate-900/40"      : "bg-slate-100",
+    rowHover:   dark ? "hover:bg-slate-900/70" : "hover:bg-slate-200",
+    toolbarBtn: dark ? "bg-[#1b2420] hover:bg-slate-800 text-white border-slate-700" : "bg-slate-50 hover:bg-slate-200 text-slate-900 border-slate-300",
   };
 }
 
@@ -235,7 +230,7 @@ export default function ReportsPage() {
       const marginX = 40;
 
       // jsPDF's standard fonts don't include the ₱ glyph, so spell it out.
-      const peso = (n) => `PHP ${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+      const peso = pesoPdf;
 
       const BLUE   = [37, 99, 235];
       const INDIGO = [99, 102, 241];
@@ -441,7 +436,7 @@ export default function ReportsPage() {
   const summaryCards = showFinance ? [
           {
             label: "Total Balance",
-            val: loading ? "..." : `₱${balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
+            val: loading ? "..." : peso(balance),
             sub: "Income minus expenses",
             up: balance >= 0,
             icon: Wallet,
@@ -465,7 +460,7 @@ export default function ReportsPage() {
           },
           {
             label: "Total Expenses",
-            val: loading ? "..." : `₱${totalExpense.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`,
+            val: loading ? "..." : peso(totalExpense),
             sub: "All recorded expenses",
             up: false,
             icon: TrendingDown,
@@ -716,7 +711,7 @@ export default function ReportsPage() {
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className={t.textMuted}>{item.label}</span>
                   <span className={`font-black ${item.textColor}`}>
-                    {loading ? '...' : `₱${item.value.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`}
+                    {loading ? '...' : peso(item.value)}
                   </span>
                 </div>
                 <div className={`w-full h-1.5 ${t.trackBg} rounded-full overflow-hidden`}>
@@ -764,7 +759,7 @@ export default function ReportsPage() {
                     </div>
                   </div>
                   <p className={`text-sm font-black font-mono ${tx.type === 'income' ? A(dark, "emerald") : A(dark, "rose")}`}>
-                    {tx.type === 'expense' ? '−' : '+'}₱{Number(tx.amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                    {tx.type === 'expense' ? '−' : '+'}{peso(tx.amount)}
                   </p>
                 </div>
               ))}

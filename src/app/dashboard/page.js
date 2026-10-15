@@ -29,46 +29,20 @@ import { collapseSeries } from "@/app/lib/eventSeries";
 import { countsInTotals } from "@/app/lib/financeTotals";
 import Link from "next/link";
 
+import { baseTheme } from '@/app/lib/theme';
 // ─── Theme token maps ──────────────────────────────────────────────────────────
 
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    // Page bg
-    pageBg:       dark ? "bg-[#111815]"        : "bg-slate-200",
-    // Card bg
-    cardBg:       dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
-    cardBorder:   dark ? "border-slate-800/60"  : "border-slate-300",
-    // Inner card (nested)
-    innerCard:    dark ? "bg-slate-900/50"      : "bg-slate-200",
-    innerBorder:  dark ? "border-slate-800/40"  : "border-slate-300",
-    // Text
-    textPrimary:  dark ? "text-white"           : "text-slate-900",
-    textSub:      dark ? "text-slate-500"       : "text-slate-600",
-    textMuted:    dark ? "text-slate-600"       : "text-slate-500",
-    // Input
-    inputBg:      dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    inputBorder:  dark ? "border-slate-800"     : "border-slate-400",
-    inputText:    dark ? "text-slate-200"       : "text-slate-800",
-    // Header divider
-    divider:      dark ? "border-slate-800"     : "border-slate-300",
-    // Hover row
-    hoverRow:     dark ? "hover:bg-slate-800/50" : "hover:bg-slate-200",
-    // Notif panel
-    notifBg:      dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    // Tab bar
-    tabBar:       dark ? "bg-[#1b2420]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
-    tabInactive:  dark ? "text-slate-500 hover:text-slate-200" : "text-slate-500 hover:text-slate-800",
-    // Icon button
-    iconBtn:      dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-300 text-slate-600 hover:text-slate-900",
-    // Dashed empty state
-    dashed:       dark ? "border-slate-800"     : "border-slate-400",
-    emptyIcon:    dark ? "text-slate-800"       : "text-slate-400",
-    // Finance deep card
-    deepCard:     dark ? "bg-slate-900/60"      : "bg-slate-200",
-    // Transaction border
-    txBorder:     dark ? "border-slate-800/30"  : "border-slate-300",
+    ...baseTheme(dark),
+    divider:   dark ? "border-slate-800"     : "border-slate-300",
+    hoverRow:  dark ? "hover:bg-slate-800/50" : "hover:bg-slate-200",
+    notifBg:   dark ? "bg-[#1b2420]"        : "bg-slate-50",
+    iconBtn:   dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-300 text-slate-600 hover:text-slate-900",
+    emptyIcon: dark ? "text-slate-800"       : "text-slate-400",
+    txBorder:  dark ? "border-slate-800/30"  : "border-slate-300",
   };
 }
 

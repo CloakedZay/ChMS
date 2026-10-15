@@ -14,6 +14,7 @@ import BranchLabel from "@/app/components/BranchLabel";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 import { friendlyError } from '@/app/lib/errors';
+import { baseTheme } from '@/app/lib/theme';
 // Real ministries per branch (step M1, db/022). The database decides who
 // may do what; this page only shows the matching buttons:
 //   Pastor            add / edit / switch off ministries; add or remove
@@ -36,24 +37,9 @@ const shortDate = (ts) => ts ? new Date(ts).toLocaleDateString("en-PH", { month:
 // ─── Theme token map — same pattern as the other dashboard pages ───────────
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-600",
-    textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#111815]"        : "bg-slate-50",
-    inputBorder: dark ? "border-slate-800"     : "border-slate-400",
-    inputText:   dark ? "text-slate-200"       : "text-slate-800",
-    divider:     dark ? "border-slate-800/60"  : "border-slate-300",
-    innerCard:   dark ? "bg-slate-900/50"      : "bg-slate-200",
-    hoverRow:    dark ? "hover:bg-slate-800/20" : "hover:bg-slate-200",
-    emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
-    dashed:      dark ? "border-slate-800"     : "border-slate-400",
-    modalBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    modalBorder: dark ? "border-slate-700"     : "border-slate-300",
-    cancelBtn:   dark ? "bg-slate-800 hover:bg-slate-700 text-white" : "bg-slate-300 hover:bg-slate-400 text-slate-900",
-    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    ...baseTheme(dark),
+    inputBg: dark ? "bg-[#111815]"        : "bg-slate-50",
+    divider: dark ? "border-slate-800/60"  : "border-slate-300",
   };
 }
 

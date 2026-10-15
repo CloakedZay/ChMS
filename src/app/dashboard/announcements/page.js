@@ -44,12 +44,13 @@ export default function AnnouncementsPage() {
         input: 'bg-white border-[#d9d6c8] text-[#252a28] placeholder:text-[#858b87]', ghost: 'border-[#d9d6c8] text-[#4c534f] hover:bg-[#f8f7f2]',
         chip: 'bg-[#f1efe7] text-[#4c534f]', modal: 'bg-white border-[#e5e3d8]' };
 
-  async function load() {
-    const { data, error } = await supabase
-      .from('announcements')
-      .select('id, church_id, ministry_id, title, body, is_pinned, expires_on, created_at')
-      .order('is_pinned', { ascending: false })
-      .order('created_at', { ascending: false });
+  const fetchItems = () => supabase
+    .from('announcements')
+    .select('id, church_id, ministry_id, title, body, is_pinned, expires_on, created_at')
+    .order('is_pinned', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  function applyItems({ data, error }) {
     if (error) {
       setLoadError(/does not exist|schema cache/i.test(error.message)
         ? 'Announcements have not been set up yet. Ask the administrator to run db/031_announcements.sql.'
@@ -61,15 +62,17 @@ export default function AnnouncementsPage() {
     setItems(data || []);
   }
 
+  async function load() { applyItems(await fetchItems()); }
+
   useEffect(() => {
     if (!user) return;
-    load();
+    fetchItems().then(applyItems);
     supabase.from('churches').select('id, name').order('name').then(({ data }) => setBranches(data || []));
     supabase.from('ministries').select('id, name, church_id, leader_id').eq('is_active', true).order('name')
       .then(({ data }) => setMinistries(data || []));
     supabase.from('profiles').select('church_id').eq('id', user.id).maybeSingle()
       .then(({ data }) => setMyChurch(data?.church_id || null));
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const branchName = (id) => (id ? branches.find((b) => b.id === id)?.name || 'One branch' : 'All branches');
   const ministryName = (id) => ministries.find((m) => m.id === id)?.name || 'One ministry';

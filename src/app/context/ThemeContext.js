@@ -1,16 +1,14 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect } from 'react';
+import { useStoredValue } from '@/app/lib/useStoredValue';
 
 const ThemeContext = createContext({ dark: false, toggle: () => {} });
 
 export function ThemeProvider({ children }) {
-  const [dark, setDark] = useState(false);
-
-  useEffect(() => {
-    const stored = localStorage.getItem('faithsync-theme');
-    if (stored) setDark(stored === 'dark');
-  }, []);
+  // Light until someone picks dark; remembered in this browser.
+  const [theme, setTheme] = useStoredValue('faithsync-theme', 'light');
+  const dark = theme === 'dark';
 
   // Tell the stylesheet too (scrollbars follow the theme, see globals.css).
   useEffect(() => {
@@ -18,11 +16,7 @@ export function ThemeProvider({ children }) {
   }, [dark]);
 
   function toggle() {
-    setDark((prev) => {
-      const next = !prev;
-      localStorage.setItem('faithsync-theme', next ? 'dark' : 'light');
-      return next;
-    });
+    setTheme(dark ? 'light' : 'dark');
   }
 
   return (

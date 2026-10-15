@@ -50,12 +50,13 @@ export default function DevotionalJournal() {
         modal: 'bg-white border-[#e5e3d8]',
       };
 
-  async function load() {
-    const { data, error } = await supabase
-      .from('devotional_journal')
-      .select('id, entry_date, scripture, title, reflection, prayer, created_at')
-      .order('entry_date', { ascending: false })
-      .order('created_at', { ascending: false });
+  const fetchEntries = () => supabase
+    .from('devotional_journal')
+    .select('id, entry_date, scripture, title, reflection, prayer, created_at')
+    .order('entry_date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  function applyEntries({ data, error }) {
     if (error) {
       setLoadError(/does not exist|schema cache/i.test(error.message)
         ? 'The journal has not been set up yet. Ask the administrator to run db/027_devotional_journal.sql.'
@@ -67,7 +68,14 @@ export default function DevotionalJournal() {
     setEntries(data || []);
   }
 
-  useEffect(() => { if (user) load(); }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function load() { applyEntries(await fetchEntries()); }
+
+  useEffect(() => {
+    if (!user) return;
+    let gone = false;
+    fetchEntries().then((r) => { if (!gone) applyEntries(r); });
+    return () => { gone = true; };
+  }, [user]);
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();

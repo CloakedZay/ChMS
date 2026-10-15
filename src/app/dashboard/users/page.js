@@ -11,6 +11,7 @@ import { Search, UserCog, Sun, Moon, Ban, CheckCircle2, KeyRound, Copy, Check } 
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 import { friendlyError } from '@/app/lib/errors';
+import { baseTheme } from '@/app/lib/theme';
 // Admin sets each login's level and branch. The database enforces the same
 // rules (db/009, db/013): only an admin changes levels, branches or
 // disables a login, and nobody changes their own level or disables
@@ -30,20 +31,7 @@ function displayName(u) {
 // ─── Theme token map — same pattern as the members page ─────────────────────
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-600",
-    textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    inputBorder: dark ? "border-slate-800"     : "border-slate-400",
-    inputText:   dark ? "text-slate-200"       : "text-slate-800",
-    divider:     dark ? "border-slate-800/40"  : "border-slate-300",
-    emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
-    tableHeadBg: dark ? "bg-slate-900/50"      : "bg-slate-200",
-    rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
-    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    ...baseTheme(dark),
   };
 }
 

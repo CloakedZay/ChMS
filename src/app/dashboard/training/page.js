@@ -16,6 +16,7 @@ import BranchLabel from "@/app/components/BranchLabel";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 import { friendlyError } from '@/app/lib/errors';
+import { baseTheme } from '@/app/lib/theme';
 function formatBytes(bytes) {
   if (!bytes) return "—";
   if (bytes < 1024) return bytes + " B";
@@ -27,32 +28,17 @@ function formatBytes(bytes) {
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-600",
-    textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#111815]"        : "bg-slate-50",
-    inputBorder: dark ? "border-slate-800"     : "border-slate-400",
-    divider:     dark ? "border-slate-800/60"  : "border-slate-300",
-    innerDivider:dark ? "border-slate-800/40"  : "border-slate-300",
-    innerCard:   dark ? "bg-slate-900/50"      : "bg-slate-200",
-    deepCard:    dark ? "bg-slate-900/40"      : "bg-slate-200",
-    deeperCard:  dark ? "bg-slate-800/30"      : "bg-slate-200",
-    deeperBorder:dark ? "border-slate-700/30"  : "border-slate-300",
-    hoverRow:    dark ? "hover:bg-slate-800/20" : "hover:bg-slate-200",
-    hoverRow2:   dark ? "hover:bg-slate-800/30" : "hover:bg-slate-200",
-    emptyIcon:   dark ? "text-slate-800"       : "text-slate-400",
-    dashed:      dark ? "border-slate-800"     : "border-slate-400",
-    modalBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    modalBorder: dark ? "border-slate-800"     : "border-slate-300",
-    cancelBtn:   dark ? "border-slate-700 text-slate-400 hover:text-white hover:border-slate-500" : "border-slate-400 text-slate-600 hover:text-slate-900 hover:border-slate-500",
-    uploadBorder:  dark ? "border-slate-700 hover:border-blue-500/50 text-slate-500 hover:text-blue-400" : "border-slate-400 hover:border-blue-500/50 text-slate-600 hover:text-blue-600",
-    uploadBorderDisabled: dark ? "border-slate-700 text-slate-600" : "border-slate-400 text-slate-500",
-    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    tabBar:      dark ? "bg-[#1b2420]/60 border-slate-800" : "bg-slate-100/90 border-slate-300",
-    tabInactive: dark ? "text-slate-500 hover:text-slate-200" : "text-slate-500 hover:text-slate-800",
+    ...baseTheme(dark),
+    inputBg:      dark ? "bg-[#111815]"        : "bg-slate-50",
+    divider:      dark ? "border-slate-800/60"  : "border-slate-300",
+    innerDivider: dark ? "border-slate-800/40"  : "border-slate-300",
+    deepCard:     dark ? "bg-slate-900/40"      : "bg-slate-200",
+    deeperCard:   dark ? "bg-slate-800/30"      : "bg-slate-200",
+    deeperBorder: dark ? "border-slate-700/30"  : "border-slate-300",
+    hoverRow2:    dark ? "hover:bg-slate-800/30" : "hover:bg-slate-200",
+    emptyIcon:    dark ? "text-slate-800"       : "text-slate-400",
+    modalBorder:  dark ? "border-slate-800"     : "border-slate-300",
+    cancelBtn:    dark ? "border-slate-700 text-slate-400 hover:text-white hover:border-slate-500" : "border-slate-400 text-slate-600 hover:text-slate-900 hover:border-slate-500",
   };
 }
 

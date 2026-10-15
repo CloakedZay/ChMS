@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useTheme } from '@/app/context/ThemeContext';
 import {
   Users, CalendarDays, BarChart3, ArrowRight, BookOpen, Church,
   HandCoins, MapPin, Heart, Sun, Moon, Check, Menu, X, ShieldCheck,
@@ -53,36 +54,25 @@ const LOCATIONS = [
   { name: "Meycauayan",       role: "Satellite",   members: "20+ members",  primary: false },
 ];
 
+// Hero photos, shown in turn (public/images, 1600×1200).
+const HERO_PHOTOS = [
+  { src: "/images/mens-fellowship.jpg",      alt: "The men of GGCF-GMI together at a fellowship gathering, each pointing one finger up" },
+  { src: "/images/women-of-grace-walk.jpg",  alt: "Women of Grace Fellowship at their \"Walking in Faith\" walk outside the Philippine Arena" },
+];
+const HERO_EVERY_MS = 5000;
+
 const NAV = [
   { href: "#about",     label: "About" },
   { href: "#modules",   label: "Modules" },
   { href: "#locations", label: "Locations" },
 ];
 
-// ── Theme hook (shared with login + dashboard via localStorage) ───────────────
-function useTheme() {
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("faithsync-theme");
-      if (stored) setDark(stored === "dark");
-    } catch {}
-  }, []);
-  function toggle() {
-    setDark(prev => {
-      const next = !prev;
-      try { localStorage.setItem("faithsync-theme", next ? "dark" : "light"); } catch {}
-      return next;
-    });
-  }
-  return { dark, toggle };
-}
-
 export default function HomePage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
+  const [photo, setPhoto] = useState(0);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -90,6 +80,13 @@ export default function HomePage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Next hero photo every 5 seconds. Restarts the wait after a dot is
+  // pressed. (People who turn motion off get a plain switch, no fade.)
+  useEffect(() => {
+    const id = setTimeout(() => setPhoto(i => (i + 1) % HERO_PHOTOS.length), HERO_EVERY_MS);
+    return () => clearTimeout(id);
+  }, [photo]);
 
   // ── Theme tokens: ivory / white sections (light), deep green sections (dark)
   const t = dark
@@ -240,22 +237,42 @@ export default function HomePage() {
 
           {/* Image composition */}
           <div className="rise-2 relative mx-auto w-full max-w-md lg:max-w-none">
-            <div className="absolute -top-5 -right-5 w-full h-full rounded-t-[12rem] rounded-b-[2rem] border-2 border-[#c5a66a]/50" aria-hidden="true" />
-            <div className={`relative aspect-[4/5] overflow-hidden rounded-t-[12rem] rounded-b-[2rem] ${dark ? "bg-[#1b2420]" : "bg-[#e8f0ea]"} shadow-xl`}>
+            <div className="absolute -top-5 -right-5 w-full h-full rounded-t-[8rem] rounded-b-[2rem] border-2 border-[#c5a66a]/50" aria-hidden="true" />
+            <div className={`relative aspect-[4/3] overflow-hidden rounded-t-[8rem] rounded-b-[2rem] ${dark ? "bg-[#1b2420]" : "bg-[#e8f0ea]"} shadow-xl`}>
               {!imgFailed ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src="/images/hero-sanctuary.jpg"
-                  alt="A bright church sanctuary with rows of seats facing the altar"
-                  className="absolute inset-0 w-full h-full object-cover"
-                  onError={() => setImgFailed(true)}
-                />
+                HERO_PHOTOS.map((p, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={p.src}
+                    src={p.src}
+                    alt={p.alt}
+                    aria-hidden={i !== photo}
+                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 motion-reduce:transition-none ${i === photo ? "opacity-100" : "opacity-0"}`}
+                    onError={() => setImgFailed(true)}
+                  />
+                ))
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <Church className="w-24 h-24 text-[#173f35]/30" strokeWidth={1} />
                 </div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-[#173f35]/35 via-transparent to-transparent" />
+
+              {/* Photo dots */}
+              {!imgFailed && (
+                <div className="absolute bottom-4 right-5 flex gap-2">
+                  {HERO_PHOTOS.map((p, i) => (
+                    <button
+                      key={p.src}
+                      type="button"
+                      onClick={() => setPhoto(i)}
+                      aria-label={`Show photo ${i + 1} of ${HERO_PHOTOS.length}`}
+                      aria-current={i === photo}
+                      className={`h-2 rounded-full transition-all ${i === photo ? "w-6 bg-white" : "w-2 bg-white/60 hover:bg-white/90"}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Floating stat card */}

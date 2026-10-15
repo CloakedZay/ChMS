@@ -6,6 +6,7 @@ import { Plus, X, Check, Ban, Loader2, HandCoins, Settings2, Receipt, Upload, Fi
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
 import { friendlyError } from '@/app/lib/errors';
+import { peso } from '@/app/lib/format';
 // Spending requests (step F2, db/017 + db/018) and their liquidation
 // (step F3, db/019: receipts + amount actually spent, checked by Finance).
 // Lives on the Finance page.
@@ -49,7 +50,6 @@ const FILTERS = [
   { key: 'all',      label: 'All' },
 ];
 
-const peso = (n) => `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 const shortDate = (ts) => ts
   ? new Date(ts).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
   : '—';

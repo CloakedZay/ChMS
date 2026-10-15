@@ -8,6 +8,7 @@ import { can, ROLE_LABELS } from "@/app/lib/permissions";
 import { History, ChevronDown, ChevronRight, Loader2, Sun, Moon } from "lucide-react";
 import DatePicker from "@/app/components/DatePicker";
 
+import { baseTheme } from '@/app/lib/theme';
 // Who changed what, and when. Entries are written only by database
 // triggers (db/010); this page just reads them. Pastor sees everything;
 // Admin sees everything except finance entries (the database enforces it).
@@ -91,20 +92,8 @@ function formatWhen(ts) {
 // ─── Theme token map — same pattern as the members page ─────────────────────
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-600",
-    textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    inputBorder: dark ? "border-slate-800"     : "border-slate-400",
-    inputText:   dark ? "text-slate-200"       : "text-slate-800",
-    divider:     dark ? "border-slate-800/40"  : "border-slate-300",
-    emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
-    rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
-    detailBg:    dark ? "bg-[#111815]"        : "bg-slate-50",
-    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    ...baseTheme(dark),
+    detailBg: dark ? "bg-[#111815]"        : "bg-slate-50",
   };
 }
 

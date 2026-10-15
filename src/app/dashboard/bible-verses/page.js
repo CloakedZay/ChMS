@@ -11,22 +11,11 @@ import BranchLabel from "@/app/components/BranchLabel";
 import ScriptureLink from "@/app/components/ScriptureLink";
 import { confirmDialog } from "@/app/lib/dialog";
 
+import { baseTheme } from '@/app/lib/theme';
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-600",
-    textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    inputBorder: dark ? "border-slate-800"     : "border-slate-400",
-    inputText:   dark ? "text-slate-200"       : "text-slate-800",
-    divider:     dark ? "border-slate-800/40"  : "border-slate-300",
-    emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
-    rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
-    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    dropzone:    dark ? "border-slate-700 bg-[#1b2420]/40 hover:border-blue-500/50" : "border-slate-400 bg-slate-50 hover:border-blue-500/50",
+    ...baseTheme(dark),
+    dropzone: dark ? "border-slate-700 bg-[#1b2420]/40 hover:border-blue-500/50" : "border-slate-400 bg-slate-50 hover:border-blue-500/50",
   };
 }
 

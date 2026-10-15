@@ -1,28 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
 import { homePathFor } from '@/app/lib/permissions';
 import { DISABLED_MESSAGE, DISABLED_FLAG } from '@/app/lib/disabledLogin';
+import { IDLE_MESSAGE, IDLE_FLAG } from '@/app/lib/IdleLogout';
 import { Eye, EyeOff, Sun, Moon } from 'lucide-react';
-
 import { friendlyError } from '@/app/lib/errors';
-function useTheme() {
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    const stored = localStorage.getItem('faithsync-theme');
-    if (stored) setDark(stored === 'dark');
-  }, []);
-  function toggle() {
-    setDark(prev => {
-      const next = !prev;
-      localStorage.setItem('faithsync-theme', next ? 'dark' : 'light');
-      return next;
-    });
-  }
-  return { dark, toggle };
-}
+import { useTheme } from '@/app/context/ThemeContext';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,6 +20,24 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
+
+  // Send a signed-in person to their dashboard (or out, if disabled).
+  const redirectByRole = useCallback(async (userId) => {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, disabled')
+      .eq('id', userId)
+      .single();
+
+    if (profile?.disabled) {
+      await supabase.auth.signOut();
+      setError(DISABLED_MESSAGE);
+      setLoading(false);
+      return;
+    }
+
+    router.replace(homePathFor(profile?.role));
+  }, [router]);
 
   // Already logged in? Skip straight through
   useEffect(() => {
@@ -51,27 +56,15 @@ export default function LoginPage() {
         if (sessionStorage.getItem(DISABLED_FLAG)) {
           sessionStorage.removeItem(DISABLED_FLAG);
           setError(DISABLED_MESSAGE);
+        } else if (sessionStorage.getItem(IDLE_FLAG)) {
+          // Signed out for being idle (lib/IdleLogout.js)? Say so.
+          sessionStorage.removeItem(IDLE_FLAG);
+          setError(IDLE_MESSAGE);
         }
       } catch {}
     });
-  }, []);
+  }, [redirectByRole]);
 
-  async function redirectByRole(userId) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, disabled')
-      .eq('id', userId)
-      .single();
-
-    if (profile?.disabled) {
-      await supabase.auth.signOut();
-      setError(DISABLED_MESSAGE);
-      setLoading(false);
-      return;
-    }
-
-    router.replace(homePathFor(profile?.role));
-  }
 
   // Sign in with Google (step E2). Google sends the person back here and the
   // effect above takes them to their dashboard. Someone whose Google account
@@ -158,7 +151,7 @@ export default function LoginPage() {
         {/* Card */}
         <div className={`${cardBg} border ${cardBord} rounded-3xl p-8 shadow-xl`}>
           <h2 className={`text-base font-bold ${textMain} mb-1`}>Welcome back</h2>
-          <p className={`${textSub} text-xs mb-7`}>Sign in — you'll be taken to your dashboard automatically.</p>
+          <p className={`${textSub} text-xs mb-7`}>Sign in — you&apos;ll be taken to your dashboard automatically.</p>
 
           <div className="space-y-4">
 
@@ -249,13 +242,13 @@ export default function LoginPage() {
 
           <p className={`mt-6 text-center text-[10px] ${dark ? 'text-white/20' : 'text-slate-400'} leading-relaxed`}>
             Your access level is set by the administrator.<br />
-            Contact your pastor if you can't log in.<br />
+            Contact your pastor if you can&apos;t log in.<br />
             Page visits and time spent are recorded for church records.
           </p>
         </div>
 
         <p className={`text-center text-sm mt-6 ${backLink} transition-colors`}>
-          <a href="/">← Back to Home</a>
+          <Link href="/">← Back to Home</Link>
         </p>
       </div>
     </div>

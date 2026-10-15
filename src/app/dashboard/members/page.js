@@ -16,6 +16,7 @@ import DatePicker from "@/app/components/DatePicker";
 import { phToday } from "@/app/lib/phDate";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 import { friendlyError } from '@/app/lib/errors';
+import { baseTheme } from '@/app/lib/theme';
 const EMPTY_FORM = {
   full_name: '',
   role: '',
@@ -65,27 +66,8 @@ function getInitials(name = "") {
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-600",
-    textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    inputBorder: dark ? "border-slate-800"     : "border-slate-400",
-    inputText:   dark ? "text-slate-200"       : "text-slate-800",
-    divider:     dark ? "border-slate-800/40"  : "border-slate-300",
-    filterInactive: dark ? "bg-[#1b2420] border-slate-800 text-slate-500 hover:text-slate-200" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    modalBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    modalBorder: dark ? "border-slate-700"     : "border-slate-300",
-    cancelBtn:   dark ? "bg-slate-800 hover:bg-slate-700 text-white" : "bg-slate-300 hover:bg-slate-400 text-slate-900",
-    emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
-    tableHeadBg: dark ? "bg-slate-900/50"      : "bg-slate-200",
-    rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
-    menuBg:      dark ? "bg-[#1b2420] border-slate-700" : "bg-slate-50 border-slate-300",
-    menuHover:   dark ? "hover:bg-slate-800"    : "hover:bg-slate-200",
-    actionBtn:   dark ? "text-slate-600 hover:text-white hover:bg-slate-800" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200",
-    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    ...baseTheme(dark),
+    actionBtn: dark ? "text-slate-600 hover:text-white hover:bg-slate-800" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200",
   };
 }
 

@@ -18,6 +18,8 @@ import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 import { countsInTotals } from "@/app/lib/financeTotals";
 
 import { friendlyError } from '@/app/lib/errors';
+import { peso } from "@/app/lib/format";
+import { baseTheme } from '@/app/lib/theme';
 const EMPTY_FORM = {
   category: 'Tithe',
   otherCategory: '',
@@ -63,25 +65,7 @@ const GLOBAL_ROLES = ["admin", "pastor"];
 // as bright) so it doesn't glare next to the dark theme.
 function T(dark) {
   return {
-    pageBg:      dark ? "bg-[#111815]"        : "bg-slate-200",
-    cardBg:      dark ? "bg-[#1b2420]/50"     : "bg-slate-100/90",
-    cardBorder:  dark ? "border-slate-800/60"  : "border-slate-300",
-    textPrimary: dark ? "text-white"           : "text-slate-900",
-    textSub:     dark ? "text-slate-500"       : "text-slate-600",
-    textMuted:   dark ? "text-slate-600"       : "text-slate-500",
-    inputBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    inputBorder: dark ? "border-slate-800"     : "border-slate-400",
-    inputText:   dark ? "text-slate-200"       : "text-slate-800",
-    divider:     dark ? "border-slate-800/40"  : "border-slate-300",
-    filterInactive: dark ? "bg-[#1b2420] border-slate-800 text-slate-500 hover:text-slate-200" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
-    modalBg:     dark ? "bg-[#1b2420]"        : "bg-slate-50",
-    modalBorder: dark ? "border-slate-700"     : "border-slate-300",
-    cancelBtn:   dark ? "bg-slate-800 hover:bg-slate-700 text-white" : "bg-slate-300 hover:bg-slate-400 text-slate-900",
-    emptyIcon:   dark ? "text-slate-700"       : "text-slate-400",
-    tableHeadBg: dark ? "bg-slate-900/50"      : "bg-slate-200",
-    rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
-    innerCard:   dark ? "bg-slate-900/50"      : "bg-slate-200",
-    iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
+    ...baseTheme(dark),
   };
 }
 
@@ -467,7 +451,7 @@ function Finance() {
                     <td className="px-6 py-4 text-blue-400 text-xs font-medium">{tx.fund || '—'}</td>
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{tx.member || '—'}</td>
                     {isGlobal && <td className={`px-6 py-4 ${t.textMuted} text-xs`}>{churchName(tx.church_id) || '—'}</td>}
-                    <td className={`px-6 py-4 font-black text-sm font-mono ${tx.status === VOID ? `${t.textMuted} line-through` : tx.type === 'income' ? A(dark, "emerald") : tx.type === 'expense' ? A(dark, "rose") : t.textPrimary}`}>{tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
+                    <td className={`px-6 py-4 font-black text-sm font-mono ${tx.status === VOID ? `${t.textMuted} line-through` : tx.type === 'income' ? A(dark, "emerald") : tx.type === 'expense' ? A(dark, "rose") : t.textPrimary}`}>{tx.type === 'expense' ? '−' : '+'}{peso(tx.amount)}</td>
                     <td className="px-6 py-4 text-center"><span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${tx.status === VOID ? STATUS_BADGE.Void : STATUS_BADGE.Verified}`}>{tx.status === VOID ? 'Void' : 'Verified'}</span></td>
                     <td className="px-6 py-4">
                       {fromRequest[tx.id] ? (
@@ -593,11 +577,6 @@ function Finance() {
   );
 }
 
-function peso(n) {
-  const sign = n < 0 ? '−' : '';
-  return `${sign}₱${Math.abs(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
-}
-
 function inputStyle(t) {
   return `w-full ${t.inputBg} border ${t.inputBorder} ${t.inputText} rounded-xl px-4 py-2.5 text-sm outline-none transition-colors focus:border-blue-500 placeholder:text-slate-500`;
 }
@@ -607,7 +586,7 @@ function StatCard({ label, amount, icon: Icon, color, t }) {
     <div className={`${t.cardBg} border ${t.cardBorder} p-6 rounded-3xl backdrop-blur-sm`}>
       <div className={`p-2.5 rounded-xl ${t.innerCard} w-fit mb-4 ${color}`}><Icon size={20} /></div>
       <p className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-1`}>{label}</p>
-      <h3 className={`text-2xl font-black ${t.textPrimary} font-mono`}>₱{(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</h3>
+      <h3 className={`text-2xl font-black ${t.textPrimary} font-mono`}>{peso(amount)}</h3>
     </div>
   );
 }

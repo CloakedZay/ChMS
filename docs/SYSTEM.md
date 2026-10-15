@@ -41,9 +41,9 @@ flowchart LR
 |---|---|---|
 | Pages | `src/app/dashboard/*`, `src/app/member-dashboard/*`, `src/app/(auth)/*` | Screens for each feature; the layout checks `canOpenPage()` before showing a page |
 | Shared components | `src/app/components/*` | Attendance sheet, spending requests, messenger, date / time pickers, dialogs, reminders, person profile, app shell |
-| Helpers | `src/app/lib/*` | `permissions.js` (levels and features), Supabase clients, Philippine dates, event series, the assistant's language and search helpers |
+| Helpers | `src/app/lib/*` | `permissions.js` (levels and features), Supabase clients (settings from the environment), `errors.js` (plain error messages), `format.js` (money), `theme.js` (shared colours), `useStoredValue.js` (settings remembered in the browser), Philippine dates, event series, the assistant's language and search helpers |
 | Server routes | `src/app/api/*` | Actions that need the secret service key. Each route first checks the caller's session and level (`lib/apiAuth.ts`) |
-| Database | `db/000 … 067` | Tables, **row level security**, functions for multi-step actions (approvals, attendance, follow-up), triggers (activity log, locks, automatic stamps), the nightly job |
+| Database | `db/000 … 068` | Tables, **row level security**, functions for multi-step actions (approvals, attendance, follow-up), triggers (activity log, locks, automatic stamps), the nightly job |
 
 **Two layers of permission.** `permissions.js` decides what each level **sees** (menu, pages, buttons). The database decides what each level can **actually read and change**, on every table, whatever screen or tool is used. The screens could be bypassed; the data rules cannot.
 
@@ -124,15 +124,17 @@ Branch scope: the **Admin and Pastor** see all branches (with a branch picker); 
 | Area | How it's handled |
 |---|---|
 | **Authorization** | Row level security on every table; 150+ rules scoped by level and branch (`get_my_role()`, `get_my_church_id()`). Multi-step actions run in database functions that check the caller first (e.g. `pastor_review_events`, `set_attendance`). Triggers block what rules can't express (voided entries locked, released-request entries locked, only the Admin changes levels). |
-| **Authentication** | Supabase Auth: hashed passwords, email or Google sign-in, a temporary password that must be changed on first sign-in, logins the Admin can disable (a disabled login loses all access at once), archiving a member switches off their member login. |
+| **Authentication** | Supabase Auth: hashed passwords, email or Google sign-in, a temporary password that must be changed on first sign-in, logins the Admin can disable (a disabled login loses all access at once), archiving a member switches off their member login. **Idle logout**: after 30 minutes with no mouse, key, touch or scroll in any FaithSync tab, the person is signed out and the login page says why (`lib/IdleLogout.js`). |
 | **Input** | All database access goes through Supabase's API with parameters (no SQL is built from text), so SQL injection isn't possible. The database checks values itself (allowed statuses, amounts above zero, lengths). React escapes all text it shows; no raw HTML is inserted. |
 | **Server routes** | Need the signed-in user's token (so they can't be triggered from another site), check the caller's level, and read data as the caller so the database rules still apply. The service key never reaches the browser. |
+| **Browser headers** | Set on every page and API reply in `next.config.mjs`: no framing by other sites (`frame-ancestors 'none'`, `X-Frame-Options: DENY`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, camera / microphone / location off (`Permissions-Policy`), HTTPS kept for a year once served over HTTPS (`Strict-Transport-Security`), no `X-Powered-By`. |
+| **Signed-out visitors** | Read nothing: every read rule is for signed-in logins (`db/068` closed the last five early rules on verses, training modules, questions and handouts). |
 | **Files** | Private storage buckets; files open through links that expire. Who may upload, open or delete follows the same rules as the record (e.g. receipts: the requester and Finance of that branch). |
 | **Privacy** | Members never see other members' status or phone numbers; the Admin sees member names only; visitors and sign-in sheet photos are deleted 6 months after the last visit / the event; the activity log hides member phone, email and birthday values. |
 | **Error messages** | `lib/errors.js` turns database and server errors into plain sentences ("You don't have permission to do this.", "This already exists."); table, column and rule names never reach the screen. The technical detail goes to the browser console or the server log. Reasons written for users by FaithSync's own database functions are shown as they are. |
 | **Audit** | `activity_log` records who added, changed, archived, voided or deleted what, and when (finance hidden from the Admin). |
 
-**Known gaps** (planned): security headers (CSP, frame blocking, HSTS), automatic logout after inactivity, two-step login for staff, and three early read rules that also let signed-out visitors read Bible verses and training module titles / questions.
+**Known gaps**: no two-step login (MFA) for staff yet; no full script-source CSP (Next.js needs inline scripts, so the CSP covers framing, plugins and `<base>` only).
 
 ## 6. Automatic work
 

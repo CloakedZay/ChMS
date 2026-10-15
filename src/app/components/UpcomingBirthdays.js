@@ -35,7 +35,7 @@ export default function UpcomingBirthdays({ cardClass, titleClass, textClass, su
       if (!cancelled) setRows(error ? [] : data || []);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [compact]);
 
   return (
     <div className={cardClass}>

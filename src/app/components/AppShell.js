@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { useStoredValue } from '@/app/lib/useStoredValue';
 import {
   LogOut, Menu, PanelLeftClose, PanelLeftOpen, ChevronRight,
   ChevronDown, Sun, Moon, X,
@@ -24,33 +25,30 @@ export default function AppShell({
   onSignOut, menuLinks = [], themeToggle, children,
 }) {
   const pathname = usePathname();
-  const [drawer, setDrawer] = useState(false);       // phone / tablet drawer
-  const [collapsed, setCollapsed] = useState(false); // desktop icon-only rail
-  const [userMenu, setUserMenu] = useState(false);
+  // The drawer and the user menu belong to the page they were opened on,
+  // so they close by themselves when the page changes.
+  const [drawerOn, setDrawerOn] = useState(null);     // phone / tablet drawer
+  const [menuOn, setMenuOn] = useState(null);
+  const drawer = drawerOn === pathname;
+  const userMenu = menuOn === pathname;
+  const setDrawer = (open) => setDrawerOn(open ? pathname : null);
+  const setUserMenu = (open) => setMenuOn((v) => ((typeof open === 'function' ? open(v === pathname) : open) ? pathname : null));
+  // Desktop icon-only rail, remembered in this browser.
+  const [sidebar, setSidebar] = useStoredValue('faithsync-sidebar', 'open');
+  const collapsed = sidebar === 'collapsed';
   const menuRef = useRef(null);
 
   useEffect(() => {
-    try { setCollapsed(localStorage.getItem('faithsync-sidebar') === 'collapsed'); } catch {}
-  }, []);
-
-  // Close the drawer / menu when the page changes.
-  useEffect(() => { setDrawer(false); setUserMenu(false); }, [pathname]);
-
-  useEffect(() => {
     if (!userMenu) return;
-    const onDown = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setUserMenu(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setUserMenu(false); };
+    const onDown = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOn(null); };
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOn(null); };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [userMenu]);
 
   function toggleCollapsed() {
-    setCollapsed((v) => {
-      const next = !v;
-      try { localStorage.setItem('faithsync-sidebar', next ? 'collapsed' : 'open'); } catch {}
-      return next;
-    });
+    setSidebar(collapsed ? 'open' : 'collapsed');
   }
 
   const allLinks = groups.flatMap((g) => g.links);

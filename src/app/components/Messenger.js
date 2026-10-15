@@ -219,7 +219,11 @@ export default function Messenger() {
     setTimeout(() => inputRef.current?.focus(), 0);
   }, [me, markRead, loadMembers]);
 
-  useEffect(() => { if (me) { loadConvos(); loadContacts(); } }, [me, loadConvos, loadContacts]);
+  // First load once signed in (applied when the answers arrive).
+  useEffect(() => {
+    if (!me) return;
+    Promise.resolve().then(() => { loadConvos(); loadContacts(); });
+  }, [me, loadConvos, loadContacts]);
 
   // ?to=<id> opens a chat with that person (the profile's Message button
   // on other pages links here).

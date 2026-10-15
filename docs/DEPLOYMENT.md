@@ -22,7 +22,7 @@ How to set FaithSync up from zero: a new Supabase project, the database, sign-in
 
 ## 3. Build the database
 
-In **SQL Editor → New query**, run the files in `db/` **one by one, in number order**, starting with `000_base_schema.sql` and ending with the last file (`067`). Open each file, copy all of it, paste, press **Run**.
+In **SQL Editor → New query**, run the files in `db/` **one by one, in number order**, starting with `000_base_schema.sql` and ending with the last file (`068`). Open each file, copy all of it, paste, press **Run**.
 
 - Every file is wrapped in `begin … commit`: if a line fails, nothing in that file is applied — fix the cause and run the same file again.
 - Every file ends with a commented **Verify** query. Run it to confirm the file worked.
@@ -38,6 +38,7 @@ In **SQL Editor → New query**, run the files in `db/` **one by one, in number 
 | 029–040 | Messages, group chats, announcements, follow-up, the assistant's search index |
 | 041–052 | Attendance and visitors, event approval, weekly events, cancel, reminders |
 | 053–067 | Finance and member fixes, automatic status, sign-in sheet photos (`attendance-sheets` bucket), profiles, Pastor as backup, clean-up |
+| 068 | Verses, training modules, questions and handouts readable by signed-in logins only |
 
 ### Make the first Admin
 
@@ -58,15 +59,18 @@ From then on, the Admin manages levels and branches on the **Users** page.
 
 ## 4. Configure the app
 
-1. **Supabase address and public key** — in `src/app/lib/supabase.js`, set `supabaseUrl` and `supabaseAnonKey` to the values from step 2. (These two are public by design; access is protected by the database rules.)
-2. **Secrets** — create a file `.env.local` in the project folder (it is ignored by git):
+1. Create a file `.env.local` in the project folder (it is ignored by git) with the values from step 2:
 
 ```bash
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key   # required: creating logins, resetting passwords, the assistant's index
-ASSISTANT_DAILY_LIMIT=50                            # optional: questions per Member per day (staff have no limit)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co   # required
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key                  # required (public by design; the database rules protect the data)
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key              # required, secret: creating logins, resetting passwords, the assistant's index
+ASSISTANT_DAILY_LIMIT=50                                     # optional: questions per Member per day (staff have no limit)
 ```
 
-3. Install and try it:
+   The two `NEXT_PUBLIC_` values are built into the app, so after changing them restart `npm run dev` or build again.
+
+2. Install and try it:
 
 ```bash
 npm install
@@ -84,7 +88,7 @@ npm run dev        # http://localhost:3000
 ## 6. Put it online (Vercel)
 
 1. Push the project to GitHub and **Import** it in Vercel (framework: Next.js; the defaults are right).
-2. In **Settings → Environment Variables**, add `SUPABASE_SERVICE_ROLE_KEY` (and `ASSISTANT_DAILY_LIMIT` if wanted).
+2. In **Settings → Environment Variables**, add the same values as `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and `ASSISTANT_DAILY_LIMIT` if wanted).
 3. Deploy. Every push to the main branch deploys again.
 4. Put the Vercel address in Supabase's Site URL / Redirect URLs (step 5).
 
@@ -104,6 +108,7 @@ The assistant downloads its text model (*multilingual-e5-small*, from Hugging Fa
 | "… has not been set up yet. Ask the administrator to run db/0NN…" | That SQL file wasn't run. Run it (and any after it that failed). |
 | A SQL file stops at `create extension if not exists pg_cron` | `pg_cron` is off. Turn it on in **Database → Extensions** and run the file again. |
 | Nobody turns *Inactive* automatically | `db/056` didn't run, or the job is missing: `select * from cron.job where jobname = 'faithsync-auto-member-status';` should return one row. |
+| "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY" | Add both to `.env.local` (or Vercel's Environment Variables) and restart / redeploy. |
 | "The server is missing SUPABASE_SERVICE_ROLE_KEY" | Add the key to `.env.local` (on your computer) or Vercel's Environment Variables, then restart / redeploy. |
 | Google sign-in returns to the login page with an error | The app's address isn't in Supabase's Redirect URLs, or the Google provider isn't turned on. |
 | "Link Google account" fails | Turn on **Allow manual linking** (step 5). |

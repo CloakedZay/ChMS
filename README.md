@@ -33,7 +33,7 @@ Requirements: **Node.js 20+** and access to the Supabase project.
 
 ```bash
 npm install
-# create .env.local with the service-role key (see docs/DEPLOYMENT.md)
+# create .env.local with the Supabase address, public key and service-role key (see docs/DEPLOYMENT.md)
 npm run dev
 ```
 
@@ -44,7 +44,7 @@ To set FaithSync up from zero (new Supabase project, database, Google sign-in, h
 ## Project layout
 
 ```
-db/                      Database changes, run in order: 000_base_schema.sql … 067
+db/                      Database changes, run in order: 000_base_schema.sql … 068
 docs/                    DEPLOYMENT.md (setup), SYSTEM.md (architecture, roles, security)
 public/                  Logo, images, Excel template
 src/app/

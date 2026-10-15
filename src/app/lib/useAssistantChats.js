@@ -17,18 +17,23 @@ export function useAssistantChats() {
 
   const select = (id) => { activeRef.current = id; setActiveId(id); };
 
-  const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('assistant_chats')
-      .select('id, title, updated_at')
-      .order('updated_at', { ascending: false })
-      .limit(MAX_LISTED);
+  const fetchChats = () => supabase
+    .from('assistant_chats')
+    .select('id, title, updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(MAX_LISTED);
+  const applyChats = ({ data, error }) => {
     if (error) { setReady(false); setChats([]); return; }
     setReady(true);
     setChats(data || []);
-  }, []);
+  };
+  const load = useCallback(async () => { applyChats(await fetchChats()); }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let gone = false;
+    fetchChats().then((r) => { if (!gone) applyChats(r); });
+    return () => { gone = true; };
+  }, []);
 
   // Open a saved chat; returns its messages in the chat pages' shape.
   async function open(id) {
