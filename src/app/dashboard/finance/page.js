@@ -136,6 +136,14 @@ function Finance() {
     return data;
   }
 
+  // Member names for the Member / Payee box (Finance's "names" access): the
+  // member directory gives names only, for their own branch.
+  const [memberNames, setMemberNames] = useState([]);   // { full_name, church_id }
+  async function fetchMemberNames() {
+    const { data } = await supabase.from('member_directory').select('full_name, church_id').order('full_name');
+    setMemberNames(data || []);
+  }
+
   async function fetchChurches() {
     const { data, error } = await supabase.from('churches').select('id, name').order('name', { ascending: true });
     if (error) { console.error('Error fetching churches:', error.message); return; }
@@ -165,6 +173,7 @@ function Finance() {
     async function init() {
       const p = await fetchProfile();
       await fetchChurches();
+      if (can(p?.role, 'finance', 'edit')) await fetchMemberNames();
       await fetchTransactions();
       if (p && !GLOBAL_ROLES.includes(p.role)) {
         setForm((f) => ({ ...f, church_id: p.church_id || '' }));
@@ -550,7 +559,12 @@ function Finance() {
 
               {showMemberField && (
                 <Field label="Member / Payee" t={t}>
-                  <input type="text" name="member" value={form.member} onChange={handleChange} placeholder="e.g. Juan dela Cruz" className={inputStyle(t)} />
+                  <input type="text" name="member" value={form.member} onChange={handleChange} placeholder="e.g. Juan dela Cruz" list="finance-member-names" autoComplete="off" className={inputStyle(t)} />
+                  {/* Suggestions from the branch's members; anything else (a store, a company) can still be typed. */}
+                  <datalist id="finance-member-names">
+                    {[...new Set(memberNames.filter((m) => !form.church_id || m.church_id === form.church_id).map((m) => m.full_name))]
+                      .map((name) => <option key={name} value={name} />)}
+                  </datalist>
                 </Field>
               )}
 
