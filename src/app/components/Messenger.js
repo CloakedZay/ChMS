@@ -19,6 +19,7 @@ import PersonProfile from '@/app/components/PersonProfile';
 
 const MAX_LEN = 2000;
 const THREAD_LIMIT = 200;
+const RECENT_MAX = 8;   // people remembered in the new-chat list, this device only
 
 const manilaDay = (iso) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(iso));
@@ -100,6 +101,7 @@ export default function Messenger() {
   const [infoBusy, setInfoBusy]     = useState(false);
   const [infoError, setInfoError]   = useState('');
   const [profileId, setProfileId]   = useState(null);   // whose profile is open (db/061)
+  const [recentIds, setRecentIds]   = useState([]);     // people picked lately, newest first
 
   const activeRef = useRef(null);
   const membersRef = useRef([]);
@@ -293,8 +295,20 @@ export default function Messenger() {
   }
 
   // ── Groups ──────────────────────────────────────────────────────────────
+  // Recent people live in this browser only (a convenience, not shared).
+  const recentKey = `faithsync-recent-people-${me}`;
+  function readRecent() {
+    try { return JSON.parse(localStorage.getItem(recentKey) || '[]'); } catch { return []; }
+  }
+  function saveRecent(ids) {
+    setRecentIds(ids);
+    try { localStorage.setItem(recentKey, JSON.stringify(ids)); } catch { /* storage off: keep it for now */ }
+  }
+  const remember = (id) => saveRecent([id, ...recentIds.filter((x) => x !== id)].slice(0, RECENT_MAX));
+
   function openPicker(tab) {
     setPicker(tab); setQuery(''); setGroupName(''); setSelected([]); setCreateError('');
+    setRecentIds(readRecent());
   }
   const toggle = (list, setList, id) =>
     setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -380,7 +394,15 @@ export default function Messenger() {
   const q = query.trim().toLowerCase();
   const matches = (c) => !q || c.display_name.toLowerCase().includes(q) || (ROLE_LABELS[c.contact_role] || '').toLowerCase().includes(q)
     || c.ministries?.some((m) => m.toLowerCase().includes(q));
-  const shownContacts = contacts.filter(matches);
+  // Nobody is listed until something is typed; then everyone whose name,
+  // level or ministry has it. Before that: people picked lately, and in a
+  // group, who's already ticked.
+  const recentPeople = recentIds.map((id) => contactById.get(id)).filter(Boolean);
+  const shownContacts = q ? contacts.filter(matches)
+    : picker === 'group'
+      ? [...contacts.filter((c) => selected.includes(c.id)), ...recentPeople.filter((c) => !selected.includes(c.id))]
+      : recentPeople;
+  const showingRecent = !q && recentPeople.length > 0;
   const addable = contacts
     .filter((c) => !members.some((m) => m.user_id === c.id))
     .filter((c) => !addQuery.trim() || c.display_name.toLowerCase().includes(addQuery.trim().toLowerCase()));
@@ -597,7 +619,7 @@ export default function Messenger() {
               <div className="relative">
                 <Search size={15} className={`absolute left-3 top-3 ${t.muted}`} />
                 <input autoFocus={picker === 'direct'} type="text" value={query} onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search by name or role" aria-label="Search people" className={field} />
+                  placeholder="Type a name, level or ministry" aria-label="Search people" className={field} />
               </div>
               {picker === 'group' && (
                 <p className={`text-xs mt-2 ${t.sub}`}>{selected.length} selected</p>
@@ -605,15 +627,24 @@ export default function Messenger() {
             </div>
 
             <ul className="overflow-y-auto pb-3 flex-1">
+              {showingRecent && (
+                <li className="px-4 pt-1 pb-1.5 flex items-center justify-between">
+                  <span className={`text-[11px] font-semibold uppercase tracking-wider ${t.muted}`}>{picker === 'group' && selected.length ? 'Selected and recent' : 'Recent'}</span>
+                  <button onClick={() => saveRecent([])} className={`text-xs font-semibold ${t.sub} hover:underline`}>Clear</button>
+                </li>
+              )}
               {shownContacts.length === 0 ? (
                 <li className={`px-6 py-8 text-center text-sm ${t.sub}`}>
-                  {contacts.length === 0 ? 'There is nobody to message yet.' : `No one matches “${query}”.`}
+                  {contacts.length === 0 ? 'There is nobody to message yet.'
+                    : !q ? `Start typing to find someone${picker === 'group' ? ' to add' : ''}. For example a name, “leader”, or a ministry.`
+                    : `No one matches “${query}”.`}
                 </li>
               ) : picker === 'group' ? shownContacts.map((c) => (
-                <PickRow key={c.id} t={t} person={c} checked={selected.includes(c.id)} onToggle={() => toggle(selected, setSelected, c.id)} />
+                <PickRow key={c.id} t={t} person={c} checked={selected.includes(c.id)}
+                  onToggle={() => { if (!selected.includes(c.id)) remember(c.id); toggle(selected, setSelected, c.id); }} />
               )) : shownContacts.map((c) => (
                 <li key={c.id} className={`flex items-center gap-1 pr-3 ${t.row}`}>
-                  <button onClick={() => setProfileId(c.id)} title="See profile"
+                  <button onClick={() => { remember(c.id); setProfileId(c.id); }} title="See profile"
                     className="flex-1 min-w-0 text-left flex items-center gap-3 pl-4 py-2.5">
                     <Avatar t={t} name={c.display_name} size="w-9 h-9 text-xs" />
                     <span className="flex-1 min-w-0">
@@ -622,7 +653,7 @@ export default function Messenger() {
                     </span>
                     <RoleChip t={t} role={c.contact_role} />
                   </button>
-                  <button onClick={() => openThread('dm', c.id)} aria-label={`Message ${c.display_name}`} title="Message"
+                  <button onClick={() => { remember(c.id); openThread('dm', c.id); }} aria-label={`Message ${c.display_name}`} title="Message"
                     className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-blue-500 hover:bg-blue-500/10">
                     <MessageCircle size={17} />
                   </button>
