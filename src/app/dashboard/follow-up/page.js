@@ -159,7 +159,8 @@ export default function FollowUpPage() {
     const notReturning = r.last_outcome === 'not_returning'
       && !(r.last_seen && new Date(r.last_seen) > new Date(r.last_followup_at))
       && !(r.last_attended && r.last_attended > manilaDate(r.last_followup_at));
-    const flagged = (quiet || missing || r.member_status === 'inactive') && !notReturning;
+    // Busy = away on purpose; they aren't chased (db/059).
+    const flagged = (quiet || missing || r.member_status === 'inactive') && !notReturning && r.member_status !== 'busy';
     const followedRecently = sinceFollowUp !== null && sinceFollowUp < threshold;
     return { ...r, away, quiet, missing, notReturning, flagged, followedRecently, needs: flagged && !followedRecently };
   }), [rows, threshold, branch]);

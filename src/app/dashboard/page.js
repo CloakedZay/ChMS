@@ -496,7 +496,7 @@ export default function DashboardPage() {
         <div className={`mb-6 flex items-center gap-2 text-sm ${t.textSub} ${t.cardBg} border ${t.cardBorder} rounded-xl px-4 py-2.5`}>
           <Search className="w-3.5 h-3.5 text-blue-400 shrink-0" />
           <span>
-            Showing results for <span className={`${t.textPrimary} font-bold`}>"{search}"</span>
+            Showing results for <span className={`${t.textPrimary} font-bold`}>&ldquo;{search}&rdquo;</span>
             {" "}— {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}, {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? "s" : ""}, {activityFeed.length} activit{activityFeed.length !== 1 ? "ies" : "y"}
           </span>
           <button onClick={() => setSearch("")} className={`ml-auto ${t.textMuted} hover:text-slate-300 transition-colors`}>
