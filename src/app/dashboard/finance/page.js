@@ -80,7 +80,6 @@ function T(dark) {
     tableHeadBg: dark ? "bg-slate-900/50"      : "bg-slate-200",
     rowHover:    dark ? "hover:bg-blue-500/5"  : "hover:bg-blue-100/60",
     innerCard:   dark ? "bg-slate-900/50"      : "bg-slate-200",
-    deepCard:    dark ? "bg-slate-900/40"      : "bg-slate-200",
     iconBtn:     dark ? "bg-[#1b2420] border-slate-800 text-slate-400 hover:text-white" : "bg-slate-50 border-slate-400 text-slate-600 hover:text-slate-900",
   };
 }
@@ -89,8 +88,6 @@ function T(dark) {
 // fine on the dark bg but are too pale for contrast on light.
 const ACCENT = {
   blue:    { dark: "text-blue-400",    light: "text-blue-600" },
-  purple:  { dark: "text-purple-400",  light: "text-purple-600" },
-  pink:    { dark: "text-pink-400",    light: "text-pink-600" },
   emerald: { dark: "text-emerald-400", light: "text-emerald-600" },
   rose:    { dark: "text-rose-400",    light: "text-rose-600" },
 };
@@ -138,7 +135,11 @@ export default function FinancePage() {
 
   async function fetchTransactions() {
     setLoading(true);
-    const { data, error } = await supabase.from('transactions').select('*').order('date_recorded', { ascending: false });
+    // Newest by the date shown in the list; same-day entries in the order
+    // they were recorded.
+    const { data, error } = await supabase.from('transactions').select('*')
+      .order('date', { ascending: false, nullsFirst: false })
+      .order('date_recorded', { ascending: false });
     if (!error) setTransactions(data || []);
     setLoading(false);
   }
@@ -232,14 +233,15 @@ export default function FinancePage() {
       form.category;
     const { otherCategory, ministryName, ...rest } = form;
     const payload = { ...rest, category: finalCategory, amount: parseFloat(form.amount) || 0, member: showMember ? (form.member || 'Anonymous') : '', church_id: isGlobal ? form.church_id : profile?.church_id };
-    if (editingTx) {
-      const { error } = await supabase.from('transactions').update(payload).eq('id', editingTx.id);
-      if (error) alertDialog('Error updating: ' + error.message);
-    } else {
-      const { error } = await supabase.from('transactions').insert([payload]);
-      if (error) alertDialog('Error saving: ' + error.message);
-    }
+    const { error } = editingTx
+      ? await supabase.from('transactions').update(payload).eq('id', editingTx.id)
+      : await supabase.from('transactions').insert([payload]);
     setSaving(false);
+    // Keep the form open with what was typed, so it can just be saved again.
+    if (error) {
+      alertDialog((editingTx ? 'Error updating: ' : 'Error saving: ') + error.message);
+      return;
+    }
     setShowModal(false);
     setEditingTx(null);
     setForm(EMPTY_FORM);
@@ -264,8 +266,11 @@ export default function FinancePage() {
   const totalExpense = counted.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
   const totalBalance = totalIncome - totalExpense;
 
+  // What's left in each fund: money in minus money spent from it.
   const fundTotals = FUNDS.reduce((acc, fund) => {
-    acc[fund] = counted.filter(t => t.fund === fund && t.type === 'income').reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const sum = (type) => counted.filter(t => t.fund === fund && t.type === type).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const income = sum('income'), expense = sum('expense');
+    acc[fund] = { income, expense, left: income - expense };
     return acc;
   }, {});
 
@@ -362,7 +367,7 @@ export default function FinancePage() {
       </div>
 
       <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 mb-6 backdrop-blur-sm`}>
-        <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-5 border-b ${t.divider} pb-3`}>Fund Breakdown</h3>
+        <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-5 border-b ${t.divider} pb-3`}>Fund Balances <span className="normal-case tracking-normal font-normal">— what&apos;s left in each fund (money in − money spent)</span></h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { label: "Monthly Budget", dot: "bg-yellow-500" },
@@ -375,20 +380,12 @@ export default function FinancePage() {
                 <div className={`w-2 h-2 rounded-full ${dot}`} />
                 <span className={`text-[10px] ${t.textSub} uppercase tracking-wider font-bold`}>{label}</span>
               </div>
-              <p className={`text-lg font-black ${t.textPrimary} font-mono`}>₱{(fundTotals[label] || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className={`mt-4 grid grid-cols-3 gap-3`}>
-          {[
-            { label: "General Fund", pct: "50%", color: A(dark, "blue") },
-            { label: "Project Fund", pct: "25%", color: A(dark, "purple") },
-            { label: "Lot Fund",     pct: "25%", color: A(dark, "pink") },
-          ].map((item) => (
-            <div key={item.label} className={`${t.deepCard} rounded-xl p-3 text-center`}>
-              <p className={`text-base font-black ${item.color}`}>{item.pct}</p>
-              <p className={`text-[9px] ${t.textMuted} mt-0.5 uppercase tracking-wider`}>{item.label}</p>
+              <p className={`text-lg font-black font-mono ${fundTotals[label].left < 0 ? A(dark, "rose") : t.textPrimary}`}>{peso(fundTotals[label].left)}</p>
+              <p className={`text-[10px] ${t.textMuted} mt-1 font-mono`}>
+                <span className={A(dark, "emerald")}>+{peso(fundTotals[label].income)}</span>
+                {' · '}
+                <span className={A(dark, "rose")}>−{peso(fundTotals[label].expense)}</span>
+              </p>
             </div>
           ))}
         </div>
@@ -558,6 +555,11 @@ export default function FinancePage() {
       )}
     </div>
   );
+}
+
+function peso(n) {
+  const sign = n < 0 ? '−' : '';
+  return `${sign}₱${Math.abs(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 }
 
 function inputStyle(t) {

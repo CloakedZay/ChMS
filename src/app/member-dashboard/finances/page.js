@@ -38,12 +38,17 @@ export default function MemberFinancesPage() {
     fetchTransactions();
   }, []);
 
-  const totalIncome  = transactions.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
-  const totalExpense = transactions.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
+  // Voided entries stay listed but never count in a total.
+  const counted = transactions.filter(t => t.status !== 'Void');
+  const totalIncome  = counted.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
+  const totalExpense = counted.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
   const totalBalance = totalIncome - totalExpense;
 
+  // What's left in each fund: money in minus money spent from it.
   const fundTotals = FUNDS.reduce((acc, fund) => {
-    acc[fund] = transactions.filter(t => t.fund === fund && t.type === 'income').reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const sum = (type) => counted.filter(t => t.fund === fund && t.type === type).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const income = sum('income'), expense = sum('expense');
+    acc[fund] = { income, expense, left: income - expense };
     return acc;
   }, {});
 
@@ -54,7 +59,7 @@ export default function MemberFinancesPage() {
     return matchSearch && matchType;
   });
 
-  const formatPeso = (v) => '₱' + (v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+  const formatPeso = (v) => (v < 0 ? '−' : '') + '₱' + Math.abs(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
@@ -78,7 +83,7 @@ export default function MemberFinancesPage() {
       </div>
 
       <div className="bg-[#1b2420] border border-white/10 rounded-3xl p-6 mb-6">
-        <h3 className="text-[10px] uppercase font-bold tracking-widest text-white/40 mb-5 border-b border-white/10 pb-3">Fund Breakdown</h3>
+        <h3 className="text-[10px] uppercase font-bold tracking-widest text-white/40 mb-5 border-b border-white/10 pb-3">Fund Balances <span className="normal-case tracking-normal font-normal">— what&apos;s left in each fund (money in − money spent)</span></h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {FUNDS.map((fund) => (
             <div key={fund} className="bg-white/[0.03] rounded-2xl p-4">
@@ -86,7 +91,12 @@ export default function MemberFinancesPage() {
                 <div className={`w-2 h-2 rounded-full ${FUND_DOTS[fund]}`} />
                 <span className="text-[10px] text-white/40 uppercase tracking-wider font-bold">{fund}</span>
               </div>
-              <p className="text-lg font-black text-white font-mono">{formatPeso(fundTotals[fund])}</p>
+              <p className={`text-lg font-black font-mono ${fundTotals[fund].left < 0 ? 'text-rose-400' : 'text-white'}`}>{formatPeso(fundTotals[fund].left)}</p>
+              <p className="text-[10px] mt-1 font-mono">
+                <span className="text-emerald-400">+{formatPeso(fundTotals[fund].income)}</span>
+                <span className="text-white/30">{' · '}</span>
+                <span className="text-rose-400">−{formatPeso(fundTotals[fund].expense)}</span>
+              </p>
             </div>
           ))}
         </div>
