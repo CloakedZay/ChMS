@@ -38,6 +38,9 @@ const STATUS_COLORS = {
 // directory and every count, and show only under the "archived" filter.
 const ARCHIVED = 'archived';
 
+// Nightly check (db/056): Active → Inactive after this many days unseen.
+const AUTO_DAYS = 14;
+
 // How alike a login's name/email is to a member's name, for sorting the
 // "Link existing login" list: shared words count most.
 function nameScore(memberName = "", login) {
@@ -46,6 +49,10 @@ function nameScore(memberName = "", login) {
   const theirs = new Set([...words(login.full_name), ...words(login.email?.split("@")[0])]);
   return target.filter((w) => theirs.has(w)).length;
 }
+
+// "  Juan   dela Cruz " → "Juan dela Cruz"; names compare ignoring case.
+const tidyName = (name = "") => name.trim().replace(/\s+/g, " ");
+const sameName = (a, b) => tidyName(a).toLowerCase() === tidyName(b).toLowerCase();
 
 function getInitials(name = "") {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
@@ -94,6 +101,17 @@ export default function MembersPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
   const { role } = useAuth();
+  // The Pastor sees every branch: which one to show, and their names.
+  const isGlobal = role === 'pastor';
+  const [branch, setBranch]     = useState('all');
+  const [churches, setChurches] = useState([]);
+  useEffect(() => {
+    if (!isGlobal) return;
+    supabase.from('churches').select('id, name').order('name').then(({ data }) => setChurches(data || []));
+  }, [isGlobal]);
+  const branchName = (id) => churches.find((c) => c.id === id)?.name || 'No branch';
+  // Branch shown on each row only when several branches are listed together.
+  const showBranch = isGlobal && branch === 'all' && churches.length > 1;
   // Secretary adds and edits; Pastor and Secretary archive; others view.
   const canEdit    = can(role, 'members', 'edit');
   const canArchive = can(role, 'memberArchive', 'edit');
@@ -147,7 +165,7 @@ export default function MembersPage() {
 
     const ids = (data || []).map((m) => m.profile_id).filter(Boolean);
     if (ids.length) {
-      const { data: profiles } = await supabase.from('profiles').select('id, email, full_name, disabled').in('id', ids);
+      const { data: profiles } = await supabase.from('profiles').select('id, email, full_name, role, disabled').in('id', ids);
       const map = {};
       (profiles || []).forEach((p) => { map[p.id] = p; });
       setLogins(map);
@@ -206,24 +224,30 @@ export default function MembersPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const fullName = tidyName(form.full_name);
+    if (!fullName) { alertDialog('Please enter the full name.'); return; }
+    // Two people can share a name, so ask rather than refuse.
+    const twin = members.find((m) => m.id !== editingMember?.id && sameName(m.full_name, fullName)
+      && (!editingMember || !sameName(editingMember.full_name, fullName)));
+    if (twin && !await confirmDialog({
+      message: `There is already a member named "${twin.full_name}"${twin.status === ARCHIVED ? ' (archived — you can restore them instead)' : ''}${twin.phone ? `, phone ${twin.phone}` : ''}. Is this a different person?`,
+      confirmText: editingMember ? 'Yes, save' : 'Yes, add',
+    })) return;
     setSaving(true);
-    const payload = { ...form, email: form.email.trim().toLowerCase() || null };
+    const payload = { ...form, full_name: fullName, email: form.email.trim().toLowerCase() || null };
     // Only send the birthday when there is something to save or clear.
     if (!form.birth_date && !editingMember?.birth_date) delete payload.birth_date;
     else payload.birth_date = form.birth_date || null;
 
-    if (editingMember) {
-      const { error } = await supabase
-        .from('members')
-        .update(payload)
-        .eq('id', editingMember.id);
-      if (error) alertDialog('Error updating member: ' + error.message);
-    } else {
-      const { error } = await supabase.from('members').insert([payload]);
-      if (error) alertDialog('Error saving member: ' + error.message);
-    }
-
+    const { error } = editingMember
+      ? await supabase.from('members').update(payload).eq('id', editingMember.id)
+      : await supabase.from('members').insert([payload]);
     setSaving(false);
+    // Keep the form open with what was typed, so it can just be saved again.
+    if (error) {
+      alertDialog((editingMember ? 'Error updating member: ' : 'Error saving member: ') + error.message);
+      return;
+    }
     setShowModal(false);
     setEditingMember(null);
     setForm(EMPTY_FORM);
@@ -231,9 +255,15 @@ export default function MembersPage() {
   }
 
   async function handleArchive(member, archive) {
+    // Archiving switches off a Member login; restoring switches it back on (db/055).
+    const login = logins[member.profile_id];
+    const loginNote = archive
+      ? (login && login.role === 'member' && !login.disabled ? ` Their login (${login.email}) will be switched off too.`
+        : login && login.role !== 'member' ? ` Their ${login.role} login keeps working — only the Admin can switch it off.` : '')
+      : (member.archive_disabled_login ? ' Their login will be switched back on.' : '');
     const confirmed = await confirmDialog(archive
-      ? `Archive "${member.full_name}"? They'll be hidden from the directory and counts, and can be restored later.`
-      : `Restore "${member.full_name}" as an active member?`);
+      ? `Archive "${member.full_name}"? They'll be hidden from the directory and counts, and can be restored later.${loginNote}`
+      : `Restore "${member.full_name}" as an active member?${loginNote}`);
     if (!confirmed) return;
     setOpenMenuId(null);
 
@@ -339,11 +369,19 @@ export default function MembersPage() {
 
   // ── Filtered list ─────────────────────────────────────────────────────────
 
-  const filtered = members.filter((m) => {
-    const matchSearch =
-      m.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      ministriesOf[m.id]?.toLowerCase().includes(search.toLowerCase()) ||
-      m.role?.toLowerCase().includes(search.toLowerCase());
+  // Someone with a login: their login level (set by the Admin) is their
+  // role. The record's own Role is only for people without a login.
+  const roleOf = (m) => logins[m.profile_id]?.role || m.role;
+
+  const inBranch = members.filter((m) => branch === 'all' || m.church_id === branch);
+
+  const q = search.toLowerCase().trim();
+  // Phone numbers match on their digits, so "0917 123" finds "09171234567".
+  const qDigits = q.replace(/\D/g, '');
+  const filtered = inBranch.filter((m) => {
+    const matchSearch = !q
+      || [m.full_name, ministriesOf[m.id], roleOf(m), m.email].some((v) => v?.toLowerCase().includes(q))
+      || (qDigits.length >= 3 && (m.phone || '').replace(/\D/g, '').includes(qDigits));
     const matchStatus = filterStatus === "all" ? m.status !== ARCHIVED : m.status === filterStatus;
     return matchSearch && matchStatus;
   });
@@ -351,10 +389,10 @@ export default function MembersPage() {
   // ── Summary counts ────────────────────────────────────────────────────────
 
   const counts = {
-    total:    members.filter((m) => m.status !== ARCHIVED).length,
-    active:   members.filter((m) => m.status === "active").length,
-    inactive: members.filter((m) => m.status === "inactive").length,
-    busy:     members.filter((m) => m.status === "busy").length,
+    total:    inBranch.filter((m) => m.status !== ARCHIVED).length,
+    active:   inBranch.filter((m) => m.status === "active").length,
+    inactive: inBranch.filter((m) => m.status === "inactive").length,
+    busy:     inBranch.filter((m) => m.status === "busy").length,
   };
 
   // ── Active member for dropdown ────────────────────────────────────────────
@@ -364,7 +402,7 @@ export default function MembersPage() {
   // ── UI ────────────────────────────────────────────────────────────────────
 
   // Long lists are shown 15 at a time (components/Pagination).
-  const pg = usePaged(filtered, 15, `${search}|${filterStatus}`);
+  const pg = usePaged(filtered, 15, `${search}|${filterStatus}|${branch}`);
 
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
@@ -426,13 +464,20 @@ export default function MembersPage() {
           <Search className={`absolute left-3 top-2.5 w-4 h-4 ${t.textSub}`} />
           <input
             type="text"
-            placeholder="Search by name, role, or ministry..."
+            placeholder="Search by name, phone, email, role, or ministry..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 pl-9 pr-4 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
           />
         </div>
         <div className="flex gap-2 flex-wrap">
+          {isGlobal && churches.length > 1 && (
+            <select value={branch} onChange={(e) => setBranch(e.target.value)} aria-label="Branch"
+              className={`${t.inputBg} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs font-bold ${t.inputText} focus:outline-none focus:border-blue-500`}>
+              <option value="all">All branches</option>
+              {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
           {["all", "active", "busy", "inactive", ARCHIVED].map((s) => (
             <button
               key={s}
@@ -489,12 +534,16 @@ export default function MembersPage() {
                         <div className="w-8 h-8 rounded-xl bg-blue-600/15 border border-blue-500/20 flex items-center justify-center shrink-0">
                           <span className="text-[10px] font-black text-blue-400">{getInitials(member.full_name)}</span>
                         </div>
-                        <span className={`font-semibold ${t.textPrimary} text-sm`}>{member.full_name}</span>
+                        <div className="min-w-0">
+                          <p className={`font-semibold ${t.textPrimary} text-sm`}>{member.full_name}</p>
+                          {showBranch && <p className={`text-[11px] font-semibold ${t.textMuted}`}>{branchName(member.church_id)}</p>}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {member.role
-                        ? <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border capitalize ${levelBadge(member.role, dark)}`}>{member.role}</span>
+                      {roleOf(member)
+                        ? <span title={logins[member.profile_id]?.role ? "Their login level — the Admin changes it on the Users page" : undefined}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border capitalize ${levelBadge(roleOf(member), dark)}`}>{roleOf(member)}</span>
                         : <span className={`text-sm ${t.textMuted}`}>—</span>}
                     </td>
                     <td className="px-6 py-4 text-blue-400 text-xs font-medium">{ministriesOf[member.id] || '—'}</td>
@@ -531,8 +580,9 @@ export default function MembersPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${STATUS_COLORS[member.status] || STATUS_COLORS.active}`}>
-                        {member.status || 'active'}
+                      <span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${STATUS_COLORS[member.status] || STATUS_COLORS.active}`}
+                        title={member.status_auto ? `Set automatically: not seen for ${AUTO_DAYS} days (no sign-in or attendance)` : undefined}>
+                        {member.status || 'active'}{member.status_auto && <span className="normal-case font-semibold opacity-70"> · auto</span>}
                       </span>
                     </td>
                     {/* Actions */}
@@ -579,7 +629,7 @@ export default function MembersPage() {
                 <Pencil size={13} /> Edit
               </button>
             )}
-            {canEdit && activeMenuMember.profile_id && (
+            {canEdit && activeMenuMember.profile_id && !activeMenuMember.archive_disabled_login && (
               <button
                 onClick={() => unlinkLogin(activeMenuMember)}
                 className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}
@@ -742,6 +792,12 @@ export default function MembersPage() {
               </Field>
 
               <Field label="Role" t={t}>
+                {editingMember && logins[editingMember.profile_id]?.role ? (
+                  <>
+                    <p className={`${inputStyle(t)} capitalize opacity-70`}>{logins[editingMember.profile_id].role}</p>
+                    <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>From their login. The Admin changes it on the Users page.</p>
+                  </>
+                ) : (
                 <select name="role" value={form.role} onChange={handleChange} className={inputStyle(t)}>
                   <option value="">Select a role</option>
                   <option value="pastor">Pastor</option>
@@ -749,6 +805,7 @@ export default function MembersPage() {
                   <option value="member">Member</option>
                   <option value="volunteer">Volunteer</option>
                 </select>
+                )}
               </Field>
 
               <Field label="Phone" t={t}>
@@ -781,6 +838,10 @@ export default function MembersPage() {
                   <option value="busy">Busy</option>
                   <option value="inactive">Inactive</option>
                 </select>
+                <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>
+                  Active members become Inactive by themselves after {AUTO_DAYS} days with no sign-in or attendance, and Active again when they come back.
+                  Busy members, and Inactive set here by hand, are left alone.
+                </p>
               </Field>
 
               <div className="flex gap-3 pt-2">
