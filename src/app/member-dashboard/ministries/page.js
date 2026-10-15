@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
 import { Loader2, CalendarClock, UserRound, BookOpen } from 'lucide-react';
 import BranchLabel from '@/app/components/BranchLabel';
+import PersonProfile from '@/app/components/PersonProfile';
 
 // The member's ministries (step M2, db/022 + db/024): the ones they belong
 // to, then the other ministries of their branch. The Pastor or a
 // ministry's head adds members. Each of the member's ministries lists its
 // training modules (M3); they're taken on the Discipleship page.
+// Tapping a head who has a login opens their profile (db/061).
 
 const shortDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
@@ -17,7 +20,19 @@ function initials(name = '') {
   return name.replace(/&/g, ' ').split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'M';
 }
 
+// The head's name: a button to their profile when they have a login.
+function HeadName({ m, onOpen, className }) {
+  if (!m.head_name) return <span className={className}>Not set</span>;
+  if (!m.leader_id) return <span className={className}>{m.head_name}</span>;
+  return (
+    <button type="button" onClick={() => onOpen(m.leader_id)} title="See profile"
+      className={`${className} underline decoration-dotted underline-offset-2 hover:text-blue-400`}>{m.head_name}</button>
+  );
+}
+
 export default function MemberMinistriesPage() {
+  const router = useRouter();
+  const [profileId, setProfileId]   = useState(null);
   const [ministries, setMinistries] = useState([]);
   const [mine, setMine]             = useState([]);   // { ministry_id, assigned_at }
   const [modules, setModules]       = useState([]);
@@ -28,7 +43,7 @@ export default function MemberMinistriesPage() {
       // Members only see their own branch's ministries and their own
       // assignments (database rules).
       const [{ data: list }, { data: assigned }, { data: mods }] = await Promise.all([
-        supabase.from('ministries').select('id, name, description, head_name, meeting_schedule, color_code').eq('is_active', true).order('name'),
+        supabase.from('ministries').select('id, name, description, head_name, leader_id, meeting_schedule, color_code').eq('is_active', true).order('name'),
         supabase.from('ministry_assignments').select('ministry_id, assigned_at'),
         supabase.from('discipleship_modules').select('id, title, ministry_id, order_index').eq('is_active', true).not('ministry_id', 'is', null).order('order_index'),
       ]);
@@ -83,7 +98,7 @@ export default function MemberMinistriesPage() {
                       </div>
                       {m.description && <p className="text-sm text-white/60 mb-3">{m.description}</p>}
                       <div className="space-y-1.5 text-xs text-white/50">
-                        <p className="flex items-center gap-2"><UserRound size={13} /> Head: <span className="text-white/80 font-semibold">{m.head_name || 'Not set'}</span></p>
+                        <p className="flex items-center gap-2"><UserRound size={13} /> Head: <HeadName m={m} onOpen={setProfileId} className="text-white/80 font-semibold" /></p>
                         <p className="flex items-center gap-2"><CalendarClock size={13} /> Meets: <span className="text-white/80 font-semibold">{m.meeting_schedule || '—'}</span></p>
                       </div>
                       {modules.some((x) => x.ministry_id === m.id) && (
@@ -116,7 +131,7 @@ export default function MemberMinistriesPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-white truncate">{m.name}</p>
                       <p className="text-xs text-white/40 truncate">
-                        Head: {m.head_name || 'not set'}{m.meeting_schedule && <> · {m.meeting_schedule}</>}
+                        Head: <HeadName m={m} onOpen={setProfileId} />{m.meeting_schedule && <> · {m.meeting_schedule}</>}
                       </p>
                     </div>
                   </div>
@@ -131,6 +146,11 @@ export default function MemberMinistriesPage() {
             <BookOpen className="w-5 h-5 shrink-0" /> Training modules and handouts are on the Discipleship page →
           </Link>
         </div>
+      )}
+
+      {profileId && (
+        <PersonProfile key={profileId} personId={profileId} onClose={() => setProfileId(null)}
+          onMessage={(id) => router.push(`/member-dashboard/messages?to=${id}`)} />
       )}
     </div>
   );

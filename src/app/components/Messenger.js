@@ -10,6 +10,7 @@ import { useTheme } from '@/app/context/ThemeContext';
 import { ROLE_LABELS } from '@/app/lib/permissions';
 import { levelBadge } from '@/app/lib/roleColors';
 import { confirmDialog } from '@/app/lib/dialog';
+import PersonProfile from '@/app/components/PersonProfile';
 
 // Chat for both dashboards: one-to-one (db/029) and groups (db/030).
 // Chats are private to the people in them. Who can be added or messaged is
@@ -98,6 +99,7 @@ export default function Messenger() {
   const [addSel, setAddSel]         = useState([]);
   const [infoBusy, setInfoBusy]     = useState(false);
   const [infoError, setInfoError]   = useState('');
+  const [profileId, setProfileId]   = useState(null);   // whose profile is open (db/061)
 
   const activeRef = useRef(null);
   const membersRef = useRef([]);
@@ -151,9 +153,13 @@ export default function Messenger() {
   }, []);
 
   const loadContacts = useCallback(async () => {
-    const { data } = await supabase
-      .from('chat_contacts').select('id, display_name, contact_role').order('display_name');
-    setContacts(data || []);
+    const [{ data }, { data: mins }] = await Promise.all([
+      supabase.from('chat_contacts').select('id, display_name, contact_role').order('display_name'),
+      supabase.rpc('contact_ministries'),   // empty before db/061
+    ]);
+    // Ministry names per person, so the picker can search by ministry.
+    const minsOf = new Map((mins || []).map((r) => [r.person_id, (r.ministries || []).map((m) => m.name)]));
+    setContacts((data || []).map((c) => ({ ...c, ministries: minsOf.get(c.id) || [] })));
   }, []);
 
   const loadMembers = useCallback(async (gid) => {
@@ -211,6 +217,16 @@ export default function Messenger() {
   }, [me, markRead, loadMembers]);
 
   useEffect(() => { if (me) { loadConvos(); loadContacts(); } }, [me, loadConvos, loadContacts]);
+
+  // ?to=<id> opens a chat with that person (the profile's Message button
+  // on other pages links here).
+  useEffect(() => {
+    if (!me) return;
+    const to = new URLSearchParams(window.location.search).get('to');
+    if (!to) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    Promise.resolve().then(() => openThread('dm', to));
+  }, [me, openThread]);
 
   // Live: new messages (direct + group), and the other person reading mine.
   useEffect(() => {
@@ -362,7 +378,8 @@ export default function Messenger() {
   const needle = listSearch.trim().toLowerCase();
   const shownItems = items.filter((i) => !needle || i.name.toLowerCase().includes(needle));
   const q = query.trim().toLowerCase();
-  const matches = (c) => !q || c.display_name.toLowerCase().includes(q) || (ROLE_LABELS[c.contact_role] || '').toLowerCase().includes(q);
+  const matches = (c) => !q || c.display_name.toLowerCase().includes(q) || (ROLE_LABELS[c.contact_role] || '').toLowerCase().includes(q)
+    || c.ministries?.some((m) => m.toLowerCase().includes(q));
   const shownContacts = contacts.filter(matches);
   const addable = contacts
     .filter((c) => !members.some((m) => m.user_id === c.id))
@@ -468,7 +485,12 @@ export default function Messenger() {
                 </button>
                 <Avatar t={t} name={headerName} group={active.kind === 'group'} />
                 <div className="min-w-0 flex-1">
-                  <p className={`text-sm font-bold truncate ${t.text}`}>{headerName}</p>
+                  {active.kind === 'dm' && dmPerson ? (
+                    <button onClick={() => setProfileId(active.id)} title="See profile"
+                      className={`block max-w-full text-left text-sm font-bold truncate hover:underline ${t.text}`}>{headerName}</button>
+                  ) : (
+                    <p className={`text-sm font-bold truncate ${t.text}`}>{headerName}</p>
+                  )}
                   {active.kind === 'group' ? (
                     <button onClick={openInfo} className={`text-xs ${t.sub} hover:underline`}>
                       {activeItem?.count || members.length} member{(activeItem?.count || members.length) === 1 ? '' : 's'} · details
@@ -590,11 +612,19 @@ export default function Messenger() {
               ) : picker === 'group' ? shownContacts.map((c) => (
                 <PickRow key={c.id} t={t} person={c} checked={selected.includes(c.id)} onToggle={() => toggle(selected, setSelected, c.id)} />
               )) : shownContacts.map((c) => (
-                <li key={c.id}>
-                  <button onClick={() => openThread('dm', c.id)} className={`w-full text-left flex items-center gap-3 px-4 py-2.5 ${t.row}`}>
+                <li key={c.id} className={`flex items-center gap-1 pr-3 ${t.row}`}>
+                  <button onClick={() => setProfileId(c.id)} title="See profile"
+                    className="flex-1 min-w-0 text-left flex items-center gap-3 pl-4 py-2.5">
                     <Avatar t={t} name={c.display_name} size="w-9 h-9 text-xs" />
-                    <span className={`text-sm font-semibold flex-1 truncate ${t.text}`}>{c.display_name}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className={`block text-sm font-semibold truncate ${t.text}`}>{c.display_name}</span>
+                      {c.ministries?.length > 0 && <span className={`block text-[11px] truncate ${t.muted}`}>{c.ministries.join(', ')}</span>}
+                    </span>
                     <RoleChip t={t} role={c.contact_role} />
+                  </button>
+                  <button onClick={() => openThread('dm', c.id)} aria-label={`Message ${c.display_name}`} title="Message"
+                    className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-blue-500 hover:bg-blue-500/10">
+                    <MessageCircle size={17} />
                   </button>
                 </li>
               ))}
@@ -643,9 +673,12 @@ export default function Messenger() {
                 {members.map((m) => (
                   <li key={m.user_id} className="flex items-center gap-3 px-4 py-2.5">
                     <Avatar t={t} name={m.display_name} size="w-9 h-9 text-xs" />
-                    <span className={`text-sm font-semibold flex-1 truncate ${t.text}`}>
-                      {m.display_name}{m.user_id === me ? ' (you)' : ''}
-                    </span>
+                    {m.user_id === me ? (
+                      <span className={`text-sm font-semibold flex-1 truncate ${t.text}`}>{m.display_name} (you)</span>
+                    ) : (
+                      <button onClick={() => setProfileId(m.user_id)} title="See profile"
+                        className={`text-sm font-semibold flex-1 truncate text-left hover:underline ${t.text}`}>{m.display_name}</button>
+                    )}
                     {m.is_owner && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#c5a66a]/20 text-[#9c7f45]">Owner</span>}
                     <RoleChip t={t} role={m.contact_role} />
                     {iAmOwner && m.user_id !== me && (
@@ -694,6 +727,12 @@ export default function Messenger() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── A person's profile (db/061) ───────────────────────────────── */}
+      {profileId && (
+        <PersonProfile key={profileId} personId={profileId} onClose={() => setProfileId(null)}
+          onMessage={(id) => { setProfileId(null); setInfo(false); openThread('dm', id); }} />
       )}
     </div>
   );
