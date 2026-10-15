@@ -5,7 +5,8 @@ import { supabase } from '@/app/lib/supabase';
 import { collapseSeries } from '@/app/lib/eventSeries';
 
 // Event approval notices (db/042, db/050) for the staff dashboard:
-//   pending  Leaders: the Secretary's events waiting for approval
+//   pending  Leaders: the Secretary's events waiting for approval; the
+//            Pastor: those in branches with no Leader (db/066)
 //   reviews  whoever filed events: the Leaders' decisions they haven't
 //            dismissed yet (approved, or sent back with a reason)
 // Also turns approved events whose date has passed into
@@ -26,12 +27,18 @@ export function useEventNotices(userId, role, enabled = true) {
     if (!userId || !enabled) return;
     let cancelled = false;
 
+    async function waitingForMe() {
+      if (role === 'leader') return supabase.from('events').select('*').eq('status', 'pending').order('date');
+      if (role !== 'pastor') return { data: [] };
+      const { data: leaderless } = await supabase.rpc('branches_without_leader');   // empty before db/066
+      if (!leaderless?.length) return { data: [] };
+      return supabase.from('events').select('*').eq('status', 'pending').in('church_id', leaderless).order('date');
+    }
+
     async function refresh() {
       await supabase.rpc('complete_past_events');   // not set up yet → ignored
       const [waiting, mine] = await Promise.all([
-        role === 'leader'
-          ? supabase.from('events').select('*').eq('status', 'pending').order('date')
-          : Promise.resolve({ data: [] }),
+        waitingForMe(),
         supabase.from('events').select('*')
           .eq('created_by', userId).eq('review_seen', false).order('reviewed_at', { ascending: false }),
       ]);

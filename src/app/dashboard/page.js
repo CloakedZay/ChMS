@@ -441,7 +441,7 @@ export default function DashboardPage() {
                           {`“${r.title}”${r.dates > 1 ? ` (${r.dates} dates)` : ''} was ${r.status === 'approved' ? 'approved' : 'sent back'}`}
                         </p>
                         <p className={`text-[10px] ${t.textSub} mt-0.5 line-clamp-2`}>
-                          {r.status === 'approved' ? 'A Leader approved your event.' : r.review_note || 'A Leader sent it back to planning.'}
+                          {r.status === 'approved' ? 'Your event was approved.' : r.review_note || 'It was sent back to planning.'}
                         </p>
                       </div>
                     </Link>

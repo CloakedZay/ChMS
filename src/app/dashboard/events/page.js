@@ -131,6 +131,10 @@ export default function EventsPage() {
   const canManageAll = can(role, 'events', 'approve');
   const canSubmit    = can(role, 'events', 'submit');
   const canSeeAttendance = can(role, 'attendance', 'view');   // db/041
+  // A branch with no Leader: the Pastor approves or sends back its pending
+  // events instead (db/066).
+  const [noLeader, setNoLeader] = useState(new Set());
+  const pastorReviews = (ev) => role === 'pastor' && ev.status === 'pending' && noLeader.has(ev.church_id);
   const canEditEvent = (ev) =>
     canManageAll ||
     (canSubmit && ev.created_by === user?.id && SUBMITTED_STATUSES.includes(ev.status));
@@ -171,6 +175,10 @@ export default function EventsPage() {
   useEffect(() => {
     async function init() {
       const p = await fetchProfile();
+      if (p?.role === 'pastor') {
+        const { data: leaderless } = await supabase.rpc('branches_without_leader');   // empty before db/066
+        setNoLeader(new Set(leaderless || []));
+      }
       try { if (localStorage.getItem('faithsync-events-view') === 'calendar') setView('calendar'); } catch { /* storage blocked */ }
       await fetchChurches();
       await fetchEvents();
@@ -282,6 +290,17 @@ export default function EventsPage() {
     return n > 1 ? ` (all ${n} dates)` : '';
   };
 
+  // The Pastor's decision in a branch with no Leader (db/066).
+  async function pastorReview(ev, approveIt, note) {
+    setActing(true);
+    const { error } = await supabase.rpc('pastor_review_events', { p_ids: sameStep(ev), p_approve: approveIt, p_note: note || null });
+    setActing(false);
+    if (error) { alertDialog(error.message); return false; }
+    await fetchEvents();
+    notifyEventsChanged();
+    return true;
+  }
+
   async function setStatus(ev, changes) {
     setActing(true);
     const { error } = await supabase.from('events').update(changes).in('id', sameStep(ev));
@@ -295,12 +314,16 @@ export default function EventsPage() {
   async function approve(ev) {
     if (!ev.date) { alertDialog(`Set the date of "${ev.title}" before approving it.`); openEdit(ev); return; }
     if (ev.series_id && !await confirmDialog(`Approve "${ev.title}"${datesNote(ev)}?`)) return;
-    setStatus(ev, { status: 'approved' });
+    if (pastorReviews(ev)) pastorReview(ev, true);
+    else setStatus(ev, { status: 'approved' });
   }
 
   async function confirmSendBack(e) {
     e.preventDefault();
-    if (await setStatus(sendBack, { status: 'planning', review_note: backNote.trim() })) setSendBack(null);
+    const done = pastorReviews(sendBack)
+      ? await pastorReview(sendBack, false, backNote.trim())
+      : await setStatus(sendBack, { status: 'planning', review_note: backNote.trim() });
+    if (done) setSendBack(null);
   }
 
   async function submitForApproval(ev) {
@@ -398,7 +421,7 @@ export default function EventsPage() {
   const viewedSeries = seriesView ? events.find((e) => e.series_id === seriesView) : null;
 
   // One line per weekly event, not per date.
-  const waiting = canManageAll ? collapseSeries(events.filter((e) => e.status === 'pending')) : [];
+  const waiting = collapseSeries(events.filter((e) => e.status === 'pending' && (canManageAll || pastorReviews(e))));
   const myReviews = collapseSeries(events.filter((e) => e.created_by === user?.id && e.review_seen === false));
   const withDates = (e) => (e.dates > 1 ? `${e.title} (${e.dates} dates)` : e.title);
 
@@ -425,8 +448,8 @@ export default function EventsPage() {
       onDelete: wrap(canEditEvent(event) ? openDelete : null),
       attendance: canSeeAttendance,
       onShowSeries: event.series ? wrap(() => { setSeriesView(event.series_id); switchView('cards'); }) : null,
-      onApprove: wrap(canManageAll && (event.status === 'pending' || (event.status === 'planning' && event.created_by === user?.id)) ? approve : null),
-      onSendBack: wrap(canManageAll && event.status === 'pending' ? (ev) => { setSendBack(ev); setBackNote(''); } : null),
+      onApprove: wrap((canManageAll && (event.status === 'pending' || (event.status === 'planning' && event.created_by === user?.id))) || pastorReviews(event) ? approve : null),
+      onSendBack: wrap((canManageAll && event.status === 'pending') || pastorReviews(event) ? (ev) => { setSendBack(ev); setBackNote(''); } : null),
       onSubmit: wrap(canSubmit && !canManageAll && event.created_by === user?.id && event.status === 'planning' ? submitForApproval : null),
       onCancel: wrap(canManageAll && event.status === 'approved' ? (ev) => { setCancelFor(ev); setCancelNote(''); } : null),
       onRestore: wrap(canManageAll && event.status === 'cancelled' ? restore : null),
@@ -474,7 +497,7 @@ export default function EventsPage() {
         </div>
       </div>
 
-      {/* Leaders: the Secretary's events waiting for approval */}
+      {/* Leaders (and the Pastor, for branches with no Leader): events waiting for approval */}
       {waiting.length > 0 && activeFilter !== 'pending' && (
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-5 py-4">
           <p className={`text-sm ${t.textPrimary} flex-1`}>
@@ -495,7 +518,7 @@ export default function EventsPage() {
                   ? <CheckCircle2 size={16} className={`${A(dark, 'emerald')} shrink-0 mt-0.5`} />
                   : <Undo2 size={16} className={`${A(dark, 'orange')} shrink-0 mt-0.5`} />}
                 <span className={t.textPrimary}>
-                  <b>{withDates(e)}</b> {e.status === 'approved' ? 'was approved by a Leader.' : 'was sent back to planning.'}
+                  <b>{withDates(e)}</b> {e.status === 'approved' ? 'was approved.' : 'was sent back to planning.'}
                   {e.status !== 'approved' && e.review_note && <span className={t.textSub}> Reason: “{e.review_note}”</span>}
                 </span>
               </li>
