@@ -28,11 +28,11 @@ function temporaryPassword(): string {
 }
 
 // Secretary creates a login for a member record in their own church
-// (step E1, db/014). The new login is linked to the record, gets the
+// (step E1, db/014); the Pastor for any branch (db/062). The new login is linked to the record, gets the
 // member's branch and the Member level, and must change its password on
 // first sign-in. Returns the username and temporary password once.
 export async function POST(req: NextRequest) {
-  const caller = await getCaller(req, ["secretary"]);
+  const caller = await getCaller(req, ["secretary", "pastor"]);
   if (caller instanceof NextResponse) return caller;
 
   const admin = getAdminClient();
@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing member_id" }, { status: 400 });
   }
 
-  // Read as the Secretary, so the database rules decide which records they
-  // may touch (their own church only).
+  // Read as the caller, so the database rules decide which records they
+  // may touch (Secretary: own church; Pastor: any).
   const { data: member } = await caller.db
     .from("members")
     .select("id, full_name, email, status, church_id, profile_id")
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     must_change_password: true,
   });
 
-  // Link as the Secretary, so the activity log shows who did it.
+  // Link as the caller, so the activity log shows who did it.
   const { data: linked, error: linkErr } = profileErr
     ? { data: null, error: profileErr }
     : await caller.db

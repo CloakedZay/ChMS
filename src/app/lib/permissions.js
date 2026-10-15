@@ -42,7 +42,8 @@ export const PERMISSIONS = {
   // excluded, as Admin has no finance); screen time for Admin and Pastor.
   changeLog:          { admin: 'view' },
   screenTime:         { admin: 'view', pastor: 'view' },
-  members:            { pastor: 'view', leader: 'view', finance: 'names', secretary: 'edit', member: 'own' },
+  // Pastor also adds and edits, as a backup when a branch has no Secretary (db/062).
+  members:            { pastor: 'edit', leader: 'view', finance: 'names', secretary: 'edit', member: 'own' },
   memberImport:       { secretary: 'edit' },
   memberArchive:      { pastor: 'edit', secretary: 'edit' },
   // Inactive-member follow-up (db/032): own branch; Pastor every branch.

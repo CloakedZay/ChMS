@@ -22,6 +22,7 @@ const EMPTY_FORM = {
   phone: '',
   email: '',
   birth_date: '',
+  church_id: '',   // Pastor only, when adding (db/062)
 };
 
 // Ministries come from ministry_assignments (db/022). The Pastor or a
@@ -112,7 +113,8 @@ export default function MembersPage() {
   const branchName = (id) => churches.find((c) => c.id === id)?.name || 'No branch';
   // Branch shown on each row only when several branches are listed together.
   const showBranch = isGlobal && branch === 'all' && churches.length > 1;
-  // Secretary adds and edits; Pastor and Secretary archive; others view.
+  // Secretary (own branch) and Pastor (any branch, db/062) add and edit;
+  // both archive; others view.
   const canEdit    = can(role, 'members', 'edit');
   const canArchive = can(role, 'memberArchive', 'edit');
   const canImport  = can(role, 'memberImport', 'edit');
@@ -191,7 +193,7 @@ export default function MembersPage() {
 
   function openAdd() {
     setEditingMember(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, church_id: isGlobal && branch !== 'all' ? branch : '' });
     setShowModal(true);
   }
 
@@ -226,15 +228,22 @@ export default function MembersPage() {
     e.preventDefault();
     const fullName = tidyName(form.full_name);
     if (!fullName) { alertDialog('Please enter the full name.'); return; }
-    // Two people can share a name, so ask rather than refuse.
+    if (isGlobal && !editingMember && !form.church_id) { alertDialog('Please choose the branch.'); return; }
+    // Two people can share a name, so ask rather than refuse (same branch only).
+    const targetChurch = editingMember ? editingMember.church_id : (isGlobal ? form.church_id : null);
     const twin = members.find((m) => m.id !== editingMember?.id && sameName(m.full_name, fullName)
+      && (!targetChurch || m.church_id === targetChurch)
       && (!editingMember || !sameName(editingMember.full_name, fullName)));
     if (twin && !await confirmDialog({
       message: `There is already a member named "${twin.full_name}"${twin.status === ARCHIVED ? ' (archived — you can restore them instead)' : ''}${twin.phone ? `, phone ${twin.phone}` : ''}. Is this a different person?`,
       confirmText: editingMember ? 'Yes, save' : 'Yes, add',
     })) return;
     setSaving(true);
-    const payload = { ...form, full_name: fullName, email: form.email.trim().toLowerCase() || null };
+    const { church_id: chosenChurch, ...fields } = form;
+    const payload = { ...fields, full_name: fullName, email: form.email.trim().toLowerCase() || null };
+    // The Secretary's new members go to their own branch by default; the
+    // Pastor picks one. A branch is never changed here.
+    if (isGlobal && !editingMember) payload.church_id = chosenChurch;
     // Only send the birthday when there is something to save or clear.
     if (!form.birth_date && !editingMember?.birth_date) delete payload.birth_date;
     else payload.birth_date = form.birth_date || null;
@@ -328,7 +337,8 @@ export default function MembersPage() {
     const { data } = await supabase
       .from('profiles')
       .select('id, email, full_name, role, disabled')
-      .eq('disabled', false);
+      .eq('disabled', false)
+      .eq('church_id', member.church_id);
     const taken = new Set(members.map((m) => m.profile_id).filter(Boolean));
     setCandidates((data || []).filter((p) => !taken.has(p.id)));
     setLinkLoading(false);
@@ -783,6 +793,14 @@ export default function MembersPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {isGlobal && !editingMember && (
+                <Field label="Branch" required t={t}>
+                  <select name="church_id" value={form.church_id} onChange={handleChange} className={inputStyle(t)}>
+                    <option value="">Choose a branch</option>
+                    {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </Field>
+              )}
               <Field label="Full Name" required t={t}>
                 <input
                   type="text" name="full_name" value={form.full_name}
