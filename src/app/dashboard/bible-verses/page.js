@@ -40,6 +40,8 @@ export default function BibleVersesPage() {
   const fileInputRef = useRef(null);
   const { role } = useAuth();
   const canEdit = can(role, 'bibleVerses', 'edit');
+  // One list for every branch, so only the Pastor deletes (db/064).
+  const canDelete = role === 'pastor';
 
   const [verses, setVerses]       = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -278,7 +280,7 @@ export default function BibleVersesPage() {
           <h2 className={`text-sm font-black ${t.textPrimary} flex items-center gap-2`}>
             <BookOpen className="w-4 h-4 text-blue-400" /> {loading ? 'Loading...' : `${verses.length} Verse${verses.length === 1 ? '' : 's'}`}
           </h2>
-          {canEdit && verses.length > 0 && (
+          {canDelete && verses.length > 0 && (
             <button
               onClick={handleClearAll}
               disabled={clearing}
@@ -303,7 +305,7 @@ export default function BibleVersesPage() {
                   <p><ScriptureLink reference={v.reference} className="text-xs font-bold text-blue-400" /></p>
                   <p className={`text-sm ${t.textPrimary} mt-1`}>{v.verse_text}</p>
                 </div>
-                {canEdit && (
+                {canDelete && (
                   <button
                     onClick={() => handleDelete(v.id)}
                     disabled={deletingId === v.id}
