@@ -141,9 +141,8 @@ export default function HomePage() {
       <nav className={`fixed inset-x-0 top-0 z-50 border-b transition-all duration-300 ${t.nav}`}>
         <div className="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-xl bg-[#173f35] flex items-center justify-center">
-              <Church className="w-[18px] h-[18px] text-[#c5a66a]" strokeWidth={1.75} />
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="God's Grace Christian Fellowship Global Ministries Inc. logo" className="w-10 h-10 rounded-full" />
             <span className="leading-tight">
               <span className={`block text-[15px] font-bold tracking-tight ${t.heading}`}>FaithSync</span>
               <span className={`hidden sm:block text-[11px] ${t.muted}`}>GGCF-GMI Pandi</span>
@@ -206,7 +205,7 @@ export default function HomePage() {
             <h1 className={`mt-6 text-4xl sm:text-5xl lg:text-[3.5rem] font-bold leading-[1.08] tracking-tight ${t.heading}`}>
               One home for your<br />
               <span className={dark ? "text-[#c5a66a]" : "text-[#9c7f45]"}>church family</span>,<br />
-              ministries &amp; giving.
+              ministries &amp; serving.
             </h1>
 
             <p className={`mt-6 max-w-xl text-lg leading-relaxed ${t.body}`}>
@@ -405,9 +404,8 @@ export default function HomePage() {
       <footer className={`${t.sectionA} border-t ${t.divider}`}>
         <div className="max-w-7xl mx-auto px-5 sm:px-8 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-lg bg-[#173f35] flex items-center justify-center">
-              <Church className="w-4 h-4 text-[#c5a66a]" strokeWidth={1.75} />
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="God's Grace Christian Fellowship Global Ministries Inc. logo" className="w-8 h-8 rounded-full" />
             <span className={`text-sm font-bold ${t.heading}`}>FaithSync</span>
           </div>
           <div className={`flex gap-6 text-sm ${t.muted}`}>

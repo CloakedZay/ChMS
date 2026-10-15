@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Church, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ChevronRight,
+  LogOut, Menu, PanelLeftClose, PanelLeftOpen, ChevronRight,
   ChevronDown, Sun, Moon, X,
 } from 'lucide-react';
 
@@ -89,9 +89,8 @@ export default function AppShell({
       >
         <div className={`h-16 shrink-0 px-5 ${collapsed ? 'lg:px-0 lg:justify-center' : ''} flex items-center justify-between border-b border-[#f4f2ea]/10`}>
           <Link href={homeHref} className="flex items-center gap-3 min-w-0">
-            <span className="w-9 h-9 rounded-xl bg-[#f4f2ea]/10 border border-[#c5a66a]/40 flex items-center justify-center shrink-0">
-              <Church className="w-[18px] h-[18px] text-[#c5a66a]" strokeWidth={1.75} />
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="God's Grace Christian Fellowship Global Ministries Inc. logo" className="w-9 h-9 rounded-full shrink-0" />
             <span className={`min-w-0 leading-tight ${label}`}>
               <span className="block text-[15px] font-bold tracking-tight text-[#f4f2ea]">FaithSync</span>
               <span className="block text-[11px] text-[#f4f2ea]/55 truncate">{portalLabel}</span>

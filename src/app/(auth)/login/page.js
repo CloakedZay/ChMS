@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
 import { homePathFor } from '@/app/lib/permissions';
 import { DISABLED_MESSAGE, DISABLED_FLAG } from '@/app/lib/disabledLogin';
-import { Eye, EyeOff, Sun, Moon, Church } from 'lucide-react';
+import { Eye, EyeOff, Sun, Moon } from 'lucide-react';
 
 function useTheme() {
   const [dark, setDark] = useState(false);
@@ -147,9 +147,9 @@ export default function LoginPage() {
 
         {/* Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#173f35] shadow-lg shadow-[#173f35]/20 mb-4">
-            <Church className="w-6 h-6 text-[#c5a66a]" strokeWidth={1.75} />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="God's Grace Christian Fellowship Global Ministries Inc. logo"
+            className="inline-block w-24 h-24 rounded-full shadow-lg shadow-black/20 mb-4" />
           <h1 className={`text-2xl font-bold ${textMain} tracking-tight`}>FaithSync</h1>
           <p className={`${textSub} text-xs mt-1 tracking-widest uppercase`}>GGCF-GMI</p>
         </div>
