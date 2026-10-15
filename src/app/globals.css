@@ -193,6 +193,16 @@ tbody tr { transition: background-color 120ms ease; }
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
 }
 
+/* Landing page hero photos (page.js): the new photo fades in while slowly
+   zooming out. A fade is not movement, so it stays on even when motion is
+   turned off (which the rule above would otherwise cut to nothing); only
+   the zoom is dropped then. */
+.hero-slide { opacity: 0; transform: scale(1.08); transition: opacity 1.2s ease, transform 6s ease-out; }
+.hero-slide.is-active { opacity: 1; transform: scale(1); }
+@media (prefers-reduced-motion: reduce) {
+  .hero-slide, .hero-slide.is-active { transform: none !important; transition: opacity 1.2s ease !important; }
+}
+
 /* Scrollbars that match the app theme (ThemeContext sets data-theme on
    <html>). Light is the default. */
 :root {

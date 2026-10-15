@@ -81,8 +81,8 @@ export default function HomePage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Next hero photo every 5 seconds. Restarts the wait after a dot is
-  // pressed. (People who turn motion off get a plain switch, no fade.)
+  // Next hero photo every 5 seconds, with a fade and slow zoom
+  // (.hero-slide in globals.css). Restarts the wait after a dot is pressed.
   useEffect(() => {
     const id = setTimeout(() => setPhoto(i => (i + 1) % HERO_PHOTOS.length), HERO_EVERY_MS);
     return () => clearTimeout(id);
@@ -247,7 +247,7 @@ export default function HomePage() {
                     src={p.src}
                     alt={p.alt}
                     aria-hidden={i !== photo}
-                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 motion-reduce:transition-none ${i === photo ? "opacity-100" : "opacity-0"}`}
+                    className={`hero-slide absolute inset-0 w-full h-full object-cover ${i === photo ? "is-active" : ""}`}
                     onError={() => setImgFailed(true)}
                   />
                 ))
