@@ -220,7 +220,8 @@ export function AttendanceEventList({ t, events, churchName, onOpen }) {
     <ul className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
       {events.map((ev) => {
         const taken = ev.members_present + ev.visitors > 0;
-        const rate = ev.active_members > 0 ? Math.round((ev.members_present / ev.active_members) * 100) : null;
+        // active_members = every member of the branch except archived and Busy (db/058).
+        const rate = ev.active_members > 0 ? Math.min(100, Math.round((ev.members_present / ev.active_members) * 100)) : null;
         return (
           <li key={ev.id} className={`border rounded-3xl p-5 flex flex-col ${t.card}`}>
             <p className="text-[10px] font-bold uppercase tracking-widest text-blue-500 mb-1 truncate">{ev.ministry || 'Event'}</p>
@@ -228,8 +229,8 @@ export function AttendanceEventList({ t, events, churchName, onOpen }) {
             <p className={`text-xs mt-1 ${t.sub}`}>{eventDate(ev.date)}{churchName?.(ev.church_id) ? ` · ${churchName(ev.church_id)}` : ''}</p>
             <p className={`text-sm mt-3 ${taken ? t.text : t.muted}`}>
               {taken
-                ? <><b>{ev.members_present}</b> members · <b>{ev.visitors}</b> visitors{rate !== null && <span className={t.muted}> · {rate}% of active members</span>}</>
-                : 'Attendance not taken yet'}
+                ? <><b>{ev.members_present}</b> members · <b>{ev.visitors}</b> visitors{rate !== null && <span className={t.muted}> · {rate}% of members</span>}</>
+                : ev.no_attendance ? 'No attendance needed' : 'Attendance not taken yet'}
             </p>
             <button onClick={() => onOpen(ev.id)}
               className={`mt-4 h-10 rounded-xl text-sm font-semibold ${ev.can_mark ? 'bg-blue-600 hover:bg-blue-500 text-white' : `border ${t.ghost}`}`}>
@@ -273,9 +274,24 @@ function VisitorsBox({ t, eventId, canMark, visitors, onChange }) {
     e?.preventDefault();
     setSaving(true);
     setError('');
-    const { error: err } = await supabase.rpc('add_event_visitor', existing
-      ? { p_event: eventId, p_visitor: existing.visitor_id }
-      : { p_event: eventId, p_name: name, p_phone: phone || null, p_invited_by: invitedBy || null });
+    // Families often share one phone: a new name with an earlier visitor's
+    // number may be someone else, so ask (db/058).
+    let samePhone = null;
+    if (!existing && phone.trim()) {
+      const { data } = await supabase.rpc('visitor_by_phone', { p_event: eventId, p_phone: phone });
+      const earlier = data?.[0];
+      if (earlier && earlier.full_name.trim().toLowerCase() !== name.trim().toLowerCase()) {
+        samePhone = await confirmDialog({
+          title: 'Same phone number',
+          message: `${phone.trim()} belongs to an earlier visitor, ${earlier.full_name}. Is "${name.trim()}" the same person?`,
+          confirmText: `Same person (${earlier.full_name})`,
+          cancelText: 'Different person',
+        }) ? earlier : false;
+      }
+    }
+    const { error: err } = await supabase.rpc('add_event_visitor', existing || samePhone
+      ? { p_event: eventId, p_visitor: (existing || samePhone).visitor_id }
+      : { p_event: eventId, p_name: name, p_phone: phone || null, p_invited_by: invitedBy || null, p_new_person: samePhone === false });
     setSaving(false);
     if (err) { setError(err.message); return; }
     reset();

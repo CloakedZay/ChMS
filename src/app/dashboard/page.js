@@ -157,7 +157,7 @@ export default function DashboardPage() {
         setMemberCount(mCount || 0);
         setActiveMembers(aCount || 0);
 
-        // Members present ÷ active members, over the events with attendance
+        // Members present ÷ members (not archived or Busy, db/058), over the events with attendance
         // taken in the last 90 days.
         const { data: attended } = await supabase.rpc('attendance_events', { p_church: null });
         const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
