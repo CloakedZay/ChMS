@@ -263,12 +263,13 @@ export default function MembersPage() {
       : (member.archive_disabled_login ? ' Their login will be switched back on.' : '');
     const confirmed = await confirmDialog(archive
       ? `Archive "${member.full_name}"? They'll be hidden from the directory and counts, and can be restored later.${loginNote}`
-      : `Restore "${member.full_name}" as an active member?${loginNote}`);
+      : `Restore "${member.full_name}"? They'll be Active if seen in the last ${AUTO_DAYS} days, otherwise Inactive until they come back.${loginNote}`);
     if (!confirmed) return;
     setOpenMenuId(null);
 
     const { data, error } = await supabase
       .from('members')
+      // On restore the database picks Active or Inactive (db/057).
       .update({ status: archive ? ARCHIVED : 'active' })
       .eq('id', member.id)
       .select('id');
