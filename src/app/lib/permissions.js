@@ -133,7 +133,6 @@ export const PAGE_FEATURES = {
   '/member-dashboard/events':       ['events'],
   '/member-dashboard/attendance':   ['attendance'],
   '/member-dashboard/ministries':   ['modules'],
-  '/member-dashboard/finances':     ['finance'],
   '/member-dashboard/discipleship': ['moduleProgress'],
   '/member-dashboard/chatbot':      ['aiAssistant'],
   '/member-dashboard/journal':      ['journal'],

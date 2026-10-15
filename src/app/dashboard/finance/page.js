@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { can } from "@/app/lib/permissions";
@@ -14,6 +15,7 @@ import BranchLabel from "@/app/components/BranchLabel";
 import { phToday } from "@/app/lib/phDate";
 import DatePicker from "@/app/components/DatePicker";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
+import { countsInTotals } from "@/app/lib/financeTotals";
 
 const EMPTY_FORM = {
   category: 'Tithe',
@@ -36,9 +38,9 @@ function categoriesForType(type) {
   return type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
 }
 const FUNDS      = ['Monthly Budget', 'General Fund', 'Project Fund', 'Lot Fund'];
-const STATUSES   = ['Verified', 'Pending', 'Unverified'];
-// Set only by the Void button, never picked in the form. Void entries stay
-// in the ledger but don't count in any total, and can't be changed.
+// Every entry counts as soon as it's saved (status 'Verified'). The only
+// other status is Void, set by the Void button: the entry stays in the
+// ledger but doesn't count in any total, and can't be changed.
 const VOID = 'Void';
 const NO_MEMBER_CATEGORIES = ['Tithe', 'Offering', 'Love Gift'];
 const PAGE_SIZE  = 10;
@@ -51,8 +53,6 @@ function normalizeCategory(cat) {
 
 const STATUS_BADGE = {
   Verified:   "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  Pending:    "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  Unverified: "bg-slate-500/10 text-slate-400 border-slate-500/20",
   Void:       "bg-slate-500/5 text-slate-500 border-slate-500/30 line-through",
 };
 
@@ -96,6 +96,11 @@ function A(dark, color) {
 }
 
 export default function FinancePage() {
+  return <Suspense fallback={null}><Finance /></Suspense>;
+}
+
+function Finance() {
+  const params = useSearchParams();
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
 
@@ -111,7 +116,11 @@ export default function FinancePage() {
   const [filterType, setFilterType]     = useState("all");
   const [form, setForm]                 = useState(EMPTY_FORM);
   const [page, setPage]                 = useState(1);
-  const [tab, setTab]                   = useState("ledger");
+  // Reminders link here with ?tab=requests.
+  const [tab, setTab]                   = useState(() => params.get('tab') === 'requests' ? "requests" : "ledger");
+  // Ledger entry id → spending request number, for entries a request made
+  // (release, returned change). Those are locked (db/054).
+  const [fromRequest, setFromRequest]   = useState({});
   const { user } = useAuth();
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
@@ -141,6 +150,14 @@ export default function FinancePage() {
       .order('date', { ascending: false, nullsFirst: false })
       .order('date_recorded', { ascending: false });
     if (!error) setTransactions(data || []);
+    const { data: reqs } = await supabase.from('expense_requests').select('id, transaction_id, change_transaction_id')
+      .or('transaction_id.not.is.null,change_transaction_id.not.is.null');
+    const links = {};
+    (reqs || []).forEach((r) => {
+      if (r.transaction_id) links[r.transaction_id] = r.id;
+      if (r.change_transaction_id) links[r.change_transaction_id] = r.id;
+    });
+    setFromRequest(links);
     setLoading(false);
   }
 
@@ -184,7 +201,7 @@ export default function FinancePage() {
       member:   tx.member   || '',
       amount:   tx.amount   || '',
       type:     tx.type     || 'income',
-      status:   tx.status   || 'Verified',
+      status:   'Verified',
       date:     tx.date     || phToday(),
       notes:    tx.notes    || '',
       church_id: tx.church_id || '',
@@ -225,6 +242,10 @@ export default function FinancePage() {
       alertDialog('Please specify which ministry.');
       return;
     }
+    if (!(parseFloat(form.amount) > 0)) {
+      alertDialog('Amount must be more than ₱0.');
+      return;
+    }
     setSaving(true);
     const showMember = !NO_MEMBER_CATEGORIES.includes(form.category);
     const finalCategory =
@@ -260,7 +281,7 @@ export default function FinancePage() {
   const churchName = (id) => churches.find((c) => c.id === id)?.name;
 
   const branchScoped = isGlobal && selectedBranch !== 'all' ? transactions.filter((t) => t.church_id === selectedBranch) : transactions;
-  const counted = branchScoped.filter((t) => t.status !== VOID);
+  const counted = branchScoped.filter(countsInTotals);
 
   const totalIncome  = counted.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
   const totalExpense = counted.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
@@ -275,7 +296,8 @@ export default function FinancePage() {
   }, {});
 
   const filtered = branchScoped.filter((tx) => {
-    const matchSearch = tx.category?.toLowerCase().includes(search.toLowerCase()) || tx.member?.toLowerCase().includes(search.toLowerCase()) || tx.fund?.toLowerCase().includes(search.toLowerCase());
+    const term = search.toLowerCase();
+    const matchSearch = [tx.category, tx.member, tx.fund, tx.notes].some((v) => v?.toLowerCase().includes(term));
     const matchType = filterType === "all" || tx.type === filterType;
     return matchSearch && matchType;
   });
@@ -394,7 +416,7 @@ export default function FinancePage() {
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1">
           <Search className={`absolute left-3 top-2.5 w-4 h-4 ${t.textSub}`} />
-          <input type="text" placeholder="Search by category, member, or fund..." value={search} onChange={handleSearchChange}
+          <input type="text" placeholder="Search by category, member, fund, or notes..." value={search} onChange={handleSearchChange}
             className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 pl-9 pr-4 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`} />
         </div>
         <div className="flex gap-2">
@@ -436,9 +458,14 @@ export default function FinancePage() {
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{tx.member || '—'}</td>
                     {isGlobal && <td className={`px-6 py-4 ${t.textMuted} text-xs`}>{churchName(tx.church_id) || '—'}</td>}
                     <td className={`px-6 py-4 font-black text-sm font-mono ${tx.status === VOID ? `${t.textMuted} line-through` : tx.type === 'income' ? A(dark, "emerald") : tx.type === 'expense' ? A(dark, "rose") : t.textPrimary}`}>{tx.type === 'expense' ? '−' : '+'}₱{(Number(tx.amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
-                    <td className="px-6 py-4 text-center"><span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${STATUS_BADGE[tx.status] || STATUS_BADGE.Verified}`}>{tx.status}</span></td>
+                    <td className="px-6 py-4 text-center"><span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${tx.status === VOID ? STATUS_BADGE.Void : STATUS_BADGE.Verified}`}>{tx.status === VOID ? 'Void' : 'Verified'}</span></td>
                     <td className="px-6 py-4">
-                      {canEdit && tx.status !== VOID && (
+                      {fromRequest[tx.id] ? (
+                        <button onClick={() => setTab('requests')} title="Made by a spending request — correct it through the request"
+                          className={`whitespace-nowrap text-[10px] font-bold px-2 py-1 rounded-lg border ${t.iconBtn}`}>
+                          From request #{fromRequest[tx.id]}
+                        </button>
+                      ) : canEdit && tx.status !== VOID && (
                         <div className="flex items-center justify-end gap-2">
                           <button onClick={() => openEdit(tx)} title="Edit" className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-300"}`}><Pencil size={13} /></button>
                           <button onClick={() => handleVoid(tx)} title="Void" className={`${t.textMuted} hover:text-red-400 transition-colors p-1 rounded-lg hover:bg-red-500/10`}><Ban size={13} /></button>
@@ -528,17 +555,11 @@ export default function FinancePage() {
               )}
 
               <Field label="Amount (₱)" required t={t}>
-                <input type="number" name="amount" value={form.amount} onChange={handleChange} required placeholder="e.g. 500" min="0" step="0.01" className={inputStyle(t)} onWheel={(e) => e.target.blur()} />
+                <input type="number" name="amount" value={form.amount} onChange={handleChange} required placeholder="e.g. 500" min="0.01" step="0.01" className={inputStyle(t)} onWheel={(e) => e.target.blur()} />
               </Field>
 
               <Field label="Date" t={t}>
                 <DatePicker name="date" value={form.date} onChange={handleChange} clearable={false} ariaLabel="Date" className={inputStyle(t)} />
-              </Field>
-
-              <Field label="Status" t={t}>
-                <select name="status" value={form.status} onChange={handleChange} className={inputStyle(t)}>
-                  {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
               </Field>
 
               <Field label="Notes" t={t}>

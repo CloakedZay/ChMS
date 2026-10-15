@@ -61,6 +61,13 @@ function ruleFor({ category, amount, limit, byPastor }) {
   return '1 approval from the Pastor or a Leader';
 }
 
+// Over the limit, love gifts and the Pastor's own requests need an Elder.
+function needsElder(r) {
+  return r.elders_only || r.needs_pastor;
+}
+
+const NO_ELDER_TEXT = "This branch has no Elder yet, so this can't be approved. Ask the Admin to mark one on the Users page.";
+
 function ruleText(r) {
   if (r.elders_only) return r.required_count >= 2 ? '2 Elders' : '1 Elder';
   if (r.needs_pastor) return 'the Pastor and 1 Elder';
@@ -79,6 +86,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   const [receipts, setReceipts]   = useState({});   // request id → receipts
   const [canDecide, setCanDecide] = useState({});   // request id → boolean
   const [limits, setLimits]       = useState({});   // church id → limit
+  const [noElder, setNoElder]     = useState([]);   // church ids with no Elder (db/054)
   const [loading, setLoading]     = useState(true);
   const [filter, setFilter]       = useState('pending');
   const [busyId, setBusyId]       = useState(null);
@@ -110,11 +118,12 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   const churchName = (id) => churches.find((c) => c.id === id)?.name;
 
   const load = useCallback(async () => {
-    const [{ data: reqs }, { data: apps }, { data: settings }, { data: recs }] = await Promise.all([
+    const [{ data: reqs }, { data: apps }, { data: settings }, { data: recs }, { data: elderless }] = await Promise.all([
       supabase.from('expense_requests').select('*').order('created_at', { ascending: false }),
       supabase.from('expense_approvals').select('*').order('created_at', { ascending: true }),
       supabase.from('finance_settings').select('church_id, approval_limit'),
       supabase.from('expense_receipts').select('*').order('created_at', { ascending: true }),
+      supabase.rpc('branches_without_elder'),
     ]);
     const byReq = {};
     (apps || []).forEach((a) => { (byReq[a.request_id] ||= []).push(a); });
@@ -130,10 +139,11 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       const answers = await Promise.all(pending.map((r) => supabase.rpc('can_decide_expense', { req_id: r.id })));
       pending.forEach((r, i) => { decide[r.id] = answers[i].data === true; });
     }
-    return { reqs: reqs || [], byReq, lim, decide, recByReq };
+    return { reqs: reqs || [], byReq, lim, decide, recByReq, elderless: elderless || [] };
   }, [userId, canSubmit]);
 
-  const apply = ({ reqs, byReq, lim, decide, recByReq }) => {
+  const apply = ({ reqs, byReq, lim, decide, recByReq, elderless }) => {
+    setNoElder(elderless);
     setRequests(reqs);
     setApprovals(byReq);
     setReceipts(recByReq);
@@ -327,7 +337,10 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
     key === 'all' ? true : key === 'closed' ? ['rejected', 'cancelled'].includes(r.status) : r.status === key).length;
 
   const formChurch = isPastor ? form.church_id : null;
+  // A Leader only gets their own branch back from branches_without_elder().
+  const formNoElder = isPastor ? noElder.includes(form.church_id) : noElder.length > 0;
   const formLimit  = limits[formChurch] ?? Object.values(limits)[0] ?? 5000;
+  const formNeedsElder = form.category === 'Love gift' || isPastor || Number(form.amount) > Number(formLimit);
   const input = `w-full ${t.inputBg} border ${t.inputBorder} ${t.inputText} rounded-xl px-4 py-2.5 text-sm outline-none transition-colors focus:border-blue-500 placeholder:text-slate-500`;
 
   // ── UI ──────────────────────────────────────────────────────────────────
@@ -425,6 +438,9 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
                     Needs <span className={`font-bold ${t.textPrimary}`}>{ruleText(r)}</span>
                     {r.approval_limit && <span className={t.textMuted}> (limit {peso(r.approval_limit)})</span>}
                   </p>
+                  {r.status === 'pending' && needsElder(r) && noElder.includes(r.church_id) && (
+                    <p className={dark ? 'text-orange-400' : 'text-orange-600'}>{NO_ELDER_TEXT}</p>
+                  )}
                   {apps.map((a) => (
                     <p key={a.id} className={a.decision === 'approve' ? (dark ? 'text-emerald-400' : 'text-emerald-600') : (dark ? 'text-rose-400' : 'text-rose-600')}>
                       {a.decision === 'approve' ? '✓ Approved' : '✕ Rejected'} by {a.approver_name || 'someone'}
@@ -708,6 +724,9 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
                   This will need <span className={`font-bold ${t.textPrimary}`}>
                     {ruleFor({ category: form.category, amount: form.amount, limit: formLimit, byPastor: isPastor })}
                   </span>.
+                  {formNeedsElder && formNoElder && (
+                    <span className={`block mt-1 ${dark ? 'text-orange-400' : 'text-orange-600'}`}>{NO_ELDER_TEXT}</span>
+                  )}
                 </p>
               )}
               <div className="flex gap-3 pt-1">

@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/app/context/AuthContext';
-import { can } from '@/app/lib/permissions';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { verseOfDayIndex, nextLocalMidnight } from '@/app/lib/verseOfDay';
 import { formatEventTime } from '@/app/lib/eventTime';
 import { phToday } from '@/app/lib/phDate';
 import { collapseSeries } from '@/app/lib/eventSeries';
-import { CalendarDays, HandCoins, BookOpen } from 'lucide-react';
+import { CalendarDays, BookOpen } from 'lucide-react';
 import UpcomingBirthdays from '@/app/components/UpcomingBirthdays';
 import CalendarWidget from '@/app/components/CalendarWidget';
 import ScriptureLink from '@/app/components/ScriptureLink';
@@ -23,18 +22,12 @@ const EVENT_BADGE = {
 };
 
 export default function MemberDashboard() {
-  const { user, role } = useAuth();
-  // Members have no finance access (see lib/permissions.js), so the
-  // church totals card stays hidden unless that changes.
-  const showFinance = can(role || 'member', 'finance');
+  const { user } = useAuth();
 
   const [dataLoading, setDataLoading]       = useState(true);
   const [myMinistryCount, setMyMinistryCount] = useState(null);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [upcomingCount, setUpcomingCount]   = useState(0);
-  const [totalFunds, setTotalFunds]         = useState(null);
-  const [totalIncome, setTotalIncome]       = useState(null);
-  const [totalExpense, setTotalExpense]     = useState(null);
 
   // Verse of the day
   const [verseOfDay, setVerseOfDay] = useState(undefined); // undefined = loading, null = none yet
@@ -58,24 +51,8 @@ export default function MemberDashboard() {
           .order('date', { ascending: true });
         const upcoming = collapseSeries(allUpcoming || []);
 
-        let trans = null;
-        if (showFinance) {
-          const { data, error: transErr } = await supabase
-            .from('transactions').select('amount, type, status');
-          if (transErr) console.error('Transactions fetch error:', transErr.message);
-          trans = data?.filter((t) => t.status !== 'Void');
-        }
-
         setUpcomingEvents(upcoming.slice(0, 5));
         setUpcomingCount(upcoming.length);
-
-        if (trans) {
-          const inc = trans.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
-          const exp = trans.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
-          setTotalIncome(inc);
-          setTotalExpense(exp);
-          setTotalFunds(inc - exp);
-        }
       } catch (err) {
         console.error('Overview fetch error:', err);
       } finally {
@@ -83,7 +60,7 @@ export default function MemberDashboard() {
       }
     }
     fetchOverview();
-  }, [user, showFinance]);
+  }, [user]);
 
   // ── Verse of the day — deterministic pick that rotates at local midnight ──
   useEffect(() => {
@@ -132,9 +109,6 @@ export default function MemberDashboard() {
   const formatDate = (d) => d
     ? new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
     : '—';
-
-  const formatPeso = (v) => v === null ? '—'
-    : '₱' + v.toLocaleString('en-PH', { minimumFractionDigits: 2 });
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
@@ -196,8 +170,8 @@ export default function MemberDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            {/* Events — full width when the Finance card is hidden */}
-            <div className={`bg-[#1b2420] rounded-3xl p-6 border border-white/10 ${showFinance ? '' : 'lg:col-span-2'}`}>
+            {/* Events */}
+            <div className="bg-[#1b2420] rounded-3xl p-6 border border-white/10 lg:col-span-2">
               <h2 className="font-black text-base mb-4 flex items-center gap-2">
                 <CalendarDays className="w-4 h-4 text-blue-400" /> Upcoming Events
               </h2>
@@ -221,27 +195,6 @@ export default function MemberDashboard() {
               }
             </div>
 
-            {/* Finance */}
-            {showFinance && <Link
-              href="/member-dashboard/finances"
-              className="bg-[#1b2420] rounded-3xl p-6 border border-white/10 hover:border-blue-500/40 transition-colors block"
-            >
-              <h2 className="font-black text-base mb-4 flex items-center gap-2">
-                <HandCoins className="w-4 h-4 text-purple-400" /> Finances
-              </h2>
-              <div className="space-y-3">
-                {[
-                  { label: 'Church Balance', value: formatPeso(totalFunds),   color: 'text-blue-400'    },
-                  { label: 'Total Income',   value: formatPeso(totalIncome),  color: 'text-emerald-400' },
-                  { label: 'Total Expenses', value: formatPeso(totalExpense), color: 'text-rose-400'    },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between p-3 bg-white/[0.03] rounded-2xl border border-white/5">
-                    <p className="text-xs text-white/40">{item.label}</p>
-                    <p className={`text-base font-black font-mono ${item.color}`}>{item.value}</p>
-                  </div>
-                ))}
-              </div>
-            </Link>}
 
           </div>
         </div>

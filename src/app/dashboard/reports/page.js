@@ -14,6 +14,7 @@ import Link from "next/link";
 import BranchLabel, { branchLabelText } from "@/app/components/BranchLabel";
 import { phToday } from "@/app/lib/phDate";
 import { alertDialog } from "@/app/lib/dialog";
+import { countsInTotals } from "@/app/lib/financeTotals";
 
 // Event statuses in order, for the "Events by Status" section shown to
 // levels without finance access.
@@ -140,7 +141,7 @@ export default function ReportsPage() {
               .order('date_recorded', { ascending: false })
           : { data: [] };
         // Voided entries stay in the ledger but never count in a report.
-        const trans = allTrans?.filter((t) => t.status !== 'Void');
+        const trans = allTrans?.filter(countsInTotals);
 
         const income = (trans || [])
           .filter(t => t.type === 'income')

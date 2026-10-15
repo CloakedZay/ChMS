@@ -20,11 +20,13 @@ import ScriptureLink from "@/app/components/ScriptureLink";
 import AnnouncementsBanner from "@/app/components/AnnouncementsBanner";
 import FollowUpReminder from "@/app/components/FollowUpReminder";
 import AttendanceReminder from "@/app/components/AttendanceReminder";
+import SpendingReminder from "@/app/components/SpendingReminder";
 import { useFollowUpReminder, REMINDER_DAYS, MISSED_EVENTS } from "@/app/lib/useFollowUpReminder";
 import { useEventNotices } from "@/app/lib/useEventNotices";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
 import { collapseSeries } from "@/app/lib/eventSeries";
+import { countsInTotals } from "@/app/lib/financeTotals";
 import Link from "next/link";
 
 // ─── Theme token maps ──────────────────────────────────────────────────────────
@@ -144,7 +146,7 @@ export default function DashboardPage() {
         const { count: aCount } = await supabase.from('member_directory').select('*', { count: 'exact', head: true }).eq('status', 'active');
         const { data: latestMembers } = await supabase.from('member_directory').select('full_name, status, ministry').order('id', { ascending: false }).limit(3);
         const { data: allTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status').order('date', { ascending: false });
-        const trans = allTrans?.filter((t) => t.status !== 'Void');
+        const trans = allTrans?.filter(countsInTotals);
         // Upcoming = approved, from today (Philippine date) on. Planning and
         // pending events aren't happening yet. A weekly event counts once,
         // at its next date (db/049).
@@ -516,6 +518,9 @@ export default function DashboardPage() {
 
         {/* Attendance not taken (Leader, Secretary; db/051) */}
         {['leader', 'secretary'].includes(role) && <AttendanceReminder />}
+
+        {/* Spending requests waiting (Pastor, Leader, Finance) */}
+        {['pastor', 'leader', 'finance'].includes(role) && <SpendingReminder />}
 
         <div className={`${card} p-6 flex items-start gap-4`}>
           <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
