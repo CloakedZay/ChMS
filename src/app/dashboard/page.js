@@ -6,7 +6,7 @@ import {
   Users, Bell, Search, TrendingUp, UserCheck,
   CalendarDays, HandCoins, ChevronRight,
   ArrowUpRight, X,
-  CheckCheck, Zap, Sun, Moon, Quote
+  Zap, Sun, Moon, Quote
 } from "lucide-react";
 
 import { useTheme } from "@/app/context/ThemeContext";
@@ -103,12 +103,6 @@ const ACTIVITY_ICON = {
   event:   { bg: "bg-violet-500/20 text-violet-400",    label: "E" },
 };
 
-const NOTIF_STYLE = {
-  member:  { bg: "bg-blue-500/10",    dot: "bg-blue-500",    icon: Users },
-  event:   { bg: "bg-violet-500/10",  dot: "bg-violet-500",  icon: CalendarDays },
-  finance: { bg: "bg-emerald-500/10", dot: "bg-emerald-500", icon: HandCoins },
-};
-
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -134,7 +128,6 @@ export default function DashboardPage() {
   const [upcomingCount, setUpcomingCount]     = useState(0);
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [recentMembers, setRecentMembers]     = useState([]);
-  const [notifications, setNotifications]     = useState([]);
   const [verseOfDay, setVerseOfDay]           = useState(undefined); // undefined = loading, null = none yet
 
   // ── Fetch live data ───────────────────────────────────────────────────────
@@ -183,22 +176,6 @@ export default function DashboardPage() {
       }
     }
     fetchLiveStats();
-  }, []);
-
-  // ── Notifications ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    async function fetchNotifications() {
-      const { data } = await supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20);
-      setNotifications(data || []);
-    }
-    fetchNotifications();
-    const channel = supabase
-      .channel('notifications-feed')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
-        setNotifications((prev) => [payload.new, ...prev]);
-      })
-      .subscribe();
-    return () => supabase.removeChannel(channel);
   }, []);
 
   // ── Verse of the day — deterministic pick that rotates at local midnight ──
@@ -253,22 +230,11 @@ export default function DashboardPage() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  async function markAllRead() {
-    const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
-    if (unreadIds.length === 0) return;
-    await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-  }
-
-  async function markOneRead(id) {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-  }
-
   // ── Computed ──────────────────────────────────────────────────────────────
-  const unreadCount    = notifications.filter(n => !n.is_read).length;
+  // The bell: follow-up reminder and event notices, each scoped by role and
+  // branch. (The old shared notifications feed is gone, db/067.)
   const showReminder   = followUp.count > 0 && !followUp.snoozed;
-  const bellCount      = unreadCount + (showReminder ? 1 : 0) + (eventNotices.pending.length ? 1 : 0) + eventNotices.reviews.length;
+  const bellCount      = (showReminder ? 1 : 0) + (eventNotices.pending.length ? 1 : 0) + eventNotices.reviews.length;
   const q              = search.toLowerCase().trim();
 
   const filteredEvents = upcomingEvents.filter(ev =>
@@ -377,11 +343,6 @@ export default function DashboardPage() {
                       <span className="text-[10px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded-full">{bellCount}</span>
                     )}
                   </div>
-                  {unreadCount > 0 && (
-                    <button onClick={markAllRead} className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors font-bold">
-                      <CheckCheck className="w-3 h-3" /> Mark all read
-                    </button>
-                  )}
                 </div>
 
                 <div className="max-h-80 overflow-y-auto">
@@ -446,45 +407,13 @@ export default function DashboardPage() {
                       </div>
                     </Link>
                   ))}
-                  {notifications.length === 0 ? (!showReminder && !eventNotices.count &&
+                  {!showReminder && !eventNotices.count && (
                     <div className="py-10 text-center">
                       <Bell className={`w-6 h-6 ${t.emptyIcon} mx-auto mb-2`} />
-                      <p className={`text-xs ${t.textMuted}`}>No notifications yet.</p>
+                      <p className={`text-xs ${t.textMuted}`}>No notifications.</p>
                     </div>
-                  ) : (
-                    notifications.map((n) => {
-                      const style = NOTIF_STYLE[n.type] || NOTIF_STYLE.member;
-                      const Icon  = style.icon;
-                      return (
-                        <button
-                          key={n.id}
-                          onClick={() => markOneRead(n.id)}
-                          className={`w-full text-left flex items-start gap-3 px-4 py-3 border-b ${t.divider} border-opacity-50 last:border-0 hover:bg-slate-800/20 transition-colors ${!n.is_read ? style.bg : ""}`}
-                        >
-                          <div className={`mt-0.5 w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${style.bg}`}>
-                            <Icon className={`w-3.5 h-3.5 ${!n.is_read ? "text-white" : t.textSub}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className={`text-xs font-bold truncate ${!n.is_read ? t.textPrimary : t.textSub}`}>{n.title}</p>
-                              {!n.is_read && <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${style.dot}`} />}
-                            </div>
-                            <p className={`text-[10px] ${t.textSub} mt-0.5 leading-relaxed line-clamp-2`}>{n.body}</p>
-                            <p className={`text-[10px] ${t.textMuted} mt-1`}>
-                              {new Date(n.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })
                   )}
                 </div>
-
-                {notifications.length > 0 && (
-                  <div className={`px-4 py-2.5 border-t ${t.divider} text-center`}>
-                    <p className={`text-[10px] ${t.textMuted}`}>{notifications.length} total notifications</p>
-                  </div>
-                )}
               </div>
             )}
           </div>
