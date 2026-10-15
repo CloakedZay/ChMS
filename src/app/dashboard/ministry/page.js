@@ -88,7 +88,7 @@ export default function MinistriesPage() {
     const [m, a, mem, lead, ch, mods, qs] = await Promise.all([
       supabase.from("ministries").select("*").order("name"),
       supabase.from("ministry_assignments").select("id, ministry_id, member_id, role, assigned_at"),
-      supabase.from("members").select("id, full_name, status, church_id").order("full_name"),
+      supabase.from("member_names").select("id, full_name, status, church_id").order("full_name"),   // names only (db/063)
       supabase.from("profiles").select("id, full_name, email, church_id, role").eq("role", "leader"),
       supabase.from("churches").select("id, name").order("name"),
       supabase.from("discipleship_modules").select("id, title, is_active, order_index, ministry_id").not("ministry_id", "is", null).order("order_index"),

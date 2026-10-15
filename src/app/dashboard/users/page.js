@@ -73,7 +73,7 @@ export default function UsersPage() {
       const [{ data: profiles }, { data: churchList }, { data: records }] = await Promise.all([
         supabase.from('profiles').select('id, email, full_name, role, church_id, disabled, is_elder').order('full_name'),
         supabase.from('churches').select('id, name').order('name'),
-        supabase.from('members').select('full_name, profile_id').not('profile_id', 'is', null),
+        supabase.from('member_names').select('full_name, profile_id').not('profile_id', 'is', null),   // names only (db/063)
       ]);
       setUsers(profiles || []);
       setChurches(churchList || []);

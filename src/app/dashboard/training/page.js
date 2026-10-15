@@ -881,7 +881,7 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
       const [{ data: profiles }, { data: mv }, { data: records }, { data: assigned }] = await Promise.all([
         supabase.from("profiles").select("id, email, full_name, role").eq("role", "member"),
         supabase.from("module_views").select("member_id, module_id, kind, created_at"),
-        supabase.from("members").select("id, profile_id").not("profile_id", "is", null),
+        supabase.from("member_names").select("id, profile_id").not("profile_id", "is", null),   // names only (db/063)
         supabase.from("ministry_assignments").select("member_id, ministry_id"),
       ]);
       const loginOf = {};
