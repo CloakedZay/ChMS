@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Search, UserPlus, X, Loader2, Users, UserRound, Phone, Lock } from 'lucide-react';
+import { ArrowLeft, Check, Search, UserPlus, X, Loader2, Users, UserRound, Phone, Lock, Camera, ImageIcon } from 'lucide-react';
 import { supabase } from '@/app/lib/supabase';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
@@ -195,8 +195,12 @@ export default function AttendanceSheet({ eventId, dark, onBack }) {
           )}
         </section>
 
-        {/* Visitors */}
-        <VisitorsBox t={t} eventId={eventId} canMark={canMark} visitors={visitors} onChange={load} />
+        <div className="space-y-5">
+          {/* Visitors */}
+          <VisitorsBox t={t} eventId={eventId} canMark={canMark} visitors={visitors} onChange={load} />
+          {/* Photos of the paper sheet */}
+          {!error && <SheetPhotos t={t} eventId={eventId} canMark={canMark} />}
+        </div>
       </div>
     </div>
   );
@@ -375,6 +379,130 @@ function VisitorsBox({ t, eventId, canMark, visitors, onChange }) {
               {canMark && (
                 <button onClick={() => remove(v)} aria-label={`Remove ${v.full_name}`}
                   className={`w-8 h-8 rounded-lg flex items-center justify-center ${t.muted} hover:text-rose-500`}><X size={15} /></button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// Photos of the paper sign-in sheet (db/060): attached by whoever takes
+// attendance, seen by whoever can see it. Kept 6 months after the event.
+const SHEET_BUCKET = 'attendance-sheets';
+const MAX_SIDE = 2000;   // phone photos are shrunk to this many pixels on the long side
+
+// A phone photo is often 4–8 MB; a smaller JPEG is still easy to read.
+async function shrinkPhoto(file) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((done) => canvas.toBlob(done, 'image/jpeg', 0.82));
+    return blob && blob.size < file.size ? blob : file;
+  } catch {
+    return file;   // a format the browser can't draw: upload as it is
+  }
+}
+
+function SheetPhotos({ t, eventId, canMark }) {
+  const [photos, setPhotos] = useState(null);   // with .url (signed)
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function fetchPhotos() {
+    const { data, error: e } = await supabase.from('event_sheet_photos')
+      .select('id, file_path, file_name, uploader_name, created_at').eq('event_id', eventId).order('created_at');
+    if (e) return missingSetup(e.message) ? [] : null;
+    if (!data?.length) return [];
+    const { data: urls } = await supabase.storage.from(SHEET_BUCKET).createSignedUrls(data.map((p) => p.file_path), 3600);
+    return data.map((p, i) => ({ ...p, url: urls?.[i]?.signedUrl || null }));
+  }
+  const reload = () => fetchPhotos().then((list) => setPhotos(list || []));
+  useEffect(() => {
+    let gone = false;
+    fetchPhotos().then((list) => { if (!gone) setPhotos(list || []); });
+    return () => { gone = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
+
+  async function upload(fileList) {
+    const files = Array.from(fileList || []).filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    setError('');
+    setUploading(true);
+    for (const file of files) {
+      const body = await shrinkPhoto(file);
+      if (body.size > 10 * 1024 * 1024) { setError(`${file.name} is larger than 10 MB.`); continue; }
+      const jpeg = body !== file;
+      const safe = (jpeg ? file.name.replace(/\.[^.]+$/, '') + '.jpg' : file.name).replace(/[^a-zA-Z0-9._-]+/g, '_').slice(-80);
+      const path = `${eventId}/${crypto.randomUUID()}-${safe}`;
+      const { error: upErr } = await supabase.storage.from(SHEET_BUCKET)
+        .upload(path, body, { contentType: jpeg ? 'image/jpeg' : file.type, upsert: false });
+      if (upErr) { setError(`Couldn't upload ${file.name}: ${upErr.message}`); continue; }
+      const { error: rowErr } = await supabase.from('event_sheet_photos')
+        .insert({ event_id: eventId, file_path: path, file_name: file.name, file_size: body.size });
+      if (rowErr) {
+        await supabase.storage.from(SHEET_BUCKET).remove([path]);
+        setError(`Couldn't save ${file.name}: ${rowErr.message}`);
+      }
+    }
+    setUploading(false);
+    reload();
+  }
+
+  async function remove(photo) {
+    if (!await confirmDialog({ message: `Remove this photo of the sign-in sheet (${photo.file_name})?`, confirmText: 'Remove' })) return;
+    const { error: e } = await supabase.from('event_sheet_photos').delete().eq('id', photo.id);
+    if (e) { setError(e.message); return; }
+    await supabase.storage.from(SHEET_BUCKET).remove([photo.file_path]);
+    reload();
+  }
+
+  // Nothing to show to someone who can only look and there are no photos.
+  if (photos !== null && !photos.length && !canMark) return null;
+
+  return (
+    <section className={`border rounded-3xl p-4 sm:p-5 ${t.card}`} aria-label="Sign-in sheet photos">
+      <div className="flex items-center gap-2 mb-1">
+        <h2 className={`font-bold flex items-center gap-2 ${t.text}`}><ImageIcon size={17} /> Sign-in sheet</h2>
+        {canMark && (
+          <label className={`ml-auto inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border text-xs font-semibold cursor-pointer ${t.ghost} ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+            {uploading ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+            {uploading ? 'Uploading…' : 'Attach photo'}
+            <input type="file" accept="image/*" multiple className="hidden" disabled={uploading}
+              onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
+          </label>
+        )}
+      </div>
+      <p className={`text-xs mb-4 ${t.muted}`}>Photos of the paper sheet, for checking later. Staff only; kept 6 months after the event.</p>
+
+      {error && <p className="text-xs text-rose-500 mb-3">{error}</p>}
+
+      {photos === null ? (
+        <div className="grid grid-cols-3 gap-2">{[0, 1, 2].map((i) => <div key={i} className="skeleton aspect-[3/4] rounded-xl" />)}</div>
+      ) : photos.length === 0 ? (
+        <p className={`text-sm text-center py-6 ${t.muted}`}>No photo attached.</p>
+      ) : (
+        <ul className="grid grid-cols-3 gap-2">
+          {photos.map((p) => (
+            <li key={p.id} className="relative group">
+              <a href={p.url || undefined} target="_blank" rel="noreferrer" title={`${p.file_name}${p.uploader_name ? ` · by ${p.uploader_name}` : ''}`}
+                className={`block aspect-[3/4] rounded-xl overflow-hidden border ${t.divider} ${t.inner}`}>
+                {p.url
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={p.url} alt={`Sign-in sheet: ${p.file_name}`} className="w-full h-full object-cover" />
+                  : <span className={`flex items-center justify-center h-full text-[11px] ${t.muted}`}>Can&apos;t load</span>}
+              </a>
+              {canMark && (
+                <button onClick={() => remove(p)} aria-label={`Remove ${p.file_name}`}
+                  className="absolute top-1 right-1 w-7 h-7 rounded-lg bg-black/60 text-white flex items-center justify-center opacity-80 hover:opacity-100">
+                  <X size={14} />
+                </button>
               )}
             </li>
           ))}

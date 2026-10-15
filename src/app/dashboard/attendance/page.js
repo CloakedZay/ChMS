@@ -43,6 +43,15 @@ function Attendance() {
   const [branch, setBranch] = useState('');
   const [error, setError] = useState('');
 
+  // Sign-in sheet photos are kept 6 months after the event (db/060): the
+  // database drops the expired entries this person may remove and returns
+  // their files, which are deleted here.
+  useEffect(() => {
+    supabase.rpc('purge_old_sheet_photos').then(({ data }) => {
+      if (data?.length) supabase.storage.from('attendance-sheets').remove(data);
+    });
+  }, []);
+
   useEffect(() => {
     if (!isGlobal) return;
     supabase.from('churches').select('id, name').order('name').then(({ data }) => setChurches(data || []));
