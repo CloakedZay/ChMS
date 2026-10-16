@@ -225,7 +225,7 @@ export default function BibleVersesPage() {
           <h2 className={`text-sm font-black ${t.textPrimary} flex items-center gap-2`}>
             <Plus className="w-4 h-4 text-blue-400" /> Add a Verse Manually
           </h2>
-          <button
+          <button aria-label={showAddForm ? 'Close the form' : undefined}
             onClick={() => setShowAddForm((v) => !v)}
             className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${t.iconBtn} transition-colors`}
           >
@@ -295,7 +295,7 @@ export default function BibleVersesPage() {
                   <p className={`text-sm ${t.textPrimary} mt-1`}>{v.verse_text}</p>
                 </div>
                 {canDelete && (
-                  <button
+                  <button aria-label="Delete verse"
                     onClick={() => handleDelete(v.id)}
                     disabled={deletingId === v.id}
                     className="text-slate-600 hover:text-rose-400 disabled:opacity-50 transition-colors shrink-0 p-1"

@@ -153,6 +153,24 @@ h1, h2, h3, h4 {
 }
 input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offset: 0; }
 
+/* Readable greys. Small text needs at least 4.5:1 contrast with its
+   background (WCAG AA). The slate scale is one set of colours for both
+   themes, and a middle grey can't pass on both ivory and near-black, so
+   the faint greys are adjusted per theme here instead of on every page.
+   Inside the utilities layer with low specificity, so hover colours
+   (hover:text-white …) still win; icons (svg) keep their softer grey.
+   tests/contrast.test.mjs checks these values. */
+@layer utilities {
+  :where(:root:not([data-theme="dark"])) .text-slate-400:not(svg),
+  :where(:root:not([data-theme="dark"])) .text-slate-500:not(svg),
+  :where(:root:not([data-theme="dark"])) .text-\[\#858b87\]:not(svg) { color: #646b67; }
+  :where(:root[data-theme="dark"]) .text-slate-600:not(svg),
+  :where(:root[data-theme="dark"]) .text-slate-700:not(svg) { color: #858b87; }
+  :where(:root[data-theme="dark"]) .text-white\/20:not(svg),
+  :where(:root[data-theme="dark"]) .text-white\/30:not(svg),
+  :where(:root[data-theme="dark"]) .text-white\/40:not(svg) { color: rgb(255 255 255 / 0.6); }
+}
+
 /* Interactions: every button / link / field eases, buttons press in a hair */
 button, a, input, select, textarea {
   transition-property: color, background-color, border-color, box-shadow, opacity, transform;
@@ -281,19 +299,19 @@ tbody tr { transition: background-color 120ms ease; }
 .member-light .text-white\/80 { color: rgb(37 42 40 / 0.8); }
 .member-light .text-white\/70 { color: rgb(37 42 40 / 0.7); }
 .member-light .text-white\/60 { color: rgb(37 42 40 / 0.68); }
-.member-light .text-white\/50 { color: rgb(37 42 40 / 0.62); }
-.member-light .text-white\/40 { color: rgb(37 42 40 / 0.56); }
-.member-light .text-white\/30 { color: rgb(37 42 40 / 0.46); }
-.member-light .text-white\/20 { color: rgb(37 42 40 / 0.4); }
+.member-light .text-white\/50,
+.member-light .text-white\/40,
+.member-light .text-white\/30,
+.member-light .text-white\/20 { color: rgb(37 42 40 / 0.68); }   /* ≥ 4.5:1 on ivory and white */
 .member-light .placeholder\:text-white\/30::placeholder,
-.member-light .placeholder\:text-white\/20::placeholder { color: rgb(37 42 40 / 0.42); }
+.member-light .placeholder\:text-white\/20::placeholder { color: rgb(37 42 40 / 0.6); }
 .member-light .hover\:text-white:hover { color: #252a28; }
 
 .member-light .text-slate-200 { color: #2b332f; }
 .member-light .text-slate-400 { color: #646b67; }
 .member-light .text-slate-500 { color: #646b67; }
-.member-light .text-slate-600 { color: #858b87; }
-.member-light .text-slate-700 { color: #858b87; }
+.member-light .text-slate-600 { color: #646b67; }
+.member-light .text-slate-700 { color: #646b67; }
 .member-light .group:hover .group-hover\:text-slate-300 { color: #2b332f; }
 
 .member-light .border-white\/10,

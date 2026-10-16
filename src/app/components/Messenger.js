@@ -13,6 +13,7 @@ import { confirmDialog } from '@/app/lib/dialog';
 import PersonProfile from '@/app/components/PersonProfile';
 
 import { friendlyError } from '@/app/lib/errors';
+import { useDialog } from '@/app/lib/useDialog';
 // Chat for both dashboards: one-to-one (db/029) and groups (db/030).
 // Chats are private to the people in them. Who can be added or messaged is
 // decided by the database (chat_contacts: your own church, plus every Admin
@@ -422,6 +423,10 @@ export default function Messenger() {
   const modalShell = `w-full sm:max-w-md max-h-[85vh] flex flex-col border rounded-t-3xl sm:rounded-3xl shadow-xl ${t.shell}`;
   const backdrop = 'fixed inset-0 z-50 bg-[#0c1311]/60 flex items-end sm:items-center justify-center sm:p-4';
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const pickerDialogRef = useDialog(!!picker, () => setPicker(null));
+  const infoDialogRef = useDialog(!!(info && active?.kind === 'group'), () => setInfo(false));
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-[calc(100dvh-4rem)] ${t.page}`}>
       <div className="mb-5">
@@ -593,7 +598,7 @@ export default function Messenger() {
       {/* ── New message / new group ────────────────────────────────────── */}
       {picker && (
         <div className={backdrop} onMouseDown={(e) => { if (e.target === e.currentTarget) setPicker(null); }}>
-          <div role="dialog" aria-modal="true" aria-label="New chat" className={modalShell}>
+          <div ref={pickerDialogRef} role="dialog" aria-modal="true" aria-label="New chat" className={modalShell}>
             <div className={`p-4 border-b ${t.pane} flex items-center justify-between`}>
               <h2 className={`font-bold ${t.text}`}>{picker === 'group' ? 'New group' : 'New message'}</h2>
               <button onClick={() => setPicker(null)} aria-label="Close" className={`w-8 h-8 rounded-lg flex items-center justify-center ${t.ghost}`}><X size={18} /></button>
@@ -683,7 +688,7 @@ export default function Messenger() {
       {/* ── Group details ──────────────────────────────────────────────── */}
       {info && active?.kind === 'group' && (
         <div className={backdrop} onMouseDown={(e) => { if (e.target === e.currentTarget) setInfo(false); }}>
-          <div role="dialog" aria-modal="true" aria-label="Group details" className={modalShell}>
+          <div ref={infoDialogRef} role="dialog" aria-modal="true" aria-label="Group details" className={modalShell}>
             <div className={`p-4 border-b ${t.pane} flex items-center justify-between`}>
               <h2 className={`font-bold ${t.text}`}>Group details</h2>
               <button onClick={() => setInfo(false)} aria-label="Close" className={`w-8 h-8 rounded-lg flex items-center justify-center ${t.ghost}`}><X size={18} /></button>

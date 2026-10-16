@@ -150,7 +150,7 @@ export default function MemberChatbotPage() {
             disabled={disabled}
             className="flex-1 min-w-0 bg-[#111815] border border-white/10 rounded-full py-2.5 px-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-60"
           />
-          <button
+          <button aria-label="Send"
             type="submit"
             disabled={disabled || !input.trim()}
             className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white flex items-center justify-center transition-all active:scale-95 shrink-0"

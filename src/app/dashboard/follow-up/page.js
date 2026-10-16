@@ -16,6 +16,7 @@ import { notifyFollowUpChanged, MISSED_EVENTS } from '@/app/lib/useFollowUpRemin
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 import { friendlyError } from '@/app/lib/errors';
+import { useDialog } from '@/app/lib/useDialog';
 // Member inactivity and follow-up (db/032).
 // "Last seen" = the later of a member's last sign-in and last page visit,
 // for members whose record is linked to a login. A member is flagged when
@@ -233,6 +234,9 @@ export default function FollowUpPage() {
   // Long lists are shown 10 at a time (components/Pagination).
   const pg = usePaged(shown, 10, `${tab}|${search}|${threshold}|${branch}`);
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const logDialogRef = useDialog(!!logFor, () => { if (!saving) setLogFor(null); });
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.page}`}>
       <div className="mb-8">
@@ -401,7 +405,7 @@ export default function FollowUpPage() {
       {logFor && (
         <div className="fixed inset-0 z-50 bg-[#0c1311]/60 flex items-end sm:items-center justify-center sm:p-4"
           onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) setLogFor(null); }}>
-          <form onSubmit={saveLog} role="dialog" aria-modal="true" aria-label="Log follow-up"
+          <form ref={logDialogRef} onSubmit={saveLog} role="dialog" aria-modal="true" aria-label="Log follow-up"
             className={`w-full sm:max-w-md border rounded-t-3xl sm:rounded-3xl p-6 shadow-xl ${t.modal}`}>
             <div className="flex items-center justify-between mb-5">
               <div>

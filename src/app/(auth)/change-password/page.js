@@ -125,8 +125,9 @@ export default function ChangePasswordPage() {
         <form onSubmit={handleSave} className={`${cardBg} border ${cardBord} rounded-3xl p-8 shadow-xl space-y-4`}>
           {askCurrent && (
             <div>
-              <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Current password</label>
+              <label htmlFor="current-password" className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Current password</label>
               <input
+                id="current-password"
                 type={showPass ? 'text' : 'password'}
                 value={current}
                 onChange={(e) => setCurrent(e.target.value)}
@@ -137,9 +138,10 @@ export default function ChangePasswordPage() {
           )}
 
           <div>
-            <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>New password</label>
+            <label htmlFor="new-password" className={`block text-xs ${labelCls} font-semibold mb-1.5`}>New password</label>
             <div className="relative">
               <input
+                id="new-password"
                 type={showPass ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -149,8 +151,9 @@ export default function ChangePasswordPage() {
               />
               <button
                 type="button"
-                tabIndex={-1}
                 onClick={() => setShowPass((v) => !v)}
+                aria-label={showPass ? 'Hide passwords' : 'Show passwords'}
+                aria-pressed={showPass}
                 className={`absolute right-3 top-3 ${dark ? 'text-white/30 hover:text-white/60' : 'text-slate-400 hover:text-slate-600'} transition-colors`}
               >
                 {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -159,8 +162,9 @@ export default function ChangePasswordPage() {
           </div>
 
           <div>
-            <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Type it again</label>
+            <label htmlFor="confirm-password" className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Type it again</label>
             <input
+              id="confirm-password"
               type={showPass ? 'text' : 'password'}
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}

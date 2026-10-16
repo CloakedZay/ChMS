@@ -7,6 +7,7 @@ import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
 import { friendlyError } from '@/app/lib/errors';
 import { peso } from '@/app/lib/format';
+import { useDialog } from '@/app/lib/useDialog';
 // Spending requests (step F2, db/017 + db/018) and their liquidation
 // (step F3, db/019: receipts + amount actually spent, checked by Finance).
 // Lives on the Finance page.
@@ -345,6 +346,12 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   const input = `w-full ${t.inputBg} border ${t.inputBorder} ${t.inputText} rounded-xl px-4 py-2.5 text-sm outline-none transition-colors focus:border-blue-500 placeholder:text-slate-500`;
 
   // ── UI ──────────────────────────────────────────────────────────────────
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const receiptsDialogRef = useDialog(!!liquidating, () => setLiquidating(null));
+  const checkDialogRef = useDialog(!!checking, () => setChecking(null));
+  const decideDialogRef = useDialog(!!deciding, () => setDeciding(null));
+  const requestDialogRef = useDialog(showForm, () => setShowForm(false));
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -533,16 +540,16 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
         const diff = Number(spent) - Number(r.amount);
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
+            <div ref={receiptsDialogRef} role="dialog" aria-modal="true" aria-label="Submit receipts" className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
               <div className="flex justify-between items-start mb-1">
                 <h2 className={`text-lg font-black ${t.textPrimary}`}>Submit receipts</h2>
-                <button onClick={() => setLiquidating(null)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
+                <button aria-label="Close" onClick={() => setLiquidating(null)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
               </div>
               <p className={`text-sm ${t.textSub} mb-4`}>
                 &ldquo;{r.title}&rdquo; · released <span className={`font-bold ${t.textPrimary}`}>{peso(r.amount)}</span>
               </p>
 
-              <Label t={t} text="Receipts (photos or PDF, up to 10 MB each)">
+              <Label t={t} group text="Receipts (photos or PDF, up to 10 MB each)">
                 <div className="space-y-2">
                   {list.map((rc) => (
                     <div key={rc.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${t.inputBorder} ${t.inputBg}`}>
@@ -599,10 +606,10 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
         const diff = Number(r.spent_amount) - Number(r.amount);
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
+            <div ref={checkDialogRef} role="dialog" aria-modal="true" aria-label="Check receipts" className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
               <div className="flex justify-between items-start mb-1">
                 <h2 className={`text-lg font-black ${t.textPrimary}`}>Check receipts</h2>
-                <button onClick={() => setChecking(null)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
+                <button aria-label="Close" onClick={() => setChecking(null)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
               </div>
               <p className={`text-sm ${t.textSub} mb-4`}>&ldquo;{r.title}&rdquo; · {r.requester_name || 'requester'}</p>
 
@@ -659,7 +666,7 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       {/* Approve / reject */}
       {deciding && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
+          <div ref={decideDialogRef} role="dialog" aria-modal="true" aria-label={deciding.decision === 'approve' ? 'Approve request' : 'Reject request'} className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
             <h2 className={`text-lg font-black ${t.textPrimary} mb-1`}>
               {deciding.decision === 'approve' ? 'Approve request' : 'Reject request'}
             </h2>
@@ -688,10 +695,10 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
       {/* New request */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
+          <div ref={requestDialogRef} role="dialog" aria-modal="true" aria-label="New spending request" className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
             <div className="flex justify-between items-center mb-5">
               <h2 className={`text-lg font-black ${t.textPrimary}`}>New spending request</h2>
-              <button onClick={() => setShowForm(false)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
+              <button aria-label="Close" onClick={() => setShowForm(false)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
             </div>
             <form onSubmit={submit} className="space-y-4">
               {isPastor && (
@@ -744,11 +751,14 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
   );
 }
 
-function Label({ t, text, children }) {
+// The label wraps the field, so screen readers announce it with the field.
+// `group`: a heading over several controls (a label may hold only one).
+function Label({ t, text, group, children }) {
+  const Tag = group ? 'div' : 'label';
   return (
-    <div>
-      <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>{text}</label>
+    <Tag className="block" role={group ? 'group' : undefined} aria-label={group ? text : undefined}>
+      <span className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>{text}</span>
       {children}
-    </div>
+    </Tag>
   );
 }

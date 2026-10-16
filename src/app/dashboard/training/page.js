@@ -17,6 +17,7 @@ import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 import { friendlyError } from '@/app/lib/errors';
 import { baseTheme } from '@/app/lib/theme';
+import { useDialog } from '@/app/lib/useDialog';
 function formatBytes(bytes) {
   if (!bytes) return "—";
   if (bytes < 1024) return bytes + " B";
@@ -327,6 +328,9 @@ export default function TrainingPage() {
     ...ministries.filter((m) => m.is_active && canEditGroup(m.id)).map((m) => ({ id: m.id, name: m.name })),
   ];
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const moduleDialogRef = useDialog(showAddModule, () => { setShowAddModule(false); setNewModuleTitle(""); setNewModuleDesc(""); });
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
 
@@ -454,7 +458,7 @@ export default function TrainingPage() {
                           {mod.is_active ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                           {mod.is_active ? "Active" : "Hidden"}
                         </button>
-                        <button onClick={() => toggleModule(mod.id)} className={t.textMuted}>
+                        <button aria-label={isOpen ? 'Hide questions' : 'Show questions'} onClick={() => toggleModule(mod.id)} className={t.textMuted}>
                           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </button>
                       </div>
@@ -477,7 +481,7 @@ export default function TrainingPage() {
                                   <span className="text-xs font-black text-blue-400 shrink-0">Q{qi + 1}</span>
                                   <p className={`flex-1 text-xs ${t.textPrimary}`}>{q.question}</p>
                                   {canEditMod && (
-                                  <button
+                                  <button aria-label="Delete question"
                                     onClick={() => handleDeleteQuestion(q)}
                                     className={`${t.textMuted} hover:text-rose-400 hover:bg-rose-500/10 p-1 rounded-lg transition-colors shrink-0`}
                                   >
@@ -759,10 +763,10 @@ export default function TrainingPage() {
       {/* Add Module Modal */}
       {showAddModule && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className={`${t.modalBg} border ${t.modalBorder} rounded-3xl p-6 w-full max-w-md shadow-2xl`}>
+          <div ref={moduleDialogRef} role="dialog" aria-modal="true" aria-label="Add training module" className={`${t.modalBg} border ${t.modalBorder} rounded-3xl p-6 w-full max-w-md shadow-2xl`}>
             <div className="flex items-center justify-between mb-5">
               <h3 className={`text-base font-black ${t.textPrimary}`}>Add Training Module</h3>
-              <button
+              <button aria-label="Close"
                 onClick={() => { setShowAddModule(false); setNewModuleTitle(""); setNewModuleDesc(""); }}
                 className={`${t.textSub} hover:text-blue-400 transition-colors`}
               >
@@ -772,10 +776,11 @@ export default function TrainingPage() {
 
             <div className="space-y-3">
               <div>
-                <label className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
+                <label htmlFor="new-module-group" className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
                   For
                 </label>
                 <select
+                  id="new-module-group"
                   value={newModuleGroup}
                   onChange={(e) => setNewModuleGroup(e.target.value)}
                   className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-4 py-2.5 text-sm ${t.textPrimary} focus:outline-none focus:border-blue-500 transition-colors`}
@@ -787,10 +792,12 @@ export default function TrainingPage() {
                 </p>
               </div>
               <div>
-                <label className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
-                  Module Title <span className="text-rose-400">*</span>
+                <label htmlFor="new-module-title" className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
+                  Module Title <span aria-hidden="true" className="text-rose-400">*</span>
                 </label>
                 <input
+                  id="new-module-title"
+                  required
                   type="text"
                   placeholder="e.g. Module 6: Spiritual Warfare"
                   value={newModuleTitle}
@@ -799,10 +806,11 @@ export default function TrainingPage() {
                 />
               </div>
               <div>
-                <label className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
+                <label htmlFor="new-module-desc" className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
                   Description
                 </label>
                 <textarea
+                  id="new-module-desc"
                   rows={3}
                   placeholder="Short overview shown to members..."
                   value={newModuleDesc}

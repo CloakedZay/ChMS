@@ -13,6 +13,7 @@ import DatePicker from '@/app/components/DatePicker';
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 import { friendlyError } from '@/app/lib/errors';
+import { useDialog } from '@/app/lib/useDialog';
 // Announcements (db/031, db/038). Pastor: any branch or all branches.
 // Leader: own branch. Either can aim an announcement at one ministry's
 // members. Everyone else who opens this page can only read. The database
@@ -141,6 +142,9 @@ export default function AnnouncementsPage() {
   // Long lists are shown 10 at a time (components/Pagination).
   const pg = usePaged(items || [], 10, '');
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const editDialogRef = useDialog(!!editing, () => { if (!saving) setEditing(null); });
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.page}`}>
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
@@ -226,7 +230,7 @@ export default function AnnouncementsPage() {
       {editing && (
         <div className="fixed inset-0 z-50 bg-[#0c1311]/60 flex items-end sm:items-center justify-center sm:p-4"
           onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) setEditing(null); }}>
-          <form onSubmit={save} role="dialog" aria-modal="true" aria-label={editing.id ? 'Edit announcement' : 'New announcement'}
+          <form ref={editDialogRef} onSubmit={save} role="dialog" aria-modal="true" aria-label={editing.id ? 'Edit announcement' : 'New announcement'}
             className={`w-full sm:max-w-xl max-h-[92vh] overflow-y-auto border rounded-t-3xl sm:rounded-3xl p-6 shadow-xl ${t.modal}`}>
             <div className="flex items-center justify-between mb-5">
               <h2 className={`text-lg font-bold ${t.text}`}>{editing.id ? 'Edit announcement' : 'New announcement'}</h2>

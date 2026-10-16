@@ -23,6 +23,7 @@ import Pagination, { usePaged } from "@/app/components/Pagination";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 import { friendlyError } from '@/app/lib/errors';
 import { baseTheme } from '@/app/lib/theme';
+import { useDialog } from '@/app/lib/useDialog';
 const EMPTY_FORM = {
   title: '',
   date: '',
@@ -455,6 +456,13 @@ export default function EventsPage() {
   // Long lists are shown 9 at a time (components/Pagination).
   const pg = usePaged(filtered, 9, `${search}|${activeFilter}|${seriesView}`);
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const openedDialogRef = useDialog(!!selected, () => setSelectedId(null));
+  const deleteDialogRef = useDialog(!!toDelete, () => { if (!acting) setToDelete(null); });
+  const cancelDialogRef = useDialog(!!cancelFor, () => { if (!acting) setCancelFor(null); });
+  const sendBackDialogRef = useDialog(!!sendBack, () => { if (!acting) setSendBack(null); });
+  const eventDialogRef = useDialog(showModal, () => setShowModal(false));
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
 
@@ -590,7 +598,7 @@ export default function EventsPage() {
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onMouseDown={(e) => { if (e.target === e.currentTarget) setSelectedId(null); }}>
-          <div role="dialog" aria-modal="true" aria-label={selected.title} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <div ref={openedDialogRef} role="dialog" aria-modal="true" aria-label={selected.title} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto">
             <button onClick={() => setSelectedId(null)} aria-label="Close"
               className="absolute -top-3 -right-1 z-10 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><X size={16} /></button>
             <div className={`${t.modalBg} rounded-3xl`}>
@@ -608,7 +616,7 @@ export default function EventsPage() {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
             onMouseDown={(e) => { if (e.target === e.currentTarget && !acting) setToDelete(null); }}>
-            <div role="dialog" aria-modal="true" aria-label="Delete event"
+            <div ref={deleteDialogRef} role="dialog" aria-modal="true" aria-label="Delete event"
               className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
               <h2 className={`text-lg font-black ${t.textPrimary}`}>Delete “{event.title}”?</h2>
               {later.length > 1 && (
@@ -645,7 +653,7 @@ export default function EventsPage() {
       {cancelFor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
           onMouseDown={(e) => { if (e.target === e.currentTarget && !acting) setCancelFor(null); }}>
-          <form onSubmit={confirmCancel} role="dialog" aria-modal="true" aria-label="Cancel event"
+          <form ref={cancelDialogRef} onSubmit={confirmCancel} role="dialog" aria-modal="true" aria-label="Cancel event"
             className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
             <h2 className={`text-lg font-black ${t.textPrimary}`}>Cancel “{cancelFor.title}”?</h2>
             <p className={`text-xs ${t.textSub} mt-1 mb-4`}>
@@ -668,7 +676,7 @@ export default function EventsPage() {
       {sendBack && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
           onMouseDown={(e) => { if (e.target === e.currentTarget && !acting) setSendBack(null); }}>
-          <form onSubmit={confirmSendBack} role="dialog" aria-modal="true" aria-label="Send back"
+          <form ref={sendBackDialogRef} onSubmit={confirmSendBack} role="dialog" aria-modal="true" aria-label="Send back"
             className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
             <h2 className={`text-lg font-black ${t.textPrimary}`}>Send back to planning</h2>
             <p className={`text-xs ${t.textSub} mt-1 mb-4`}>“{sendBack.title}” — tell them what to change. They&apos;ll see this, then they can fix it and submit again.</p>
@@ -687,10 +695,10 @@ export default function EventsPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
+          <div ref={eventDialogRef} role="dialog" aria-modal="true" aria-label={editingEvent ? 'Edit event' : 'Add new event'} className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className={`text-lg font-black ${t.textPrimary}`}>{editingEvent ? "Edit Event" : "Add New Event"}</h2>
-              <button onClick={() => setShowModal(false)} className={`${t.textSub} hover:text-blue-400 transition-colors`}><X size={18} /></button>
+              <button aria-label="Close" onClick={() => setShowModal(false)} className={`${t.textSub} hover:text-blue-400 transition-colors`}><X size={18} /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -814,7 +822,7 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
       <div className="flex justify-between items-start mb-4">
         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[phase] || STATUS_COLORS.planning}`}>{phase}</span>
         {(onEdit || onDelete || onCancel || onRestore) && <div className="relative">
-          <button onClick={() => setMenuOpen(!menuOpen)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${t.menuHover}`}><MoreHorizontal size={16} /></button>
+          <button aria-label="More actions" onClick={() => setMenuOpen(!menuOpen)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${t.menuHover}`}><MoreHorizontal size={16} /></button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
@@ -924,10 +932,11 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
 }
 
 function Field({ label, required, t, children }) {
+  // The label wraps the field, so screen readers announce it with the field.
   return (
-    <div>
-      <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>{label} {required && <span className="text-red-400">*</span>}</label>
+    <label className="block">
+      <span className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>{label} {required && <span aria-hidden="true" className="text-red-400">*</span>}</span>
       {children}
-    </div>
+    </label>
   );
 }

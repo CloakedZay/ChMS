@@ -5,6 +5,7 @@ import { supabase } from '@/app/lib/supabase';
 import { X, Upload, Download, Loader2, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 
 import { friendlyError, UserError } from '@/app/lib/errors';
+import { useDialog } from '@/app/lib/useDialog';
 // Secretary: add many members at once from an Excel (.xlsx) file, using
 // the template in public/templates (Members sheet + a Choices sheet).
 // The file is read in the browser, every row is checked and shown in a
@@ -214,15 +215,18 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
       ? <span className="flex items-center gap-1 text-orange-400"><AlertTriangle size={13} /> {r.warnings.join('; ')}</span>
       : <span className="flex items-center gap-1 text-emerald-400"><CheckCircle2 size={13} /> OK</span>;
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const importDialogRef = useDialog(true, () => { if (!importing) onClose(); });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-4xl p-6 shadow-2xl mx-4 max-h-[90vh] flex flex-col`}>
+      <div ref={importDialogRef} role="dialog" aria-modal="true" aria-label="Import members" className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-4xl p-6 shadow-2xl mx-4 max-h-[90vh] flex flex-col`}>
         <div className="flex justify-between items-start mb-4">
           <div>
             <h2 className={`text-lg font-black ${t.textPrimary}`}>Import members</h2>
             <p className={`text-xs ${t.textSub} mt-1`}>From an Excel file (.xlsx). Members are added to your branch.</p>
           </div>
-          <button onClick={onClose} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
+          <button aria-label="Close" onClick={onClose} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
         </div>
 
         {/* Step 1: template + file */}

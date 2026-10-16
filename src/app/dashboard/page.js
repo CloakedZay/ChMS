@@ -276,7 +276,7 @@ export default function DashboardPage() {
               className={`${t.inputBg} border ${t.inputBorder} rounded-full py-2 pl-9 pr-9 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 w-full sm:w-64 transition-colors`}
             />
             {search && (
-              <button onClick={() => setSearch("")} className={`absolute right-3 top-2.5 ${t.textSub} hover:text-slate-300 transition-colors`}>
+              <button aria-label="Clear search" onClick={() => setSearch("")} className={`absolute right-3 top-2.5 ${t.textSub} hover:text-slate-300 transition-colors`}>
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -401,7 +401,7 @@ export default function DashboardPage() {
             Showing results for <span className={`${t.textPrimary} font-bold`}>&ldquo;{search}&rdquo;</span>
             {" "}— {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}, {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? "s" : ""}, {activityFeed.length} activit{activityFeed.length !== 1 ? "ies" : "y"}
           </span>
-          <button onClick={() => setSearch("")} className={`ml-auto ${t.textMuted} hover:text-slate-300 transition-colors`}>
+          <button aria-label="Clear search" onClick={() => setSearch("")} className={`ml-auto ${t.textMuted} hover:text-slate-300 transition-colors`}>
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

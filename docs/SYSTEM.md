@@ -178,5 +178,20 @@ They check the app's own rules in `src/app/lib/` without a database or browser:
 | `tests/dates.test.mjs` | Today's date in Manila (already the next day while UTC is still on the day before), event times as `6:00 PM` |
 | `tests/verseOfDay.test.mjs` | One verse all day, changing at local midnight |
 | `tests/fetchAll.test.mjs` | Reading every row past Supabase's 1,000-rows-per-request limit, and stopping on an error |
+| `tests/contrast.test.mjs` | Grey text in `globals.css` is at least 4.5:1 against its backgrounds, in light, dark and member light mode |
 
 The database rules (`db/*.sql`) are checked by hand per level in the app, since they need a live Supabase project.
+
+## 9. Accessibility
+
+Aimed at WCAG 2.1 level AA for the things a church app's users meet every day.
+
+| Area | How it's handled |
+|---|---|
+| **Readable text** | Small text is at least 4.5:1 against its background. The slate greys are one palette for both themes, so the faintest ones are adjusted per theme in `globals.css` ("Readable greys"); `tests/contrast.test.mjs` checks them. Status is never shown by colour alone: badges also say Active, Void, Pending… |
+| **Light and dark** | Every page follows the theme switch. Staff pages use `lib/theme.js`; the member pages are written with dark classes and `.member-light` in `globals.css` turns them ivory. |
+| **Keyboard** | Everything works without a mouse. A gold outline shows where the cursor is. **Skip to main content** is the first Tab stop on every signed-in page (`AppShell`). Pop-ups (`lib/useDialog.js`) take the cursor when they open, keep Tab inside, close with Esc, and hand the cursor back to the button that opened them. The date picker moves by day and week with the arrow keys. |
+| **Screen readers** | Form labels are tied to their fields (the `Field` / `Label` helpers wrap the field). Buttons that show only an icon have a name ("Close", "Edit entry", "Send", "Show password"). Pop-ups are announced as dialogs with their title; the menu and breadcrumb are named landmarks; the page language is set (`lang="en"`). |
+| **Motion** | With "reduce motion" turned on in the device settings, animations stop; the landing photos only fade. |
+| **Phones** | Pages are laid out for phone widths; several pop-ups (journal, announcements, follow-up, messages) open as bottom sheets, and on touch screens opening a pop-up doesn't throw up the keyboard. |
+

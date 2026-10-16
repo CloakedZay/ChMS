@@ -12,6 +12,7 @@ import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 import { friendlyError } from '@/app/lib/errors';
 import { baseTheme } from '@/app/lib/theme';
+import { useDialog } from '@/app/lib/useDialog';
 // Admin sets each login's level and branch. The database enforces the same
 // rules (db/009, db/013): only an admin changes levels, branches or
 // disables a login, and nobody changes their own level or disables
@@ -185,6 +186,9 @@ export default function UsersPage() {
   const selectStyle = `${t.inputBg} border ${t.inputBorder} rounded-xl py-2 px-3 text-sm ${t.inputText} focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-50`;
 
   // ── UI ────────────────────────────────────────────────────────────────────
+
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const passwordDialogRef = useDialog(!!newPassword, async () => { if (copied || await confirmDialog("Close? You won't see this password again.")) setNewPassword(null); });
 
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
@@ -404,7 +408,7 @@ export default function UsersPage() {
       {/* ── New temporary password (shown once) ── */}
       {newPassword && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`${dark ? "bg-[#1b2420] border-slate-700" : "bg-slate-50 border-slate-300"} border rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
+          <div ref={passwordDialogRef} role="dialog" aria-modal="true" aria-label="Password reset" className={`${dark ? "bg-[#1b2420] border-slate-700" : "bg-slate-50 border-slate-300"} border rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
             <h2 className={`text-lg font-black ${t.textPrimary} mb-1`}>Password reset</h2>
             <p className={`text-xs ${t.textSub} mb-5`}>
               Give these to <span className="font-bold">{newPassword.name}</span>. The password won&apos;t be shown again —

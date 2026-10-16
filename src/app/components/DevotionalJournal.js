@@ -11,6 +11,7 @@ import DatePicker from '@/app/components/DatePicker';
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 import { friendlyError } from '@/app/lib/errors';
+import { useDialog } from '@/app/lib/useDialog';
 // Devotional journal (db/027). Private: every person reads and writes only
 // their own entries; the database enforces it. Used by both dashboards.
 
@@ -132,6 +133,9 @@ export default function DevotionalJournal() {
   // Long lists are shown 10 at a time (components/Pagination).
   const pg = usePaged(shown, 10, search);
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const journalDialogRef = useDialog(!!editing, () => { if (!saving) setEditing(null); });
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.page}`}>
       {/* Header */}
@@ -235,7 +239,7 @@ export default function DevotionalJournal() {
           className="fixed inset-0 z-50 bg-[#0c1311]/60 flex items-end sm:items-center justify-center p-0 sm:p-4"
           onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) setEditing(null); }}
         >
-          <form
+          <form ref={journalDialogRef}
             onSubmit={save}
             role="dialog" aria-modal="true" aria-label={editing.id ? 'Edit entry' : 'New entry'}
             className={`w-full sm:max-w-xl max-h-[92vh] overflow-y-auto border rounded-t-3xl sm:rounded-3xl p-6 shadow-xl ${t.modal}`}

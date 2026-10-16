@@ -20,6 +20,7 @@ import { useDebounced } from "@/app/lib/useDebounced";
 import { friendlyError } from '@/app/lib/errors';
 import { peso } from "@/app/lib/format";
 import { baseTheme } from '@/app/lib/theme';
+import { useDialog } from '@/app/lib/useDialog';
 const EMPTY_FORM = {
   category: 'Tithe',
   otherCategory: '',
@@ -356,6 +357,9 @@ function Finance() {
     setPage(1);
   }
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const entryDialogRef = useDialog(showModal, () => setShowModal(false));
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200`}>
 
@@ -532,10 +536,10 @@ function Finance() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
+          <div ref={entryDialogRef} role="dialog" aria-modal="true" aria-label={editingTx ? 'Edit entry' : 'New entry'} className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className={`text-lg font-black ${t.textPrimary}`}>{editingTx ? 'Edit Entry' : 'New Entry'}</h2>
-              <button onClick={() => setShowModal(false)} className={`${t.textSub} hover:text-blue-400 transition-colors`}><X size={18} /></button>
+              <button aria-label="Close" onClick={() => setShowModal(false)} className={`${t.textSub} hover:text-blue-400 transition-colors`}><X size={18} /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -631,10 +635,11 @@ function StatCard({ label, amount, icon: Icon, color, t }) {
 }
 
 function Field({ label, required, t, children }) {
+  // The label wraps the field, so screen readers announce it with the field.
   return (
-    <div>
-      <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>{label} {required && <span className="text-red-400">*</span>}</label>
+    <label className="block">
+      <span className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>{label} {required && <span aria-hidden="true" className="text-red-400">*</span>}</span>
       {children}
-    </div>
+    </label>
   );
 }

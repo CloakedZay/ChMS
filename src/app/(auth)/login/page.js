@@ -157,9 +157,11 @@ export default function LoginPage() {
 
             {/* Email */}
             <div>
-              <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Email</label>
+              <label htmlFor="login-email" className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Email</label>
               <input
+                id="login-email"
                 type="email"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="yourname@email.com"
@@ -170,9 +172,11 @@ export default function LoginPage() {
 
             {/* Password */}
             <div>
-              <label className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Password</label>
+              <label htmlFor="login-password" className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Password</label>
               <div className="relative">
                 <input
+                  id="login-password"
+                  autoComplete="current-password"
                   type={showPass ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -182,8 +186,9 @@ export default function LoginPage() {
                 />
                 <button
                   type="button"
-                  tabIndex={-1}
                   onClick={() => setShowPass(v => !v)}
+                  aria-label={showPass ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPass}
                   className={`absolute right-3 top-3 ${dark ? 'text-white/30 hover:text-white/60' : 'text-slate-400 hover:text-slate-600'} transition-colors`}
                 >
                   {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

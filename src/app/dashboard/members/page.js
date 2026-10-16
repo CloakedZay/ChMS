@@ -19,6 +19,7 @@ import { phToday } from "@/app/lib/phDate";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 import { friendlyError } from '@/app/lib/errors';
 import { baseTheme } from '@/app/lib/theme';
+import { useDialog } from '@/app/lib/useDialog';
 const EMPTY_FORM = {
   full_name: '',
   role: '',
@@ -434,6 +435,11 @@ export default function MembersPage() {
     setPage,
   };
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const linkDialogRef = useDialog(!!linkFor, () => setLinkFor(null));
+  const loginDialogRef = useDialog(!!newLogin, async () => { if (copied || await confirmDialog("Close? You won't see this password again.")) setNewLogin(null); });
+  const memberDialogRef = useDialog(showModal, () => setShowModal(false));
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
 
@@ -618,7 +624,7 @@ export default function MembersPage() {
                     {/* Actions */}
                     <td className="px-6 py-4 text-right">
                       {(canEdit || canArchive) && (
-                        <button
+                        <button aria-label={`Actions for ${member.full_name}`}
                           onClick={(e) => handleMenuOpen(e, member.id)}
                           className={`transition-colors p-1 rounded-lg ${t.actionBtn}`}
                         >
@@ -713,10 +719,10 @@ export default function MembersPage() {
           .sort((a, b) => b.score - a.score || (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''));
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-lg p-6 shadow-2xl mx-4 max-h-[85vh] flex flex-col`}>
+            <div ref={linkDialogRef} role="dialog" aria-modal="true" aria-label="Link existing login" className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-lg p-6 shadow-2xl mx-4 max-h-[85vh] flex flex-col`}>
               <div className="flex justify-between items-start mb-1">
                 <h2 className={`text-lg font-black ${t.textPrimary}`}>Link existing login</h2>
-                <button onClick={() => setLinkFor(null)} className={`${t.textSub} hover:text-blue-400 transition-colors`}><X size={18} /></button>
+                <button aria-label="Close" onClick={() => setLinkFor(null)} className={`${t.textSub} hover:text-blue-400 transition-colors`}><X size={18} /></button>
               </div>
               <p className={`text-xs ${t.textSub} mb-4`}>
                 Pick the login that belongs to <span className="font-bold">{linkFor.full_name}</span>. Closest name matches are first.
@@ -764,7 +770,7 @@ export default function MembersPage() {
       {/* ── New login details (shown once) ── */}
       {newLogin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
+          <div ref={loginDialogRef} role="dialog" aria-modal="true" aria-label="Login created" className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
             <h2 className={`text-lg font-black ${t.textPrimary} mb-1`}>Login created</h2>
             <p className={`text-xs ${t.textSub} mb-5`}>
               Give these to <span className="font-bold">{newLogin.name}</span>. The password won&apos;t be shown again —
@@ -801,12 +807,12 @@ export default function MembersPage() {
       {/* ── Add / Edit Modal ── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
+          <div ref={memberDialogRef} role="dialog" aria-modal="true" aria-label={editingMember ? 'Edit member' : 'Add new member'} className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className={`text-lg font-black ${t.textPrimary}`}>
                 {editingMember ? "Edit Member" : "Add New Member"}
               </h2>
-              <button onClick={() => setShowModal(false)} className={`${t.textSub} hover:text-blue-400 transition-colors`}>
+              <button aria-label="Close" onClick={() => setShowModal(false)} className={`${t.textSub} hover:text-blue-400 transition-colors`}>
                 <X size={18} />
               </button>
             </div>
@@ -905,12 +911,13 @@ function inputStyle(t) {
 }
 
 function Field({ label, required, t, children }) {
+  // The label wraps the field, so screen readers announce it with the field.
   return (
-    <div>
-      <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>
-        {label} {required && <span className="text-red-400">*</span>}
-      </label>
+    <label className="block">
+      <span className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>
+        {label} {required && <span aria-hidden="true" className="text-red-400">*</span>}
+      </span>
       {children}
-    </div>
+    </label>
   );
 }

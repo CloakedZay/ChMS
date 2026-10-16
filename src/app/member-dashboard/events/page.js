@@ -10,6 +10,7 @@ import BranchLabel from '@/app/components/BranchLabel';
 import EventCalendar from '@/app/components/EventCalendar';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
+import { useDialog } from '@/app/lib/useDialog';
 const STATUS_COLORS = {
   approved: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   pending:  'bg-orange-500/10 text-orange-400 border-orange-500/20',
@@ -126,6 +127,9 @@ export default function MemberEventsPage() {
 
   // Long lists are shown 9 at a time (components/Pagination).
   const pg = usePaged(filtered, 9, `${search}|${ministryFilter}`);
+
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const openedDialogRef = useDialog(!!opened, () => setOpenId(null));
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 min-h-screen">
@@ -290,7 +294,7 @@ export default function MemberEventsPage() {
       {opened && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onMouseDown={(e) => { if (e.target === e.currentTarget) setOpenId(null); }}>
-          <div role="dialog" aria-modal="true" aria-label={opened.title}
+          <div ref={openedDialogRef} role="dialog" aria-modal="true" aria-label={opened.title}
             className="w-full max-w-md bg-[#1b2420] border border-white/10 rounded-3xl p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[opened.status] || STATUS_COLORS.approved}`}>

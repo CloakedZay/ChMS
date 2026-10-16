@@ -69,6 +69,12 @@ export default function AppShell({
   return (
     <div className={`min-h-screen ${dark ? 'bg-[#111815]' : 'bg-[#f8f7f2]'}`}>
 
+      {/* Keyboard users jump past the menu; hidden until it gets focus (first Tab). */}
+      <a href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[90] focus:px-4 focus:py-2 focus:rounded-xl focus:bg-[#173f35] focus:text-white focus:text-sm focus:font-bold focus:shadow-lg">
+        Skip to main content
+      </a>
+
       {/* Drawer backdrop (phones / tablets) */}
       {drawer && (
         <div
@@ -103,7 +109,7 @@ export default function AppShell({
           </button>
         </div>
 
-        <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-5 space-y-6">
+        <nav aria-label="Main menu" className="sidebar-scroll flex-1 overflow-y-auto px-3 py-5 space-y-6">
           {groups.map((group) => (
             <div key={group.label}>
               <p className={`px-3 mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#f4f2ea]/40 ${label}`}>
@@ -245,7 +251,7 @@ export default function AppShell({
           </div>
         </header>
 
-        <main className="min-w-0">{children}</main>
+        <main id="main-content" tabIndex={-1} className="min-w-0 focus:outline-none">{children}</main>
       </div>
     </div>
   );

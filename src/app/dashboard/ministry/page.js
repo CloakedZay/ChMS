@@ -15,6 +15,7 @@ import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 import { friendlyError } from '@/app/lib/errors';
 import { baseTheme } from '@/app/lib/theme';
+import { useDialog } from '@/app/lib/useDialog';
 // Real ministries per branch (step M1, db/022). The database decides who
 // may do what; this page only shows the matching buttons:
 //   Pastor            add / edit / switch off ministries; add or remove
@@ -359,6 +360,9 @@ export default function MinistriesPage() {
     );
   }
 
+  // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
+  const ministryDialogRef = useDialog(!!editing, () => setEditing(null));
+
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} ${t.textPrimary} transition-colors duration-200 space-y-6`}>
       {/* Header */}
@@ -426,10 +430,10 @@ export default function MinistriesPage() {
       {/* Add / edit ministry (Pastor) */}
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
+          <div ref={ministryDialogRef} role="dialog" aria-modal="true" aria-label={editing.id ? 'Edit ministry' : 'Add ministry'} className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
             <div className="flex justify-between items-center mb-5">
               <h2 className={`text-lg font-black ${t.textPrimary}`}>{editing.id ? "Edit ministry" : "Add ministry"}</h2>
-              <button onClick={() => setEditing(null)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
+              <button aria-label="Close" onClick={() => setEditing(null)} className={`${t.textSub} hover:text-blue-400`}><X size={18} /></button>
             </div>
             <form onSubmit={saveMinistry} className="space-y-4">
               <Field t={t} label="Branch">
@@ -492,10 +496,11 @@ export default function MinistriesPage() {
 }
 
 function Field({ t, label, children }) {
+  // The label wraps the field, so screen readers announce it with the field.
   return (
-    <div>
-      <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>{label}</label>
+    <label className="block">
+      <span className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>{label}</span>
       {children}
-    </div>
+    </label>
   );
 }

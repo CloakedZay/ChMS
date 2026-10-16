@@ -258,7 +258,7 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
           disabled={disabled}
           className={`flex-1 min-w-0 ${t.inputBg} border ${t.inputBorder} rounded-full py-2.5 px-4 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-60`}
         />
-        <button
+        <button aria-label="Send"
           type="submit"
           disabled={disabled || !input.trim()}
           className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white flex items-center justify-center transition-all active:scale-95 shrink-0"
@@ -437,8 +437,9 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit, canShare })
         <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub} mb-4`}>Upload a Document</h3>
         <form onSubmit={handleUpload} className="space-y-3">
           <div>
-            <label className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>Title</label>
+            <label htmlFor="doc-title" className={`block text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1.5`}>Title</label>
             <input
+              id="doc-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
