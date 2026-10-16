@@ -327,7 +327,7 @@ export default function MembersPage() {
       const data = await res.json();
       if (!res.ok) { alertDialog(data.error || 'Could not create the login.'); return; }
       setCopied(false);
-      setNewLogin({ name: member.full_name, email: data.email, password: data.password });
+      setNewLogin({ name: member.full_name, email: data.email, password: data.password, role: member.role });
       await fetchMembers();
     } catch (err) {
       alertDialog('Could not create the login: ' + friendlyError(err));
@@ -787,6 +787,11 @@ export default function MembersPage() {
                 <p className={`text-lg font-mono font-bold ${t.textPrimary} tracking-wider select-all`}>{newLogin.password}</p>
               </div>
             </div>
+            {['pastor', 'leader'].includes(newLogin.role) && (
+              <p className={`text-xs mb-5 px-3 py-2.5 rounded-xl border border-orange-500/30 bg-orange-500/10 ${dark ? 'text-orange-300' : 'text-orange-700'}`}>
+                The login was made at the <b>Member</b> level. Their record says <b className="capitalize">{newLogin.role}</b>: ask the Admin to set that level on the Users page.
+              </p>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={copyNewLogin}
@@ -842,7 +847,7 @@ export default function MembersPage() {
                     <p className={`${inputStyle(t)} capitalize opacity-70`}>{editingMember.login_role}</p>
                     <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>From their login. The Admin changes it on the Users page.</p>
                   </>
-                ) : (
+                ) : (<>
                 <select name="role" value={form.role} onChange={handleChange} className={inputStyle(t)}>
                   <option value="">Select a role</option>
                   <option value="pastor">Pastor</option>
@@ -850,6 +855,10 @@ export default function MembersPage() {
                   <option value="member">Member</option>
                   <option value="volunteer">Volunteer</option>
                 </select>
+                <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>
+                  For people without a login. A login always starts at the Member level; only the Admin gives staff levels, on the Users page.
+                </p>
+                </>
                 )}
               </Field>
 

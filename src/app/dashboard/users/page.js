@@ -44,6 +44,8 @@ export default function UsersPage() {
   const [users, setUsers]             = useState([]);
   // Member record each login is linked to (db/014), by profile id.
   const [linkedRecords, setLinkedRecords] = useState({});
+  // Login id → the Role written on its member record (db/071), to suggest a level.
+  const [recordRoles, setRecordRoles]     = useState({});
   const [churches, setChurches]       = useState([]);
   const [loading, setLoading]         = useState(true);
   const [savingId, setSavingId]       = useState(null);
@@ -60,16 +62,20 @@ export default function UsersPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: profiles }, { data: churchList }, { data: records }] = await Promise.all([
+      const names = (cols) => supabase.from('member_names').select(cols).not('profile_id', 'is', null);   // names only (db/063)
+      const [{ data: profiles }, { data: churchList }, recordsRes] = await Promise.all([
         supabase.from('profiles').select('id, email, full_name, role, church_id, disabled, is_elder').order('full_name'),
         supabase.from('churches').select('id, name').order('name'),
-        supabase.from('member_names').select('full_name, profile_id').not('profile_id', 'is', null),   // names only (db/063)
+        names('full_name, profile_id, role'),
       ]);
+      // Before db/071 the view has no role column.
+      const records = recordsRes.error ? (await names('full_name, profile_id')).data : recordsRes.data;
       setUsers(profiles || []);
       setChurches(churchList || []);
-      const map = {};
-      (records || []).forEach((r) => { map[r.profile_id] = r.full_name; });
+      const map = {}, roles = {};
+      (records || []).forEach((r) => { map[r.profile_id] = r.full_name; if (r.role) roles[r.profile_id] = r.role; });
       setLinkedRecords(map);
+      setRecordRoles(roles);
       setLoading(false);
     }
     load();
@@ -328,6 +334,13 @@ export default function UsersPage() {
                             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                           </select>
                           </div>
+                        )}
+                        {/* The Secretary added them as e.g. Leader, but a new login starts as Member. */}
+                        {!isMe && u.role === 'member' && ['pastor', 'leader'].includes(recordRoles[u.id]) && (
+                          <button type="button" disabled={saving} onClick={() => handleLevelChange(u, recordRoles[u.id])}
+                            className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-orange-500 hover:underline disabled:opacity-50">
+                            Record says: {ROLE_LABELS[recordRoles[u.id]]} · Set level
+                          </button>
                         )}
                         {u.role === 'leader' && (
                           <label className={`mt-2 flex items-center gap-2 text-xs font-semibold ${u.is_elder ? 'text-violet-400' : t.textSub} cursor-pointer w-fit`}>
