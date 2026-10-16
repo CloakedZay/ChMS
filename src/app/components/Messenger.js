@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, MessageCircle, Plus, Search, Send, X, Check, CheckCheck, Loader2, Users, LogOut, Pencil,
+  MoreVertical, MoreHorizontal, Archive, ArchiveRestore, Trash2,
 } from 'lucide-react';
 import { supabase } from '@/app/lib/supabase';
 import { useAuth } from '@/app/context/AuthContext';
@@ -18,6 +19,10 @@ import { useDialog } from '@/app/lib/useDialog';
 // Chats are private to the people in them. Who can be added or messaged is
 // decided by the database (chat_contacts: your own church, plus every Admin
 // and Pastor).
+//
+// Like Messenger (db/073): delete your own message for everyone, delete any
+// message for yourself, delete a whole chat for yourself, and archive a
+// chat (it comes back when a new message arrives).
 
 const MAX_LEN = 2000;
 const THREAD_LIMIT = 200;
@@ -54,6 +59,17 @@ function RoleChip({ t, role }) {
 }
 
 // A tick-box row for choosing people.
+// The ⋯ next to a message: shown on hover or keyboard focus (always on
+// touch screens, which have no hover).
+function MessageMenuButton({ t, open, onToggle }) {
+  return (
+    <button onClick={onToggle} aria-label="Message options" aria-expanded={open} title="Message options"
+      className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center ${t.ghost} ${open ? '' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100'}`}>
+      <MoreHorizontal size={15} />
+    </button>
+  );
+}
+
 function PickRow({ t, person, checked, onToggle }) {
   return (
     <li>
@@ -104,6 +120,9 @@ export default function Messenger() {
   const [infoError, setInfoError]   = useState('');
   const [profileId, setProfileId]   = useState(null);   // whose profile is open (db/061)
   const [recentIds, setRecentIds]   = useState([]);     // people picked lately, newest first
+  const [showArchived, setShowArchived] = useState(false);
+  const [msgMenu, setMsgMenu]       = useState(null);   // id of the message whose menu is open
+  const [chatMenu, setChatMenu]     = useState(false);  // the open chat's ⋯ menu
 
   const activeRef = useRef(null);
   const membersRef = useRef([]);
@@ -186,6 +205,8 @@ export default function Messenger() {
   const openThread = useCallback(async (kind, id) => {
     setActive({ kind, id });
     activeRef.current = { kind, id };
+    setMsgMenu(null);
+    setChatMenu(false);
     setPicker(null);
     setInfo(false);
     setSendError('');
@@ -193,26 +214,32 @@ export default function Messenger() {
     setMembers([]);
     setThreadLoading(true);
 
-    let rows = [];
-    if (kind === 'dm') {
-      const { data } = await supabase
-        .from('messages')
-        .select('id, sender_id, recipient_id, body, created_at, read_at')
-        .or(`and(sender_id.eq.${me},recipient_id.eq.${id}),and(sender_id.eq.${id},recipient_id.eq.${me})`)
-        .order('created_at', { ascending: false })
-        .limit(THREAD_LIMIT);
-      rows = data || [];
-    } else {
-      const [msgs] = await Promise.all([
-        supabase.from('group_messages')
-          .select('id, sender_id, body, created_at')
+    // deleted_at arrives with db/073; before that, ask without it.
+    const fetchRows = async (cols) => (kind === 'dm'
+      ? supabase
+          .from('messages')
+          .select(cols)
+          .or(`and(sender_id.eq.${me},recipient_id.eq.${id}),and(sender_id.eq.${id},recipient_id.eq.${me})`)
+          .order('created_at', { ascending: false })
+          .limit(THREAD_LIMIT)
+      : supabase.from('group_messages')
+          .select(cols)
           .eq('group_id', id)
           .order('created_at', { ascending: false })
-          .limit(THREAD_LIMIT),
-        loadMembers(id),
-      ]);
-      rows = msgs.data || [];
-    }
+          .limit(THREAD_LIMIT));
+    const base = kind === 'dm' ? 'id, sender_id, recipient_id, body, created_at, read_at' : 'id, sender_id, body, created_at';
+    const [first] = await Promise.all([fetchRows(`${base}, deleted_at`), kind === 'group' ? loadMembers(id) : null]);
+    let rows = (first.error ? (await fetchRows(base)).data : first.data) || [];
+
+    // Leave out what I deleted for me, and everything before I deleted the chat.
+    const ids = rows.map((r) => r.id);
+    const [{ data: state }, { data: hides }] = await Promise.all([
+      supabase.from('chat_states').select('cleared_at').eq('chat_key', `${kind}:${id}`).maybeSingle(),
+      ids.length ? supabase.from('message_hides').select('message_id').eq('kind', kind).in('message_id', ids) : { data: [] },
+    ]);
+    const hidden = new Set((hides || []).map((h) => h.message_id));
+    rows = rows.filter((r) => !hidden.has(r.id) && (!state?.cleared_at || r.created_at > state.cleared_at));
+
     if (!sameActive(activeRef.current, kind, id)) return;    // switched away while loading
     setThread(rows.slice().reverse());
     setThreadLoading(false);
@@ -255,7 +282,23 @@ export default function Messenger() {
         { event: 'UPDATE', schema: 'public', table: 'messages', filter: `sender_id=eq.${me}` },
         (payload) => {
           const msg = payload.new;
-          setThread((list) => list.map((m) => (m.id === msg.id ? { ...m, read_at: msg.read_at } : m)));
+          setThread((list) => list.map((m) => (m.id === msg.id ? { ...m, read_at: msg.read_at, body: msg.body, deleted_at: msg.deleted_at } : m)));
+        })
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `recipient_id=eq.${me}` },
+        (payload) => {   // the sender deleted it for everyone (db/073)
+          const msg = payload.new;
+          if (!msg.deleted_at) return;
+          setThread((list) => list.map((m) => (m.id === msg.id ? { ...m, body: msg.body, deleted_at: msg.deleted_at } : m)));
+          loadConvos();
+        })
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'group_messages' },   // RLS: only my groups arrive
+        (payload) => {
+          const msg = payload.new;
+          if (!msg.deleted_at) return;
+          setThread((list) => list.map((m) => (m.id === msg.id ? { ...m, body: msg.body, deleted_at: msg.deleted_at } : m)));
+          loadConvos();
         })
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'group_messages' },   // RLS: only my groups arrive
@@ -372,15 +415,57 @@ export default function Messenger() {
     }
   }
 
+  // ── Deleting and archiving (db/073) ─────────────────────────────────────
+  const notReady = (error) => (isMissing(error?.message)
+    ? 'Deleting and archiving need db/073_message_delete_and_archive.sql. Ask the administrator to run it.'
+    : friendlyError(error));
+
+  async function deleteForEveryone(m) {
+    setMsgMenu(null);
+    if (!await confirmDialog({ message: 'Delete this message for everyone? It will show as "This message was deleted" for everyone in the chat.', confirmText: 'Delete for everyone', danger: true })) return;
+    const { error } = await supabase.rpc('delete_message_for_everyone', { p_kind: active.kind, p_id: m.id });
+    if (error) { setSendError(notReady(error)); return; }
+    setThread((list) => list.map((x) => (x.id === m.id ? { ...x, body: 'This message was deleted', deleted_at: new Date().toISOString() } : x)));
+    loadConvos();
+  }
+
+  async function deleteForMe(m) {
+    setMsgMenu(null);
+    if (!await confirmDialog({ message: 'Delete this message for you? The others in the chat still see it.', confirmText: 'Delete for me', danger: true })) return;
+    const { error } = await supabase.rpc('hide_message', { p_kind: active.kind, p_id: m.id });
+    if (error) { setSendError(notReady(error)); return; }
+    setThread((list) => list.filter((x) => x.id !== m.id));
+    loadConvos();
+  }
+
+  async function archiveChat(on) {
+    setChatMenu(false);
+    const { error } = await supabase.rpc('set_chat_archived', { p_key: `${active.kind}:${active.id}`, p_on: on });
+    if (error) { setSendError(notReady(error)); return; }
+    if (on) { setActive(null); setThread([]); }
+    loadConvos();
+  }
+
+  async function deleteChat() {
+    setChatMenu(false);
+    const who = active.kind === 'group' ? 'The other members keep their copy.' : `${headerName.split(' ')[0]} keeps their copy.`;
+    if (!await confirmDialog({ message: `Delete this whole chat for you? ${who} It comes back if a new message arrives.`, confirmText: 'Delete chat', danger: true })) return;
+    const { error } = await supabase.rpc('clear_chat', { p_key: `${active.kind}:${active.id}` });
+    if (error) { setSendError(notReady(error)); return; }
+    setActive(null); setThread([]); setMembers([]);
+    loadConvos();
+    window.dispatchEvent(new Event('faithsync-messages-read'));
+  }
+
   // ── Derived ─────────────────────────────────────────────────────────────
   const items = useMemo(() => {
     const a = (dms || []).map((c) => ({
       kind: 'dm', id: c.other_id, name: c.display_name, role: c.contact_role,
-      preview: c.last_body, fromMe: c.last_from_me, lastAt: c.last_at, unread: c.unread,
+      preview: c.last_body, fromMe: c.last_from_me, lastAt: c.last_at, unread: c.unread, archived: !!c.archived,
     }));
     const b = (groups || []).map((g) => ({
       kind: 'group', id: g.group_id, name: g.name, count: g.member_count, isOwner: g.is_owner,
-      preview: g.last_body, sender: g.last_sender_name, fromMe: g.last_from_me, lastAt: g.last_at, unread: g.unread,
+      preview: g.last_body, sender: g.last_sender_name, fromMe: g.last_from_me, lastAt: g.last_at, unread: g.unread, archived: !!g.archived,
     }));
     return [...a, ...b].sort((x, y) => new Date(y.lastAt) - new Date(x.lastAt));
   }, [dms, groups]);
@@ -396,7 +481,9 @@ export default function Messenger() {
   const iAmOwner = active?.kind === 'group' && members.some((m) => m.user_id === me && m.is_owner);
 
   const needle = listSearch.trim().toLowerCase();
-  const shownItems = items.filter((i) => !needle || i.name.toLowerCase().includes(needle));
+  const archivedCount = items.filter((i) => i.archived).length;
+  // The main list or the Archived list; a search looks in the one shown.
+  const shownItems = items.filter((i) => i.archived === showArchived && (!needle || i.name.toLowerCase().includes(needle)));
   const q = query.trim().toLowerCase();
   const matches = (c) => !q || c.display_name.toLowerCase().includes(q) || (ROLE_LABELS[c.contact_role] || '').toLowerCase().includes(q)
     || c.ministries?.some((m) => m.toLowerCase().includes(q));
@@ -454,6 +541,15 @@ export default function Messenger() {
             </button>
           </div>
 
+          {(showArchived || archivedCount > 0) && (
+            <button onClick={() => setShowArchived((v) => !v)}
+              className={`flex items-center gap-2 px-4 py-2.5 border-b text-xs font-semibold ${t.pane} ${t.ghost}`}>
+              {showArchived
+                ? <><ArrowLeft size={14} /> Back to chats</>
+                : <><Archive size={14} /> Archived chats ({archivedCount})</>}
+            </button>
+          )}
+
           <div className="flex-1 overflow-y-auto">
             {dms === null && groups === null ? (
               <div className="p-4 space-y-3">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-14 w-full" />)}</div>
@@ -462,8 +558,8 @@ export default function Messenger() {
                 <span className={`mx-auto w-12 h-12 rounded-2xl flex items-center justify-center mb-3 ${t.chip}`}>
                   <MessageCircle size={22} strokeWidth={1.5} />
                 </span>
-                <p className={`text-sm font-semibold ${t.text}`}>{listSearch ? 'No chats match' : 'No chats yet'}</p>
-                {!listSearch && <p className={`text-xs mt-1 ${t.sub}`}>Press + to message someone or start a group.</p>}
+                <p className={`text-sm font-semibold ${t.text}`}>{listSearch ? 'No chats match' : showArchived ? 'No archived chats' : 'No chats yet'}</p>
+                {!listSearch && !showArchived && <p className={`text-xs mt-1 ${t.sub}`}>Press + to message someone or start a group.</p>}
               </div>
             ) : (
               <ul>
@@ -537,6 +633,27 @@ export default function Messenger() {
                     <Users size={17} strokeWidth={1.75} />
                   </button>
                 )}
+                <div className="relative">
+                  <button onClick={() => setChatMenu((v) => !v)} aria-label="Chat options" aria-expanded={chatMenu} title="Chat options"
+                    className={`w-9 h-9 rounded-full flex items-center justify-center ${t.ghost}`}>
+                    <MoreVertical size={17} strokeWidth={1.75} />
+                  </button>
+                  {chatMenu && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setChatMenu(false)} />
+                      <div role="menu" className={`absolute right-0 top-10 z-20 w-48 border rounded-xl shadow-xl overflow-hidden ${t.shell}`}>
+                        <button role="menuitem" onClick={() => archiveChat(!activeItem?.archived)}
+                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${t.ghost}`}>
+                          {activeItem?.archived ? <><ArchiveRestore size={14} /> Unarchive chat</> : <><Archive size={14} /> Archive chat</>}
+                        </button>
+                        <button role="menuitem" onClick={deleteChat}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left text-rose-500 hover:bg-rose-500/10">
+                          <Trash2 size={14} /> Delete chat
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </header>
 
               <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5">
@@ -557,11 +674,34 @@ export default function Messenger() {
                       {showSender && (
                         <p className={`text-[11px] font-semibold mt-2 mb-0.5 ml-2 ${t.muted}`}>{memberName.get(m.sender_id) || 'Member'}</p>
                       )}
-                      <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${mine ? `${t.mine} rounded-br-md` : `${t.theirs} rounded-bl-md`}`}>
-                          <p className="text-sm whitespace-pre-wrap break-words">{m.body}</p>
-                          <p className={`text-[10px] mt-1 text-right ${mine ? 'opacity-70' : t.muted}`}>{clock(m.created_at)}</p>
+                      <div className={`group relative flex items-center gap-1 ${mine ? 'justify-end' : 'justify-start'}`}>
+                        {mine && (
+                          <MessageMenuButton t={t} open={msgMenu === m.id} onToggle={() => setMsgMenu(msgMenu === m.id ? null : m.id)} />
+                        )}
+                        <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${m.deleted_at ? `border ${t.pane} ${t.muted}` : mine ? `${t.mine} rounded-br-md` : `${t.theirs} rounded-bl-md`}`}>
+                          <p className={`text-sm whitespace-pre-wrap break-words ${m.deleted_at ? 'italic' : ''}`}>{m.deleted_at ? 'This message was deleted' : m.body}</p>
+                          <p className={`text-[10px] mt-1 text-right ${mine && !m.deleted_at ? 'opacity-70' : t.muted}`}>{clock(m.created_at)}</p>
                         </div>
+                        {!mine && (
+                          <MessageMenuButton t={t} open={msgMenu === m.id} onToggle={() => setMsgMenu(msgMenu === m.id ? null : m.id)} />
+                        )}
+                        {msgMenu === m.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setMsgMenu(null)} />
+                            <div role="menu" className={`absolute top-full mt-1 z-20 w-52 border rounded-xl shadow-xl overflow-hidden ${mine ? 'right-0' : 'left-0'} ${t.shell}`}>
+                              {mine && !m.deleted_at && (
+                                <button role="menuitem" onClick={() => deleteForEveryone(m)}
+                                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left text-rose-500 hover:bg-rose-500/10">
+                                  <Trash2 size={14} /> Delete for everyone
+                                </button>
+                              )}
+                              <button role="menuitem" onClick={() => deleteForMe(m)}
+                                className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${t.ghost}`}>
+                                <Trash2 size={14} /> Delete for me
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                       {mine && i === lastMineIndex && (
                         <p className={`text-[11px] text-right mt-0.5 pr-1 flex items-center justify-end gap-1 ${t.muted}`}>

@@ -87,7 +87,7 @@ erDiagram
 | Follow-up | `member_followups` |
 | Finance | `transactions`, `finance_settings`, `expense_requests`, `expense_approvals`, `expense_receipts` |
 | Training | `discipleship_modules`, `discipleship_questions`, `discipleship_progress`, `module_handouts`, `module_views` |
-| Communication | `announcements`, `messages`, `chat_groups`, `chat_group_members`, `group_messages` |
+| Communication | `announcements`, `messages`, `chat_groups`, `chat_group_members`, `group_messages`, `message_hides` and `chat_states` (deleted for me, archived and cleared chats, db/073) |
 | Assistant | `chatbot_documents`, `knowledge_chunks`, `assistant_chats`, `assistant_messages`, `assistant_usage` |
 | Personal and system | `devotional_journal`, `bible_verses`, `activity_log`, `page_visits` |
 
