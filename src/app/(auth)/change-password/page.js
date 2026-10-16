@@ -11,6 +11,7 @@ import { Eye, EyeOff, KeyRound } from 'lucide-react';
 import GoogleAccountCard from '@/app/components/GoogleAccountCard';
 
 import { friendlyError } from '@/app/lib/errors';
+import { confirmDialog } from '@/app/lib/dialog';
 // First sign-in for a login the Secretary created (db/014): the member
 // replaces the temporary password with their own, then goes to their
 // dashboard. Anyone else can use it to change their password too; they
@@ -92,6 +93,14 @@ export default function ChangePasswordPage() {
     if (askCurrent && !current) { setError('Enter your current password.'); return; }
     if (password.length < MIN_LENGTH) { setError(`Use at least ${MIN_LENGTH} characters.`); return; }
     if (password !== confirm) { setError("The two passwords don't match."); return; }
+    // Ask first, so a password isn't changed by a slip. Not on the first
+    // sign-in: there, setting a password is the only way on.
+    if (!mustChangePassword && !await confirmDialog({
+      title: 'Change your password?',
+      message: 'Are you sure you want to change your password? From now on you will sign in with the new one.',
+      confirmText: 'Yes, change it',
+      cancelText: 'Not now',
+    })) return;
     setError('');
     setSaving(true);
     setDone(false);
