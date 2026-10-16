@@ -7,7 +7,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { ROLES, ROLE_LABELS, GLOBAL_ROLES } from "@/app/lib/permissions";
 import { levelBadge, levelDot } from "@/app/lib/roleColors";
 import { authFetch } from "@/app/lib/authFetch";
-import { Search, UserCog, Sun, Moon, Ban, CheckCircle2, KeyRound, Copy, Check } from "lucide-react";
+import { Search, UserCog, Sun, Moon, Ban, CheckCircle2, KeyRound, Copy, Check, Trash2 } from "lucide-react";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 import { friendlyError } from '@/app/lib/errors';
@@ -55,6 +55,7 @@ export default function UsersPage() {
   const [filterAccess, setFilterAccess] = useState("all");
   const [page, setPage]               = useState(1);
   const [resetting, setResetting]     = useState(null);
+  const [deleting, setDeleting]       = useState(null);
   const [newPassword, setNewPassword] = useState(null);   // { name, email, password }
   const [copied, setCopied]           = useState(false);
 
@@ -157,6 +158,41 @@ export default function UsersPage() {
       alertDialog('Could not reset the password: ' + friendlyError(err));
     } finally {
       setResetting(null);
+    }
+  }
+
+  // A login made by mistake (duplicate, test account) can be deleted, but
+  // only when it has no church records (db/074); otherwise Disable it, so
+  // history stays traceable. The server checks again before deleting.
+  async function handleDelete(u) {
+    setDeleting(u.id);
+    try {
+      const ask = (extra) => authFetch('/api/users/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: u.id, ...extra }),
+      }).then(async (res) => ({ ok: res.ok, data: await res.json() }));
+
+      const check = await ask({ check_only: true });
+      if (!check.ok) { alertDialog(check.data.error || 'Could not check this login.'); return; }
+      if (check.data.records?.length) {
+        const list = check.data.records.map((r) => `${r.how_many} ${r.what}`).join(', ');
+        alertDialog(`${displayName(u)}'s login can't be deleted because it has church records: ${list}. Use Disable instead: they can't sign in, and their history stays.`);
+        return;
+      }
+      if (!await confirmDialog({
+        message: `Delete ${displayName(u)}'s login permanently? This can't be undone. Their messages, journal and assistant chats are removed with it; their member record stays.`,
+        confirmText: 'Delete login',
+        danger: true,
+      })) return;
+
+      const done = await ask({});
+      if (!done.ok) { alertDialog(done.data.error || 'Could not delete the login.'); return; }
+      setUsers((list) => list.filter((x) => x.id !== u.id));
+    } catch (err) {
+      alertDialog('Could not delete the login: ' + friendlyError(err));
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -387,6 +423,14 @@ export default function UsersPage() {
                             }`}
                           >
                             {u.disabled ? <><CheckCircle2 size={13} /> Enable</> : <><Ban size={13} /> Disable</>}
+                          </button>
+                          <button
+                            onClick={() => handleDelete(u)}
+                            disabled={saving || deleting === u.id}
+                            title="Delete a login made by mistake (only if it has no church records)"
+                            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 whitespace-nowrap ${t.textSub} border-transparent hover:text-rose-400 hover:bg-rose-500/10`}
+                          >
+                            <Trash2 size={13} /> {deleting === u.id ? 'Checking...' : 'Delete'}
                           </button>
                           </div>
                         )}
