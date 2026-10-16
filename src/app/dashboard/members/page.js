@@ -44,8 +44,10 @@ const STATUS_COLORS = {
 // directory and every count, and show only under the "archived" filter.
 const ARCHIVED = 'archived';
 
-// Nightly check (db/056): Active → Inactive after this many days unseen.
+// Nightly check (db/056, 072): Active → Inactive after this many days
+// unseen, or after this many missed events in a row.
 const AUTO_DAYS = 14;
+const AUTO_MISSED = 3;
 
 // Rows per page; each page is asked from the database (db/069).
 const PAGE_SIZE = 15;
@@ -290,7 +292,7 @@ export default function MembersPage() {
       : (member.archive_disabled_login ? ' Their login will be switched back on.' : '');
     const confirmed = await confirmDialog(archive
       ? `Archive "${member.full_name}"? They'll be hidden from the directory and counts, and can be restored later.${loginNote}`
-      : `Restore "${member.full_name}"? They'll be Active if seen in the last ${AUTO_DAYS} days, otherwise Inactive until they come back.${loginNote}`);
+      : `Restore "${member.full_name}"? They'll be Active if seen in the last ${AUTO_DAYS} days and they haven't missed their last ${AUTO_MISSED} events, otherwise Inactive until they come back.${loginNote}`);
     if (!confirmed) return;
     setOpenMenuId(null);
 
@@ -618,7 +620,7 @@ export default function MembersPage() {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${STATUS_COLORS[member.status] || STATUS_COLORS.active}`}
-                        title={member.status_auto ? `Set automatically: not seen for ${AUTO_DAYS} days (no sign-in or attendance)` : undefined}>
+                        title={member.status_auto ? `Set automatically: not seen for ${AUTO_DAYS} days, or missed ${AUTO_MISSED} events in a row` : undefined}>
                         {member.status || 'active'}{member.status_auto && <span className="normal-case font-semibold opacity-70"> · auto</span>}
                       </span>
                     </td>
@@ -893,7 +895,7 @@ export default function MembersPage() {
                   <option value="inactive">Inactive</option>
                 </select>
                 <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>
-                  Active members become Inactive by themselves after {AUTO_DAYS} days with no sign-in or attendance, and Active again when they come back.
+                  Active members become Inactive by themselves after {AUTO_DAYS} days with no sign-in or attendance, or after missing {AUTO_MISSED} events in a row, and Active again when they come back.
                   Busy members, and Inactive set here by hand, are left alone.
                 </p>
               </Field>

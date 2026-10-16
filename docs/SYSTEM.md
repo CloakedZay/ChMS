@@ -141,7 +141,7 @@ Branch scope: the **Admin and Pastor** see all branches (with a branch picker); 
 
 | What | When | Where |
 |---|---|---|
-| Active → Inactive after 14 days unseen, and back when seen | Nightly, 1 AM (Philippine time) | `pg_cron` job → `auto_member_status()` (db/056) |
+| Active → Inactive after 14 days unseen or 3 missed events in a row, and back when they return | Nightly, 1 AM (Philippine time) | `pg_cron` job → `auto_member_status()` (db/056, 072) |
 | Approved events past their date become Done | When event pages load | `complete_past_events()` (db/042) |
 | Visitors 6 months after their last visit are deleted | When attendance / visitor lists load | `purge_old_visitors()` (db/041) |
 | Sign-in sheet photos older than 6 months are deleted | When the Attendance page loads | `purge_old_sheet_photos()` (db/060) |
