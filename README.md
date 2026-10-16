@@ -37,7 +37,7 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>. Other commands: `npm run build`, `npm start`, `npm run lint`.
+Open <http://localhost:3000>. Other commands: `npm run build`, `npm start`, `npm run lint`, `npm test` (see [docs/SYSTEM.md](docs/SYSTEM.md#8-testing)).
 
 To set FaithSync up from zero (new Supabase project, database, Google sign-in, hosting), follow **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 

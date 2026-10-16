@@ -10,6 +10,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Throwaway build used to check production headers (also in .gitignore).
+    ".next-check/**",
   ]),
 ]);
 

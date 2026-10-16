@@ -156,3 +156,25 @@ Branch scope: the **Admin and Pastor** see all branches (with a branch picker); 
 | **Vercel** | Hosting | Site offline |
 
 The assistant uses **no outside AI service**: it understands the question itself (English and Tagalog, with spelling correction), searches the church's documents and handouts (keywords + meaning + typo-tolerant), and answers with the matching passages and their source.
+
+## 8. Testing
+
+Automated tests use Node's built-in test runner (`node:test`), so nothing extra is installed. Run them with:
+
+```
+npm test
+```
+
+They check the app's own rules in `src/app/lib/` without a database or browser:
+
+| File | What it checks |
+|---|---|
+| `tests/permissions.test.mjs` | Each level's access matches the roles doc: only Finance edits finance, Leaders approve events and the Secretary submits, the journal is private to everyone, only the Admin manages logins, members can't open staff pages, unknown pages are closed |
+| `tests/financeTotals.test.mjs` | Every saved entry counts in totals; voided entries never do |
+| `tests/format.test.mjs` | Peso amounts (`₱1,234.50`, negatives, bad input → `₱0.00`, the PDF's `PHP` form) |
+| `tests/errors.test.mjs` | Database errors become plain sentences with no table or rule names; messages written for people pass through; the technical error is still logged |
+| `tests/eventSeries.test.mjs` | Weekly dates (across months, years, a leap day; at most 52), one card per series on its next date that's still on, notices grouped per series, the "Every Sunday · until …" label |
+| `tests/dates.test.mjs` | Today's date in Manila (already the next day while UTC is still on the day before), event times as `6:00 PM` |
+| `tests/verseOfDay.test.mjs` | One verse all day, changing at local midnight |
+
+The database rules (`db/*.sql`) are checked by hand per level in the app, since they need a live Supabase project.
