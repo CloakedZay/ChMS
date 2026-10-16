@@ -11,7 +11,9 @@ import { FileSpreadsheet, UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pe
 import BranchLabel from "@/app/components/BranchLabel";
 import { levelBadge } from "@/app/lib/roleColors";
 
-import Pagination, { usePaged } from "@/app/components/Pagination";
+import Pagination from "@/app/components/Pagination";
+import { useDebounced } from "@/app/lib/useDebounced";
+import { fetchAll } from "@/app/lib/fetchAll";
 import DatePicker from "@/app/components/DatePicker";
 import { phToday } from "@/app/lib/phDate";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
@@ -43,6 +45,9 @@ const ARCHIVED = 'archived';
 
 // Nightly check (db/056): Active → Inactive after this many days unseen.
 const AUTO_DAYS = 14;
+
+// Rows per page; each page is asked from the database (db/069).
+const PAGE_SIZE = 15;
 
 // How alike a login's name/email is to a member's name, for sorting the
 // "Link existing login" list: shared words count most.
@@ -102,7 +107,15 @@ export default function MembersPage() {
   const canArchive = can(role, 'memberArchive', 'edit');
   const canImport  = can(role, 'memberImport', 'edit');
 
+  // One page of members (db/069 member_list): each row also carries its
+  // ministries, linked login (login_email / login_role / login_disabled)
+  // and is_helper. The summary cards come from member_counts.
   const [members, setMembers]             = useState([]);
+  const [matchCount, setMatchCount]       = useState(0);
+  const [counts, setCounts]               = useState({ total: 0, active: 0, busy: 0, inactive: 0 });
+  const [page, setPage]                   = useState(1);
+  const [reload, setReload]               = useState(0);
+  const [loadError, setLoadError]         = useState('');
   const [loading, setLoading]             = useState(true);
   const [showModal, setShowModal]         = useState(false);
   const [saving, setSaving]               = useState(false);
@@ -113,9 +126,7 @@ export default function MembersPage() {
   const [filterStatus, setFilterStatus]   = useState("all");
   const [form, setForm]                   = useState(EMPTY_FORM);
   const [showImport, setShowImport]       = useState(false);
-  const [ministriesOf, setMinistriesOf]   = useState({});  // member id → "A, B"
-  // Logins linked to member records (db/014): profile id → profile.
-  const [logins, setLogins]               = useState({});
+  const [importNames, setImportNames]     = useState([]);   // every member's name, for the import's duplicate check
   const [creatingLoginId, setCreatingLoginId] = useState(null);
   const [newLogin, setNewLogin]           = useState(null);   // { name, email, password }
   const [copied, setCopied]               = useState(false);
@@ -125,52 +136,63 @@ export default function MembersPage() {
   const [linkSearch, setLinkSearch]       = useState("");
   const [linkLoading, setLinkLoading]     = useState(false);
   const [linkingId, setLinkingId]         = useState(null);
-  // Attendance helpers (db/041): logins allowed to take attendance.
-  const [helpers, setHelpers]             = useState(new Set());
 
   // ── Data ──────────────────────────────────────────────────────────────────
 
-  async function fetchMembers() {
-    setLoading(true);
-    const { data } = await supabase.from('members').select('*').order('full_name');
-    if (data) setMembers(data);
-    const [{ data: assigned }, { data: ministryList }] = await Promise.all([
-      supabase.from('ministry_assignments').select('member_id, ministry_id'),
-      supabase.from('ministries').select('id, name, is_active'),
-    ]);
-    const nameOf = {};
-    (ministryList || []).forEach((mi) => { if (mi.is_active) nameOf[mi.id] = mi.name; });
-    const byMember = {};
-    (assigned || []).forEach((a) => {
-      if (nameOf[a.ministry_id]) (byMember[a.member_id] ||= []).push(nameOf[a.ministry_id]);
-    });
-    const joined = {};
-    Object.entries(byMember).forEach(([id, names]) => { joined[id] = names.sort().join(', '); });
-    setMinistriesOf(joined);
+  // Reload the shown page and the counts (after a save, archive, link…).
+  const fetchMembers = () => setReload((n) => n + 1);
 
-    const ids = (data || []).map((m) => m.profile_id).filter(Boolean);
-    if (ids.length) {
-      const { data: profiles } = await supabase.from('profiles').select('id, email, full_name, role, disabled').in('id', ids);
-      const map = {};
-      (profiles || []).forEach((p) => { map[p.id] = p; });
-      setLogins(map);
-    }
-    const { data: helperRows } = await supabase.from('attendance_helpers').select('profile_id');
-    setHelpers(new Set((helperRows || []).map((h) => h.profile_id)));
-    setLoading(false);
-  }
+  const branchFilter = branch === 'all' ? null : branch;
+  // Ask the server once typing pauses.
+  const query = useDebounced(search.trim(), 300);
+
+  useEffect(() => {
+    let stale = false;
+    (async () => {
+      const from = (page - 1) * PAGE_SIZE;
+      const { data, count, error } = await supabase
+        .rpc('member_list', { p_church: branchFilter, p_status: filterStatus, p_search: query || null }, { count: 'exact' })
+        .order('full_name')
+        .order('id')
+        .range(from, from + PAGE_SIZE - 1);
+      if (stale) return;
+      if (error) {
+        // Past the last page (the list got shorter): go to page 1.
+        if (page > 1 && error.code === 'PGRST103') { setPage(1); return; }
+        setLoadError(friendlyError(error, 'Could not load the members.'));
+      } else if (page > 1 && !data?.length) {
+        setPage(1);
+        return;
+      } else {
+        setMembers(data || []);
+        setMatchCount(count || 0);
+        setLoadError('');
+      }
+      setLoading(false);
+    })();
+    return () => { stale = true; };
+  }, [branchFilter, filterStatus, query, page, reload]);
+
+  useEffect(() => {
+    let stale = false;
+    supabase.rpc('member_counts', { p_church: branchFilter }).then(({ data, error }) => {
+      if (stale) return;
+      if (error) { console.error(error); return; }
+      const c = data?.[0] || {};
+      setCounts({ total: Number(c.total) || 0, active: Number(c.active) || 0, busy: Number(c.busy) || 0, inactive: Number(c.inactive) || 0 });
+    });
+    return () => { stale = true; };
+  }, [branchFilter, reload]);
 
   // Pastor / Secretary: let a member (with a login) take attendance.
   async function toggleHelper(member) {
     setOpenMenuId(null);
-    const on = !helpers.has(member.profile_id);
+    const on = !member.is_helper;
     if (on && !await confirmDialog(`Make ${member.full_name} an attendance helper? They'll be able to tick attendance and add visitors for this branch's events — nothing else.`)) return;
     const { error } = await supabase.rpc('set_attendance_helper', { p_member: member.id, p_on: on });
     if (error) { alertDialog(/does not exist|schema cache|Could not find/i.test(error.message) ? 'Run db/041_event_attendance.sql first.' : error.message); return; }
-    setHelpers((prev) => { const n = new Set(prev); if (on) n.add(member.profile_id); else n.delete(member.profile_id); return n; });
+    setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, is_helper: on } : m)));
   }
-
-  useEffect(() => { fetchMembers(); }, []);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -207,6 +229,19 @@ export default function MembersPage() {
     setOpenMenuId(openMenuId === memberId ? null : memberId);
   }
 
+  // A member (other than the one being edited) with this name, in that
+  // branch if given. Asks the database for names containing the longest
+  // word, then compares whole names ignoring case and extra spaces.
+  async function findSameName(fullName, church) {
+    const word = fullName.split(' ').sort((a, b) => b.length - a.length)[0];
+    let q = supabase.from('members').select('id, full_name, status, phone, church_id')
+      .ilike('full_name', `%${word.replace(/[\\%_]/g, (c) => '\\' + c)}%`);
+    if (church) q = q.eq('church_id', church);
+    const { data, error } = await q;
+    if (error) console.error(error);
+    return (data || []).find((m) => m.id !== editingMember?.id && sameName(m.full_name, fullName)) || null;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     const fullName = tidyName(form.full_name);
@@ -214,9 +249,7 @@ export default function MembersPage() {
     if (isGlobal && !editingMember && !form.church_id) { alertDialog('Please choose the branch.'); return; }
     // Two people can share a name, so ask rather than refuse (same branch only).
     const targetChurch = editingMember ? editingMember.church_id : (isGlobal ? form.church_id : null);
-    const twin = members.find((m) => m.id !== editingMember?.id && sameName(m.full_name, fullName)
-      && (!targetChurch || m.church_id === targetChurch)
-      && (!editingMember || !sameName(editingMember.full_name, fullName)));
+    const twin = editingMember && sameName(editingMember.full_name, fullName) ? null : await findSameName(fullName, targetChurch);
     if (twin && !await confirmDialog({
       message: `There is already a member named "${twin.full_name}"${twin.status === ARCHIVED ? ' (archived — you can restore them instead)' : ''}${twin.phone ? `, phone ${twin.phone}` : ''}. Is this a different person?`,
       confirmText: editingMember ? 'Yes, save' : 'Yes, add',
@@ -248,7 +281,7 @@ export default function MembersPage() {
 
   async function handleArchive(member, archive) {
     // Archiving switches off a Member login; restoring switches it back on (db/055).
-    const login = logins[member.profile_id];
+    const login = member.login_role ? { role: member.login_role, email: member.login_email, disabled: member.login_disabled } : null;
     const loginNote = archive
       ? (login && login.role === 'member' && !login.disabled ? ` Their login (${login.email}) will be switched off too.`
         : login && login.role !== 'member' ? ` Their ${login.role} login keeps working — only the Admin can switch it off.` : '')
@@ -322,7 +355,12 @@ export default function MembersPage() {
       .select('id, email, full_name, role, disabled')
       .eq('disabled', false)
       .eq('church_id', member.church_id);
-    const taken = new Set(members.map((m) => m.profile_id).filter(Boolean));
+    // Leave out logins already linked to a member record.
+    const ids = (data || []).map((p) => p.id);
+    const { data: linked } = ids.length
+      ? await supabase.from('members').select('profile_id').in('profile_id', ids)
+      : { data: [] };
+    const taken = new Set((linked || []).map((m) => m.profile_id));
     setCandidates((data || []).filter((p) => !taken.has(p.id)));
     setLinkLoading(false);
   }
@@ -361,33 +399,22 @@ export default function MembersPage() {
     await fetchMembers();
   }
 
-  // ── Filtered list ─────────────────────────────────────────────────────────
+  // The import checks names against every member, not just this page.
+  async function openImport() {
+    const { data, error } = await fetchAll(() => supabase.from('members').select('full_name').order('id'));
+    if (error) { alertDialog('Could not open the import: ' + friendlyError(error)); return; }
+    setImportNames(data);
+    setShowImport(true);
+  }
+
+  // Search, status filter or branch changed: back to page 1.
+  function changeSearch(value)  { setSearch(value); setPage(1); }
+  function changeStatus(value)  { setFilterStatus(value); setPage(1); }
+  function changeBranch(value)  { setBranch(value); setPage(1); }
 
   // Someone with a login: their login level (set by the Admin) is their
   // role. The record's own Role is only for people without a login.
-  const roleOf = (m) => logins[m.profile_id]?.role || m.role;
-
-  const inBranch = members.filter((m) => branch === 'all' || m.church_id === branch);
-
-  const q = search.toLowerCase().trim();
-  // Phone numbers match on their digits, so "0917 123" finds "09171234567".
-  const qDigits = q.replace(/\D/g, '');
-  const filtered = inBranch.filter((m) => {
-    const matchSearch = !q
-      || [m.full_name, ministriesOf[m.id], roleOf(m), m.email].some((v) => v?.toLowerCase().includes(q))
-      || (qDigits.length >= 3 && (m.phone || '').replace(/\D/g, '').includes(qDigits));
-    const matchStatus = filterStatus === "all" ? m.status !== ARCHIVED : m.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
-
-  // ── Summary counts ────────────────────────────────────────────────────────
-
-  const counts = {
-    total:    inBranch.filter((m) => m.status !== ARCHIVED).length,
-    active:   inBranch.filter((m) => m.status === "active").length,
-    inactive: inBranch.filter((m) => m.status === "inactive").length,
-    busy:     inBranch.filter((m) => m.status === "busy").length,
-  };
+  const roleOf = (m) => m.login_role || m.role;
 
   // ── Active member for dropdown ────────────────────────────────────────────
 
@@ -395,8 +422,17 @@ export default function MembersPage() {
 
   // ── UI ────────────────────────────────────────────────────────────────────
 
-  // Long lists are shown 15 at a time (components/Pagination).
-  const pg = usePaged(filtered, 15, `${search}|${filterStatus}|${branch}`);
+  // Paging for components/Pagination; the rows are already this page's.
+  const totalPages = Math.max(1, Math.ceil(matchCount / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pg = {
+    page: currentPage,
+    totalPages,
+    total: matchCount,
+    from: matchCount ? (currentPage - 1) * PAGE_SIZE + 1 : 0,
+    to: Math.min(currentPage * PAGE_SIZE, matchCount),
+    setPage,
+  };
 
   return (
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.pageBg} transition-colors duration-200`}>
@@ -418,7 +454,7 @@ export default function MembersPage() {
           </button>
           {canImport && (
             <button
-              onClick={() => setShowImport(true)}
+              onClick={openImport}
               className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm border transition-all shrink-0 ${t.iconBtn}`}
             >
               <FileSpreadsheet size={16} />
@@ -460,13 +496,13 @@ export default function MembersPage() {
             type="text"
             placeholder="Search by name, phone, email, role, or ministry..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => changeSearch(e.target.value)}
             className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl py-2 pl-9 pr-4 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
           />
         </div>
         <div className="flex gap-2 flex-wrap">
           {isGlobal && churches.length > 1 && (
-            <select value={branch} onChange={(e) => setBranch(e.target.value)} aria-label="Branch"
+            <select value={branch} onChange={(e) => changeBranch(e.target.value)} aria-label="Branch"
               className={`${t.inputBg} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs font-bold ${t.inputText} focus:outline-none focus:border-blue-500`}>
               <option value="all">All branches</option>
               {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -475,7 +511,7 @@ export default function MembersPage() {
           {["all", "active", "busy", "inactive", ARCHIVED].map((s) => (
             <button
               key={s}
-              onClick={() => setFilterStatus(s)}
+              onClick={() => changeStatus(s)}
               className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${
                 filterStatus === s
                   ? "bg-blue-600 text-white"
@@ -510,17 +546,17 @@ export default function MembersPage() {
                     Loading congregation data...
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : loadError || matchCount === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center py-14">
                     <Users className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
                     <p className={`${t.textSub} text-sm`}>
-                      {search || filterStatus !== "all" ? "No members match your search." : "No members yet. Add one!"}
+                      {loadError || (search || filterStatus !== "all" ? "No members match your search." : "No members yet. Add one!")}
                     </p>
                   </td>
                 </tr>
               ) : (
-                pg.items.map((member) => (
+                members.map((member) => (
                   <tr key={member.id} className={`${t.rowHover} transition-colors`}>
                     {/* Name + Avatar */}
                     <td className="px-6 py-4">
@@ -536,18 +572,18 @@ export default function MembersPage() {
                     </td>
                     <td className="px-6 py-4">
                       {roleOf(member)
-                        ? <span title={logins[member.profile_id]?.role ? "Their login level — the Admin changes it on the Users page" : undefined}
+                        ? <span title={member.login_role ? "Their login level — the Admin changes it on the Users page" : undefined}
                             className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border capitalize ${levelBadge(roleOf(member), dark)}`}>{roleOf(member)}</span>
                         : <span className={`text-sm ${t.textMuted}`}>—</span>}
                     </td>
-                    <td className="px-6 py-4 text-blue-400 text-xs font-medium">{ministriesOf[member.id] || '—'}</td>
+                    <td className="px-6 py-4 text-blue-400 text-xs font-medium">{member.ministries || '—'}</td>
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{member.phone || '—'}</td>
                     <td className="px-6 py-4">
                       {member.profile_id ? (
                         <span className={`text-xs ${t.textSub} break-all`}>
-                          {logins[member.profile_id]?.email || 'Linked'}
-                          {logins[member.profile_id]?.disabled && <span className="ml-1 text-rose-400 font-bold">(disabled)</span>}
-                          {helpers.has(member.profile_id) && (
+                          {member.login_email || 'Linked'}
+                          {member.login_disabled && <span className="ml-1 text-rose-400 font-bold">(disabled)</span>}
+                          {member.is_helper && (
                             <span className="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-blue-400 bg-blue-500/10 whitespace-nowrap">
                               <ClipboardCheck size={10} /> Attendance helper
                             </span>
@@ -598,9 +634,9 @@ export default function MembersPage() {
         </div>
 
         {/* Pages */}
-        {!loading && filtered.length > 0 && (
+        {!loading && !loadError && matchCount > 0 && (
           <div className={`px-6 pb-4 border-t ${t.divider}`}>
-            <Pagination {...pg} label={`members${filtered.length < counts.total ? ` (of ${counts.total})` : ''}`} />
+            <Pagination {...pg} label={`members${matchCount < counts.total ? ` (of ${counts.total})` : ''}`} />
           </div>
         )}
       </div>
@@ -636,7 +672,7 @@ export default function MembersPage() {
                 onClick={() => toggleHelper(activeMenuMember)}
                 className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${t.textSub} ${t.menuHover} transition-colors`}
               >
-                <ClipboardCheck size={13} className="shrink-0" /> {helpers.has(activeMenuMember.profile_id) ? 'Remove helper' : 'Attendance helper'}
+                <ClipboardCheck size={13} className="shrink-0" /> {activeMenuMember.is_helper ? 'Remove helper' : 'Attendance helper'}
               </button>
             )}
             {canArchive && (activeMenuMember.status === ARCHIVED ? (
@@ -662,7 +698,7 @@ export default function MembersPage() {
       {showImport && (
         <MemberImport
           t={t}
-          existingMembers={members}
+          existingMembers={importNames}
           onClose={() => setShowImport(false)}
           onImported={fetchMembers}
         />
@@ -794,9 +830,9 @@ export default function MembersPage() {
               </Field>
 
               <Field label="Role" t={t}>
-                {editingMember && logins[editingMember.profile_id]?.role ? (
+                {editingMember?.login_role ? (
                   <>
-                    <p className={`${inputStyle(t)} capitalize opacity-70`}>{logins[editingMember.profile_id].role}</p>
+                    <p className={`${inputStyle(t)} capitalize opacity-70`}>{editingMember.login_role}</p>
                     <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>From their login. The Admin changes it on the Users page.</p>
                   </>
                 ) : (

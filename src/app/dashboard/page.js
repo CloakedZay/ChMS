@@ -26,7 +26,6 @@ import { useEventNotices } from "@/app/lib/useEventNotices";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
 import { collapseSeries } from "@/app/lib/eventSeries";
-import { countsInTotals } from "@/app/lib/financeTotals";
 import Link from "next/link";
 
 import { baseTheme } from '@/app/lib/theme';
@@ -112,8 +111,12 @@ export default function DashboardPage() {
         const { count: mCount } = await supabase.from('member_directory').select('*', { count: 'exact', head: true });
         const { count: aCount } = await supabase.from('member_directory').select('*', { count: 'exact', head: true }).eq('status', 'active');
         const { data: latestMembers } = await supabase.from('member_directory').select('full_name, status, ministry').order('id', { ascending: false }).limit(3);
-        const { data: allTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status').order('date', { ascending: false });
-        const trans = allTrans?.filter(countsInTotals);
+        // Total funds from the database (voided entries left out, db/069), so it
+        // stays right past 1,000 entries; plus the 5 latest entries that count.
+        const { data: fundRows } = await supabase.rpc('finance_summary', { p_church: null });
+        const { data: latestTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status')
+          .or('status.is.null,status.neq.Void')
+          .order('date', { ascending: false, nullsFirst: false }).order('date_recorded', { ascending: false }).limit(5);
         // Upcoming = approved, from today (Philippine date) on. Planning and
         // pending events aren't happening yet. A weekly event counts once,
         // at its next date (db/049).
@@ -137,12 +140,8 @@ export default function DashboardPage() {
         setUpcomingCount(upcoming.length);
         setRecentMembers(latestMembers || []);
 
-        if (trans) {
-          const income  = trans.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
-          const expense = trans.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
-          setTotalFunds(income - expense);
-          setRecentTransactions(trans.slice(0, 5));
-        }
+        setTotalFunds((fundRows || []).reduce((a, r) => a + (Number(r.income) || 0) - (Number(r.expense) || 0), 0));
+        setRecentTransactions(latestTrans || []);
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
       } finally {

@@ -15,6 +15,7 @@ import BranchLabel, { branchLabelText } from "@/app/components/BranchLabel";
 import { phToday } from "@/app/lib/phDate";
 import { alertDialog } from "@/app/lib/dialog";
 import { countsInTotals } from "@/app/lib/financeTotals";
+import { fetchAll } from "@/app/lib/fetchAll";
 
 import { friendlyError } from '@/app/lib/errors';
 import { peso, pesoPdf } from "@/app/lib/format";
@@ -131,10 +132,11 @@ export default function ReportsPage() {
 
         // ── Transactions (only for levels that can see finance) ──
         const { data: allTrans } = showFinance
-          ? await supabase
+          ? await fetchAll(() => supabase
               .from('transactions')
               .select('amount, type, date_recorded, status')
               .order('date_recorded', { ascending: false })
+              .order('id'))
           : { data: [] };
         // Voided entries stay in the ledger but never count in a report.
         const trans = allTrans?.filter(countsInTotals);

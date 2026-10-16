@@ -15,7 +15,7 @@ import BranchLabel from "@/app/components/BranchLabel";
 import { phToday } from "@/app/lib/phDate";
 import DatePicker from "@/app/components/DatePicker";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
-import { countsInTotals } from "@/app/lib/financeTotals";
+import { useDebounced } from "@/app/lib/useDebounced";
 
 import { friendlyError } from '@/app/lib/errors';
 import { peso } from "@/app/lib/format";
@@ -89,7 +89,13 @@ function Finance() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
 
+  // One page of the ledger and how many entries match (db/069); the totals
+  // come from the database too, so they stay right however long the ledger.
   const [transactions, setTransactions] = useState([]);
+  const [matchCount, setMatchCount]     = useState(0);
+  const [fundRows, setFundRows]         = useState([]);   // { fund, income, expense }
+  const [loadError, setLoadError]       = useState('');
+  const [reload, setReload]             = useState(0);
   const [churches, setChurches]         = useState([]);
   const [profile, setProfile]           = useState(null);
   const [selectedBranch, setSelectedBranch] = useState('all');
@@ -135,31 +141,75 @@ function Finance() {
     if (data) setChurches(data);
   }
 
-  async function fetchTransactions() {
-    setLoading(true);
-    // Newest by the date shown in the list; same-day entries in the order
-    // they were recorded.
-    const { data, error } = await supabase.from('transactions').select('*')
-      .order('date', { ascending: false, nullsFirst: false })
-      .order('date_recorded', { ascending: false });
-    if (!error) setTransactions(data || []);
-    const { data: reqs } = await supabase.from('expense_requests').select('id, transaction_id, change_transaction_id')
-      .or('transaction_id.not.is.null,change_transaction_id.not.is.null');
-    const links = {};
-    (reqs || []).forEach((r) => {
-      if (r.transaction_id) links[r.transaction_id] = r.id;
-      if (r.change_transaction_id) links[r.change_transaction_id] = r.id;
+  // Reload the shown page and the totals (after a save, void or release).
+  const fetchTransactions = () => setReload((n) => n + 1);
+
+  // The Pastor's branch picker; everyone else sees their own branch (row rules).
+  const branchFilter = isGlobal && selectedBranch !== 'all' ? selectedBranch : null;
+  // Ask the server once typing pauses.
+  const query = useDebounced(search.trim(), 300);
+
+  // One page of entries, newest by the date shown in the list; same-day
+  // entries in the order they were recorded.
+  useEffect(() => {
+    if (!profile) return;
+    let stale = false;
+    (async () => {
+      const from = (page - 1) * PAGE_SIZE;
+      const { data, count, error } = await supabase
+        .rpc('ledger_entries', { p_church: branchFilter, p_type: filterType === 'all' ? null : filterType, p_search: query || null }, { count: 'exact' })
+        .order('date', { ascending: false, nullsFirst: false })
+        .order('date_recorded', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+      if (stale) return;
+      if (error) {
+        // Past the last page (the list got shorter): go to page 1.
+        if (page > 1 && error.code === 'PGRST103') { setPage(1); return; }
+        setLoadError(friendlyError(error, 'Could not load the ledger.'));
+        setLoading(false);
+        return;
+      }
+      if (page > 1 && !data?.length) { setPage(1); return; }
+      // Entries a spending request made (release, returned change) are locked (db/054).
+      const ids = (data || []).map((tx) => tx.id);
+      const { data: reqs } = ids.length
+        ? await supabase.from('expense_requests').select('id, transaction_id, change_transaction_id')
+            .or(`transaction_id.in.(${ids.join(',')}),change_transaction_id.in.(${ids.join(',')})`)
+        : { data: [] };
+      if (stale) return;
+      const links = {};
+      (reqs || []).forEach((r) => {
+        if (r.transaction_id) links[r.transaction_id] = r.id;
+        if (r.change_transaction_id) links[r.change_transaction_id] = r.id;
+      });
+      setFromRequest(links);
+      setTransactions(data || []);
+      setMatchCount(count || 0);
+      setLoadError('');
+      setLoading(false);
+    })();
+    return () => { stale = true; };
+  }, [profile, branchFilter, filterType, query, page, reload]);
+
+  // Totals per fund, without voided entries (db/069 finance_summary).
+  useEffect(() => {
+    if (!profile) return;
+    let stale = false;
+    supabase.rpc('finance_summary', { p_church: branchFilter }).then(({ data, error }) => {
+      if (stale) return;
+      if (error) console.error(error);
+      setFundRows(data || []);
     });
-    setFromRequest(links);
-    setLoading(false);
-  }
+    return () => { stale = true; };
+  }, [profile, branchFilter, reload]);
 
   useEffect(() => {
     async function init() {
       const p = await fetchProfile();
+      if (!p) { setLoading(false); return; }
       await fetchChurches();
       if (can(p?.role, 'finance', 'edit')) await fetchMemberNames();
-      await fetchTransactions();
       if (p && !GLOBAL_ROLES.includes(p.role)) {
         setForm((f) => ({ ...f, church_id: p.church_id || '' }));
       }
@@ -269,36 +319,25 @@ function Finance() {
     const { data, error } = await supabase.from('transactions').update({ status: VOID }).eq('id', tx.id).select('id');
     if (error) alertDialog('Error voiding: ' + friendlyError(error));
     else if (!data?.length) alertDialog('You don\'t have permission to void this entry.');
-    else setTransactions((prev) => prev.map((t) => t.id === tx.id ? { ...t, status: VOID } : t));
+    else fetchTransactions();   // the totals change too
   }
 
   const churchName = (id) => churches.find((c) => c.id === id)?.name;
 
-  const branchScoped = isGlobal && selectedBranch !== 'all' ? transactions.filter((t) => t.church_id === selectedBranch) : transactions;
-  const counted = branchScoped.filter(countsInTotals);
-
-  const totalIncome  = counted.filter(t => t.type === 'income').reduce((a, t) => a + (Number(t.amount) || 0), 0);
-  const totalExpense = counted.filter(t => t.type === 'expense').reduce((a, t) => a + (Number(t.amount) || 0), 0);
+  const totalIncome  = fundRows.reduce((a, r) => a + (Number(r.income) || 0), 0);
+  const totalExpense = fundRows.reduce((a, r) => a + (Number(r.expense) || 0), 0);
   const totalBalance = totalIncome - totalExpense;
 
   // What's left in each fund: money in minus money spent from it.
   const fundTotals = FUNDS.reduce((acc, fund) => {
-    const sum = (type) => counted.filter(t => t.fund === fund && t.type === type).reduce((s, t) => s + (Number(t.amount) || 0), 0);
-    const income = sum('income'), expense = sum('expense');
+    const row = fundRows.find((r) => r.fund === fund);
+    const income = Number(row?.income) || 0, expense = Number(row?.expense) || 0;
     acc[fund] = { income, expense, left: income - expense };
     return acc;
   }, {});
 
-  const filtered = branchScoped.filter((tx) => {
-    const term = search.toLowerCase();
-    const matchSearch = [tx.category, tx.member, tx.fund, tx.notes].some((v) => v?.toLowerCase().includes(term));
-    const matchType = filterType === "all" || tx.type === filterType;
-    return matchSearch && matchType;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(matchCount / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const showMemberField = !NO_MEMBER_CATEGORIES.includes(form.category);
 
@@ -438,13 +477,13 @@ function Finance() {
             <tbody className={`divide-y ${t.divider}`}>
               {loading ? (
                 <tr><td colSpan={isGlobal ? 8 : 7} className={`text-center py-14 ${t.textMuted} text-sm`}>Loading ledger...</td></tr>
-              ) : filtered.length === 0 ? (
+              ) : loadError || matchCount === 0 ? (
                 <tr><td colSpan={isGlobal ? 8 : 7} className="text-center py-14">
                   <History className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
-                  <p className={`${t.textMuted} text-sm`}>{search || filterType !== "all" ? "No entries match your search." : "No transactions yet. Add one!"}</p>
+                  <p className={`${t.textMuted} text-sm`}>{loadError || (search || filterType !== "all" ? "No entries match your search." : "No transactions yet. Add one!")}</p>
                 </td></tr>
               ) : (
-                paginated.map((tx) => (
+                transactions.map((tx) => (
                   <tr key={tx.id} className={`${t.rowHover} transition-colors`}>
                     <td className={`px-6 py-4 ${t.textSub} text-sm`}>{tx.date ? new Date(tx.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</td>
                     <td className={`px-6 py-4 font-semibold ${t.textPrimary} text-sm`}>{tx.category}</td>
@@ -472,12 +511,12 @@ function Finance() {
             </tbody>
           </table>
         </div>
-        {!loading && filtered.length > 0 && (
+        {!loading && !loadError && matchCount > 0 && (
           <div className={`px-6 py-3 border-t ${t.divider} flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3`}>
             <span className={`text-[10px] ${t.textMuted} uppercase tracking-widest`}>
-              Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} entries
+              Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, matchCount)} of {matchCount} entries
             </span>
-            {filtered.length > PAGE_SIZE && (
+            {matchCount > PAGE_SIZE && (
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${t.filterInactive}`}>Prev</button>

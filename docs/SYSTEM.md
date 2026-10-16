@@ -91,12 +91,13 @@ erDiagram
 | Assistant | `chatbot_documents`, `knowledge_chunks`, `assistant_chats`, `assistant_messages`, `assistant_usage` |
 | Personal and system | `devotional_journal`, `bible_verses`, `activity_log`, `page_visits` |
 
-**Views** give limited columns to people who may not read a whole table: `member_directory` (names, ministries), `member_names` (names only, for the Admin), `chat_contacts` (who you can message).
+**Views** give limited columns to people who may not read a whole table: `member_directory` (names, ministries), `member_names` (names only, for the Admin), `chat_contacts` (who you can message), `member_rows` (members with their ministries and login, for the Members page; follows the `members` rules).
 
 **Design choices**
 - **Never deleted, only closed:** members are *archived*, finance entries *voided*, events *cancelled* — the record stays traceable.
 - **Some names are stored as text on purpose:** the payee on a transaction (can be a store, not a member), and the requester / approver names on spending requests (Finance can't read logins, but must see who asked).
 - **Dates follow the Philippines:** `ph_today()` and `Asia/Manila` everywhere a "today" matters.
+- **Long lists are paged by the database:** the ledger and the members list ask for one page at a time (`ledger_entries`, `member_list` with the page's search and filters), and their totals and counts are worked out in the database (`finance_summary`, `member_counts`, db/069). Supabase returns at most 1,000 rows per request, so adding up rows in the browser would go wrong on a large ledger. These run as the signed-in person, so the row rules still apply. The staff dashboard's total funds use `finance_summary` too; lists that need every row (Reports, the member import's duplicate check) read them 1,000 at a time with `lib/fetchAll.js`.
 
 ## 4. User levels and what each can do
 
@@ -176,5 +177,6 @@ They check the app's own rules in `src/app/lib/` without a database or browser:
 | `tests/eventSeries.test.mjs` | Weekly dates (across months, years, a leap day; at most 52), one card per series on its next date that's still on, notices grouped per series, the "Every Sunday · until …" label |
 | `tests/dates.test.mjs` | Today's date in Manila (already the next day while UTC is still on the day before), event times as `6:00 PM` |
 | `tests/verseOfDay.test.mjs` | One verse all day, changing at local midnight |
+| `tests/fetchAll.test.mjs` | Reading every row past Supabase's 1,000-rows-per-request limit, and stopping on an error |
 
 The database rules (`db/*.sql`) are checked by hand per level in the app, since they need a live Supabase project.
