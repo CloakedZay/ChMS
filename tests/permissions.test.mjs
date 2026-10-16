@@ -64,6 +64,13 @@ test('the journal is private: everyone has own access, nobody views others', () 
   }
 });
 
+test('the Admin manages assistant documents like the Pastor (db/070)', () => {
+  assert.equal(can('admin', 'aiDocuments', 'edit'), true);
+  assert.equal(can('pastor', 'aiDocuments', 'edit'), true);
+  assert.equal(can('secretary', 'aiDocuments'), false);
+  assert.equal(can('member', 'aiDocuments'), false);
+});
+
 test('only the Admin manages logins', () => {
   for (const role of ROLES) assert.equal(can(role, 'users', 'edit'), role === 'admin', role);
 });

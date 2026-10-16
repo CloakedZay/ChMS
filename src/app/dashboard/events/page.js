@@ -88,7 +88,8 @@ export default function EventsPage() {
   const [showModal, setShowModal]   = useState(false);
   const [saving, setSaving]         = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
-  const [search, setSearch]         = useState("");
+  // ?q= (from the dashboard search) opens with the search filled in.
+  const [search, setSearch]         = useState(() => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') || '' : ''));
   // ?filter=pending (from the dashboard bell) opens on that tab.
   const [activeFilter, setActiveFilter] = useState(() => {
     const f = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('filter') : null;

@@ -114,7 +114,7 @@ erDiagram
 | Training | View | Manage, review | Manage (general + own ministry), review | — | — | Take |
 | Announcements | View | Post (all branches) | Post (own branch) | View | View | View |
 | Bible verses | View | Add, **delete** | Add | — | — | Verse of the day |
-| Assistant | Ask | Ask, documents | Ask, documents | Ask | Ask | Ask (daily limit) |
+| Assistant | Ask, documents (all branches) | Ask, documents (all branches) | Ask, documents (own branch) | Ask | Ask | Ask (daily limit) |
 | Activity | Change log, screen time | Screen time | — | — | — | — |
 | Messages, journal, profile | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
@@ -125,7 +125,7 @@ Branch scope: the **Admin and Pastor** see all branches (with a branch picker); 
 | Area | How it's handled |
 |---|---|
 | **Authorization** | Row level security on every table; 150+ rules scoped by level and branch (`get_my_role()`, `get_my_church_id()`). Multi-step actions run in database functions that check the caller first (e.g. `pastor_review_events`, `set_attendance`). Triggers block what rules can't express (voided entries locked, released-request entries locked, only the Admin changes levels). |
-| **Authentication** | Supabase Auth: hashed passwords, email or Google sign-in, a temporary password that must be changed on first sign-in, logins the Admin can disable (a disabled login loses all access at once), archiving a member switches off their member login. **Idle logout**: after 30 minutes with no mouse, key, touch or scroll in any FaithSync tab, the person is signed out and the login page says why (`lib/IdleLogout.js`). |
+| **Authentication** | Supabase Auth: hashed passwords, email or Google sign-in, a temporary password that must be changed on first sign-in, logins the Admin can disable (a disabled login loses all access at once), archiving a member switches off their member login. **Password change**: the current password, then (with `NEXT_PUBLIC_PASSWORD_EMAIL_CODE=on` and email sending set up) a 6-digit code emailed through Supabase re-authentication; not on the first sign-in, and not for logins without a real email (`change-password/page.js`). **Idle logout**: after 30 minutes with no mouse, key, touch or scroll in any FaithSync tab, the person is signed out and the login page says why (`lib/IdleLogout.js`). |
 | **Input** | All database access goes through Supabase's API with parameters (no SQL is built from text), so SQL injection isn't possible. The database checks values itself (allowed statuses, amounts above zero, lengths). React escapes all text it shows; no raw HTML is inserted. |
 | **Server routes** | Need the signed-in user's token (so they can't be triggered from another site), check the caller's level, and read data as the caller so the database rules still apply. The service key never reaches the browser. |
 | **Browser headers** | Set on every page and API reply in `next.config.mjs`: no framing by other sites (`frame-ancestors 'none'`, `X-Frame-Options: DENY`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, camera / microphone / location off (`Permissions-Policy`), HTTPS kept for a year once served over HTTPS (`Strict-Transport-Security`), no `X-Powered-By`. |

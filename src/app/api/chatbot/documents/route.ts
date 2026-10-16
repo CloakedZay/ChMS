@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractText } from "@/app/lib/extractText";
 import { indexDocument } from "@/app/lib/knowledge";
-import { getCaller, resolveChurchId, CONTENT_ROLES, AI_DOCUMENT_VIEWERS } from "@/app/lib/apiAuth";
+import { getCaller, resolveChurchId, AI_DOCUMENT_EDITORS, AI_DOCUMENT_SHARERS, AI_DOCUMENT_VIEWERS } from "@/app/lib/apiAuth";
 
 import { friendlyError } from "@/app/lib/errors";
 export const runtime = "nodejs";
@@ -11,8 +11,7 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Documents with no branch are shared by every branch (db/045); only the
-// Pastor may add, move or change them.
-const SHARE_ROLE = "pastor";
+// Pastor and the Admin (db/070) may add, move or change them.
 const needsSetup = (err: { message: string }) => /null value in column "(church_id|doc_type)"/i.test(err.message)
   ? "This needs db/045_shared_documents.sql. Ask the administrator to run it."
   : friendlyError(err);
@@ -48,7 +47,7 @@ export async function GET(req: NextRequest) {
 // Upload a file, extract its text, save it as a chatbot_documents row
 export async function POST(req: NextRequest) {
   try {
-    const caller = await getCaller(req, CONTENT_ROLES);
+    const caller = await getCaller(req, AI_DOCUMENT_EDITORS);
     if (caller instanceof NextResponse) return caller;
 
     const formData = await req.formData();
@@ -57,8 +56,8 @@ export async function POST(req: NextRequest) {
     // "Staff only" documents (db/039) are never used to answer Members.
     const staffOnly = formData.get("staff_only")?.toString() === "true";
     const allBranches = formData.get("all_branches")?.toString() === "true";
-    if (allBranches && caller.role !== SHARE_ROLE) {
-      return NextResponse.json({ error: "Only the Pastor can add documents for all branches." }, { status: 403 });
+    if (allBranches && !AI_DOCUMENT_SHARERS.includes(caller.role)) {
+      return NextResponse.json({ error: "Only the Pastor or the Admin can add documents for all branches." }, { status: 403 });
     }
     const churchId = allBranches ? null : resolveChurchId(caller, formData.get("church_id")?.toString());
 
@@ -123,7 +122,7 @@ export async function POST(req: NextRequest) {
 // or which branches use it (all_branches, db/045: back to church_id when
 // false)
 export async function PATCH(req: NextRequest) {
-  const caller = await getCaller(req, CONTENT_ROLES);
+  const caller = await getCaller(req, AI_DOCUMENT_EDITORS);
   if (caller instanceof NextResponse) return caller;
 
   const { id, is_active, staff_only, all_branches, church_id } = await req.json();
@@ -131,8 +130,8 @@ export async function PATCH(req: NextRequest) {
   if (typeof is_active === "boolean") changes.is_active = is_active;
   if (typeof staff_only === "boolean") changes.staff_only = staff_only;
   if (typeof all_branches === "boolean") {
-    if (caller.role !== SHARE_ROLE) {
-      return NextResponse.json({ error: "Only the Pastor can choose which branches use a document." }, { status: 403 });
+    if (!AI_DOCUMENT_SHARERS.includes(caller.role)) {
+      return NextResponse.json({ error: "Only the Pastor or the Admin can choose which branches use a document." }, { status: 403 });
     }
     const branch = all_branches ? null : resolveChurchId(caller, church_id);
     if (!all_branches && !branch) return NextResponse.json({ error: "Missing church_id" }, { status: 400 });
@@ -161,7 +160,7 @@ export async function PATCH(req: NextRequest) {
 
 // Delete a document
 export async function DELETE(req: NextRequest) {
-  const caller = await getCaller(req, CONTENT_ROLES);
+  const caller = await getCaller(req, AI_DOCUMENT_EDITORS);
   if (caller instanceof NextResponse) return caller;
 
   const id = req.nextUrl.searchParams.get("id");

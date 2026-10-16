@@ -3,14 +3,15 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import {
-  Users, Bell, Search, TrendingUp, UserCheck,
+  Users, Bell, TrendingUp, UserCheck,
   CalendarDays, HandCoins, ChevronRight,
-  ArrowUpRight, X,
+  ArrowUpRight,
   Zap, Sun, Moon, Quote
 } from "lucide-react";
 
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
+import GlobalSearch from "@/app/components/GlobalSearch";
 import { can } from "@/app/lib/permissions";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import BranchLabel from "@/app/components/BranchLabel";
@@ -87,7 +88,6 @@ export default function DashboardPage() {
   const t = T(dark);
 
   const [loading, setLoading]           = useState(true);
-  const [search, setSearch]             = useState("");
   const [showNotifs, setShowNotifs]     = useState(false);
   const notifRef                        = useRef(null);
 
@@ -208,16 +208,6 @@ export default function DashboardPage() {
   // branch. (The old shared notifications feed is gone, db/067.)
   const showReminder   = followUp.count > 0 && !followUp.snoozed;
   const bellCount      = (showReminder ? 1 : 0) + (eventNotices.pending.length ? 1 : 0) + eventNotices.reviews.length;
-  const q              = search.toLowerCase().trim();
-
-  const filteredEvents = upcomingEvents.filter(ev =>
-    !q || ev.title?.toLowerCase().includes(q) || ev.ministry?.toLowerCase().includes(q) || ev.status?.toLowerCase().includes(q)
-  );
-
-  const filteredTransactions = recentTransactions.filter(tx =>
-    !q || tx.category?.toLowerCase().includes(q) || tx.fund?.toLowerCase().includes(q) || tx.member?.toLowerCase().includes(q) || tx.type?.toLowerCase().includes(q)
-  );
-
   const activityFeed = [
     ...recentTransactions.slice(0, 3).map((t) => ({
       type: "finance",
@@ -234,7 +224,7 @@ export default function DashboardPage() {
       text: `${e.title} — ${e.status}`,
       time: e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : "—",
     })),
-  ].filter(a => !q || a.text.toLowerCase().includes(q) || a.type.toLowerCase().includes(q)).slice(0, 6);
+  ].slice(0, 6);
 
   const STATS = [
     { label: "Active Members",    value: loading ? "..." : memberCount.toString(),             sub: `${activeMembers} active`,     icon: Users,      color: A(dark, "blue"),   trend: "up"                        },
@@ -265,22 +255,8 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Search */}
-          <div className="relative flex-1 sm:flex-none">
-            <Search className={`absolute left-3 top-2.5 w-4 h-4 ${t.textSub}`} />
-            <input
-              type="text"
-              placeholder="Search events, funds, members..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className={`${t.inputBg} border ${t.inputBorder} rounded-full py-2 pl-9 pr-9 text-sm ${t.inputText} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 w-full sm:w-64 transition-colors`}
-            />
-            {search && (
-              <button aria-label="Clear search" onClick={() => setSearch("")} className={`absolute right-3 top-2.5 ${t.textSub} hover:text-slate-300 transition-colors`}>
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          {/* Search: pages, members, events, finance, announcements (components/GlobalSearch) */}
+          <GlobalSearch role={role} t={t} />
 
           {/* Theme toggle */}
           <button
@@ -393,20 +369,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Search banner */}
-      {q && (
-        <div className={`mb-6 flex items-center gap-2 text-sm ${t.textSub} ${t.cardBg} border ${t.cardBorder} rounded-xl px-4 py-2.5`}>
-          <Search className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-          <span>
-            Showing results for <span className={`${t.textPrimary} font-bold`}>&ldquo;{search}&rdquo;</span>
-            {" "}— {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}, {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? "s" : ""}, {activityFeed.length} activit{activityFeed.length !== 1 ? "ies" : "y"}
-          </span>
-          <button aria-label="Clear search" onClick={() => setSearch("")} className={`ml-auto ${t.textMuted} hover:text-slate-300 transition-colors`}>
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
       {/* ── OVERVIEW ── */}
       <div className="space-y-8">
         {/* Left: announcements, reminders, verse, stats and lists; right: a sidebar */}
@@ -464,7 +426,7 @@ export default function DashboardPage() {
           <div className={`${card} p-6`}>
             <div className={`flex items-center justify-between mb-5 border-b ${t.divider} pb-3`}>
               <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>
-                Next Schedule {q && <span className="ml-2 text-blue-400">· filtered</span>}
+                Next Schedule
               </h3>
               <a href="/dashboard/events" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
                 View all <ChevronRight className="w-3 h-3" />
@@ -472,14 +434,14 @@ export default function DashboardPage() {
             </div>
             {loading ? (
               <p className={`${t.textMuted} text-sm text-center py-8`}>Syncing...</p>
-            ) : filteredEvents.length === 0 ? (
+            ) : upcomingEvents.length === 0 ? (
               <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
                 <CalendarDays className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
-                <p className={`text-xs ${t.textMuted}`}>{q ? `No events matching "${search}"` : "No upcoming events found."}</p>
+                <p className={`text-xs ${t.textMuted}`}>No upcoming events found.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredEvents.map((ev) => (
+                {upcomingEvents.map((ev) => (
                   <div key={ev.id} className={`flex items-start justify-between gap-3 p-3 rounded-2xl ${t.innerCard} ${t.hoverRow} transition-colors`}>
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{ev.title}</p>
@@ -503,7 +465,7 @@ export default function DashboardPage() {
           <div className={`${card} p-6`}>
             <div className={`mb-5 border-b ${t.divider} pb-3`}>
               <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>
-                Activity Log {q && <span className="ml-2 text-blue-400">· filtered</span>}
+                Activity Log
               </h3>
             </div>
             {loading ? (
@@ -511,7 +473,7 @@ export default function DashboardPage() {
             ) : activityFeed.length === 0 ? (
               <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
                 <TrendingUp className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
-                <p className={`text-xs ${t.textMuted}`}>{q ? `No activity matching "${search}"` : "No recent activities logged."}</p>
+                <p className={`text-xs ${t.textMuted}`}>No recent activities logged.</p>
               </div>
             ) : (
               <div className="space-y-4">

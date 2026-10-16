@@ -16,8 +16,20 @@ import { friendlyError } from '@/app/lib/errors';
 // dashboard. Anyone else can use it to change their password too; they
 // confirm their current password first, unless they've never had one
 // (Google-only sign-in).
+//
+// Second check (NEXT_PUBLIC_PASSWORD_EMAIL_CODE=on): a 6-digit code is
+// emailed (Supabase reauthenticate) and must be typed before the password
+// changes. Not on the first sign-in (the temporary password was handed over
+// in person), and not for made-up usernames (@members.faithsync.app), which
+// can't receive email; those keep the current-password check. It is a
+// setting rather than "skip it if the email fails", so nobody can get
+// around it by making the email fail. Needs email sending (SMTP) set up in
+// Supabase first: docs/DEPLOYMENT.md.
 
 const MIN_LENGTH = 8;
+const EMAIL_CODE_ON = process.env.NEXT_PUBLIC_PASSWORD_EMAIL_CODE === 'on';
+const NO_EMAIL_DOMAIN = '@members.faithsync.app';   // api/members/create-login
+const RESEND_SECONDS = 60;
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -31,6 +43,9 @@ export default function ChangePasswordPage() {
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState('');
   const [done, setDone]         = useState(false);
+  const [codeSent, setCodeSent] = useState(false);   // waiting for the emailed code
+  const [code, setCode]         = useState('');
+  const [wait, setWait]         = useState(0);       // seconds until "Send a new code"
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -40,9 +55,40 @@ export default function ChangePasswordPage() {
   // Google-only accounts have no password to confirm.
   const hasPassword = !!user?.identities?.some((i) => i.provider === 'email');
   const askCurrent  = !mustChangePassword && hasPassword;
+  const realEmail   = !!user?.email && !user.email.toLowerCase().endsWith(NO_EMAIL_DOMAIN);
+  const askCode     = EMAIL_CODE_ON && !mustChangePassword && realEmail;
+
+  // Count down to "Send a new code".
+  useEffect(() => {
+    if (wait <= 0) return;
+    const id = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(id);
+  }, [wait]);
+
+  async function sendCode() {
+    const { error: sendError } = await supabase.auth.reauthenticate();
+    if (sendError) {
+      setError("We couldn't send the code: " + friendlyError(sendError));
+      return false;
+    }
+    setWait(RESEND_SECONDS);
+    return true;
+  }
+
+  async function resendCode() {
+    setError('');
+    if (await sendCode()) setCode('');
+  }
+
+  function cancelCode() {
+    setCodeSent(false);
+    setCode('');
+    setError('');
+  }
 
   async function handleSave(e) {
     e.preventDefault();
+    if (codeSent) { await finishWithCode(); return; }
     if (askCurrent && !current) { setError('Enter your current password.'); return; }
     if (password.length < MIN_LENGTH) { setError(`Use at least ${MIN_LENGTH} characters.`); return; }
     if (password !== confirm) { setError("The two passwords don't match."); return; }
@@ -59,7 +105,32 @@ export default function ChangePasswordPage() {
       }
     }
 
-    const { error: pwError } = await supabase.auth.updateUser({ password });
+    // Second check: email a code, then wait for it (finishWithCode).
+    if (askCode) {
+      const sent = await sendCode();
+      setSaving(false);
+      if (sent) setCodeSent(true);
+      return;
+    }
+
+    await savePassword();
+  }
+
+  async function finishWithCode() {
+    const nonce = code.replace(/\D/g, '');
+    if (nonce.length !== 6) { setError('Enter the 6-digit code from the email.'); return; }
+    setError('');
+    setSaving(true);
+    await savePassword(nonce);
+  }
+
+  async function savePassword(nonce) {
+    const { error: pwError } = await supabase.auth.updateUser(nonce ? { password, nonce } : { password });
+    if (pwError && nonce && (pwError.code === 'reauthentication_not_valid' || /nonce|reauthenticat/i.test(pwError.message))) {
+      setError('That code is not right, or it has expired. Check the email or send a new code.');
+      setSaving(false);
+      return;
+    }
     if (pwError) {
       setError(pwError.message.includes('different')
         ? 'Choose a password different from the temporary one.'
@@ -88,6 +159,8 @@ export default function ChangePasswordPage() {
     setCurrent('');
     setPassword('');
     setConfirm('');
+    setCodeSent(false);
+    setCode('');
     setDone(true);
   }
 
@@ -123,6 +196,32 @@ export default function ChangePasswordPage() {
         </div>
 
         <form onSubmit={handleSave} className={`${cardBg} border ${cardBord} rounded-3xl p-8 shadow-xl space-y-4`}>
+          {codeSent ? (
+            <div>
+              <p className={`text-sm ${textMain} mb-3`}>
+                We emailed a 6-digit code to <span className="font-semibold break-all">{user.email}</span>. Type it here to change your password.
+              </p>
+              <label htmlFor="email-code" className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Code from the email</label>
+              <input
+                id="email-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={8}
+                placeholder="123456"
+                autoFocus
+                className={`w-full border rounded-xl px-4 py-3 text-lg tracking-[0.4em] font-mono ${inputCls} focus:outline-none focus:border-blue-500 transition-colors`}
+              />
+              <div className="flex items-center justify-between mt-2 text-xs">
+                <button type="button" onClick={cancelCode} className={`${textSub} hover:text-blue-400 font-semibold`}>← Change the password</button>
+                <button type="button" onClick={resendCode} disabled={wait > 0} className="text-blue-500 hover:underline font-semibold disabled:opacity-50 disabled:no-underline">
+                  {wait > 0 ? `Send a new code (${wait}s)` : 'Send a new code'}
+                </button>
+              </div>
+              <p className={`${textSub} text-[11px] mt-3`}>No email? Check the spam folder. The code works only for a short time.</p>
+            </div>
+          ) : (<>
           {askCurrent && (
             <div>
               <label htmlFor="current-password" className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Current password</label>
@@ -172,6 +271,12 @@ export default function ChangePasswordPage() {
               className={`w-full border rounded-xl px-4 py-3 text-sm ${inputCls} focus:outline-none focus:border-blue-500 transition-colors`}
             />
           </div>
+          {EMAIL_CODE_ON && !mustChangePassword && !realEmail && (
+            <p className={`${textSub} text-[11px] leading-relaxed`}>
+              Your login has no email, so no code can be sent to confirm this change. Ask the Secretary to add your email, or link Google below, for the extra check.
+            </p>
+          )}
+          </>)}
 
           {error && (
             <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{error}</p>
@@ -187,7 +292,7 @@ export default function ChangePasswordPage() {
             disabled={saving}
             className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-bold text-sm py-3 rounded-xl transition-colors"
           >
-            {saving ? 'Saving...' : 'Save password'}
+            {saving ? (codeSent ? 'Checking...' : 'Saving...') : codeSent ? 'Confirm and change password' : askCode ? 'Continue' : 'Save password'}
           </button>
 
           {!mustChangePassword && (

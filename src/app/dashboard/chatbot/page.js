@@ -39,8 +39,8 @@ export default function ChatbotPage() {
   // Admin sees the documents read-only; Finance and Secretary only chat.
   const canSeeDocs  = can(role, 'aiDocuments');
   const canEditDocs = can(role, 'aiDocuments', 'edit');
-  // Documents for all branches are the Pastor's (db/045).
-  const canShareDocs = role === 'pastor';
+  // Documents for all branches: the Pastor and the Admin (db/045, 070).
+  const canShareDocs = role === 'pastor' || role === 'admin';
 
   const [activeTab, setActiveTab] = useState("chat");
 
@@ -379,13 +379,13 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit, canShare })
     }
   }
 
-  // One branch <-> all branches (the Pastor only). Back to one branch means
+  // One branch <-> all branches (the Pastor and the Admin). Back to one branch means
   // the branch picked above.
   async function toggleShared(doc) {
     const shared = !doc.church_id;
     if (!await confirmDialog(shared
       ? `Use "${doc.title}" in this branch only? The other branches' assistants will stop using it.`
-      : `Use "${doc.title}" in every branch? All branches' assistants will answer from it, and only the Pastor can change or delete it.`)) return;
+      : `Use "${doc.title}" in every branch? All branches' assistants will answer from it, and only the Pastor or the Admin can change or delete it.`)) return;
     setBusyId(doc.id);
     try {
       const res = await authFetch("/api/chatbot/documents", {

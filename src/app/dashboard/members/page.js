@@ -123,7 +123,8 @@ export default function MembersPage() {
   const [openMenuId, setOpenMenuId]       = useState(null);
   const [menuPos, setMenuPos]             = useState({ top: 0, right: 0 });
   const [editingMember, setEditingMember] = useState(null);
-  const [search, setSearch]               = useState("");
+  // ?q= (from the dashboard search) opens with the search filled in.
+  const [search, setSearch]               = useState(() => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') || '' : ''));
   const [filterStatus, setFilterStatus]   = useState("all");
   const [form, setForm]                   = useState(EMPTY_FORM);
   const [showImport, setShowImport]       = useState(false);

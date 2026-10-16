@@ -15,6 +15,13 @@ export const HANDOUT_ROLES = CONTENT_ROLES;
 // Roles that can see the chatbot document list (aiDocuments in permissions.js).
 export const AI_DOCUMENT_VIEWERS = ["admin", ...CONTENT_ROLES];
 
+// Roles that can add, change and delete assistant documents and rebuild
+// their search index: the Admin too, like the Pastor (db/070).
+export const AI_DOCUMENT_EDITORS = ["admin", ...CONTENT_ROLES];
+
+// Roles that can make a document shared by all branches (db/045, 070).
+export const AI_DOCUMENT_SHARERS = ["admin", "pastor"];
+
 export type Caller = {
   db: SupabaseClient; // queries run as the caller, so RLS applies
   userId: string;

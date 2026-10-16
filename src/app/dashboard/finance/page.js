@@ -104,7 +104,8 @@ function Finance() {
   const [showModal, setShowModal]       = useState(false);
   const [saving, setSaving]             = useState(false);
   const [editingTx, setEditingTx]       = useState(null);
-  const [search, setSearch]             = useState("");
+  // ?q= (from the dashboard search) opens with the search filled in.
+  const [search, setSearch]             = useState(() => params.get('q') || '');
   const [filterType, setFilterType]     = useState("all");
   const [form, setForm]                 = useState(EMPTY_FORM);
   const [page, setPage]                 = useState(1);

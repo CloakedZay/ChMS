@@ -7,6 +7,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { can, ROLE_LABELS } from "@/app/lib/permissions";
 import { History, ChevronDown, ChevronRight, Loader2, Sun, Moon } from "lucide-react";
 import DatePicker from "@/app/components/DatePicker";
+import Pagination from "@/app/components/Pagination";
 
 import { baseTheme } from '@/app/lib/theme';
 // Who changed what, and when. Entries are written only by database
@@ -14,7 +15,8 @@ import { baseTheme } from '@/app/lib/theme';
 // Admin sees everything except finance entries (the database enforces it).
 // The Screen time tab reads page_visits totals (db/011).
 
-const PAGE_SIZE = 100;
+// Changes per page, newest first; each page is asked from the database.
+const PAGE_SIZE = 20;
 
 const TYPE_LABELS = {
   members:                "Member",
@@ -112,8 +114,8 @@ export default function ActivityPage() {
   const [people, setPeople]     = useState({});
   const [churches, setChurches] = useState([]);
   const [loading, setLoading]   = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore]   = useState(false);
+  const [page, setPage]         = useState(1);
+  const [total, setTotal]       = useState(0);   // changes matching the filters
   const [expanded, setExpanded] = useState(null);
 
   const [filterPerson, setFilterPerson] = useState("all");
@@ -140,8 +142,9 @@ export default function ActivityPage() {
   const fetchPage = useCallback(async (offset) => {
     let q = supabase
       .from("activity_log")
-      .select("*")
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(offset, offset + PAGE_SIZE - 1);
     if (filterPerson === "system") q = q.is("actor_id", null);
     else if (filterPerson !== "all") q = q.eq("actor_id", filterPerson);
@@ -154,33 +157,33 @@ export default function ActivityPage() {
       end.setDate(end.getDate() + 1);
       q = q.lt("created_at", end.toISOString());
     }
-    const { data, error } = await q;
-    if (error) { console.error("Error loading activity:", error.message); return []; }
-    return data || [];
+    const { data, count, error } = await q;
+    if (error) { console.error("Error loading activity:", error.message); return { rows: [], count: 0 }; }
+    return { rows: data || [], count: count || 0 };
   }, [filterPerson, filterType, filterAction, dateFrom, dateTo]);
 
   useEffect(() => {
     let cancelled = false;
-    fetchPage(0).then((rows) => {
+    fetchPage((page - 1) * PAGE_SIZE).then(({ rows, count }) => {
       if (cancelled) return;
       setEntries(rows);
-      setHasMore(rows.length === PAGE_SIZE);
+      setTotal(count);
       setExpanded(null);
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [fetchPage]);
+  }, [fetchPage, page]);
 
-  async function loadMore() {
-    setLoadingMore(true);
-    const rows = await fetchPage(entries.length);
-    setEntries((prev) => [...prev, ...rows]);
-    setHasMore(rows.length === PAGE_SIZE);
-    setLoadingMore(false);
-  }
+  // A filter change reloads the list from page 1 (see the effect above).
+  const onFilter = (setter) => (ev) => { setLoading(true); setPage(1); setter(ev.target.value); };
 
-  // A filter change reloads the list from the top (see the effect above).
-  const onFilter = (setter) => (ev) => { setLoading(true); setter(ev.target.value); };
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pg = {
+    page, totalPages, total,
+    from: total ? (page - 1) * PAGE_SIZE + 1 : 0,
+    to: Math.min(page * PAGE_SIZE, total),
+    setPage,
+  };
 
   const churchName = (id) => churches.find((c) => c.id === id)?.name;
   const personName = (id) => {
@@ -324,17 +327,7 @@ export default function ActivityPage() {
         )}
       </div>
 
-      {hasMore && !loading && (
-        <div className="flex justify-center mt-5">
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all"
-          >
-            {loadingMore && <Loader2 className="w-4 h-4 animate-spin" />} Load more
-          </button>
-        </div>
-      )}
+      {!loading && <Pagination {...pg} label="changes" />}
       </>)}
     </div>
   );

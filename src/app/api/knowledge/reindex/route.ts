@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCaller, resolveChurchId, CONTENT_ROLES, AI_DOCUMENT_VIEWERS, GLOBAL_ROLES } from "@/app/lib/apiAuth";
+import { getCaller, resolveChurchId, AI_DOCUMENT_EDITORS, AI_DOCUMENT_SHARERS, AI_DOCUMENT_VIEWERS, GLOBAL_ROLES } from "@/app/lib/apiAuth";
 import { reindexAll } from "@/app/lib/knowledge";
 
 import { friendlyError } from "@/app/lib/errors";
@@ -24,9 +24,9 @@ export async function GET(req: NextRequest) {
 
 // Rebuild the index: every document of the branch (all branches for the
 // Pastor / Admin when none is picked), the documents for all branches (the
-// Pastor's, db/045) and every handout the caller may edit.
+// Pastor's and Admin's, db/045, 070) and every handout the caller may edit.
 export async function POST(req: NextRequest) {
-  const caller = await getCaller(req, CONTENT_ROLES);
+  const caller = await getCaller(req, AI_DOCUMENT_EDITORS);
   if (caller instanceof NextResponse) return caller;
 
   const { church_id } = await req.json().catch(() => ({}));
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   const allBranches = GLOBAL_ROLES.includes(caller.role) && !church_id;
 
   try {
-    const report = await reindexAll(caller.db, churchId, allBranches, caller.role === "pastor");
+    const report = await reindexAll(caller.db, churchId, allBranches, AI_DOCUMENT_SHARERS.includes(caller.role));
     return NextResponse.json({ success: true, ...report });
   } catch (err) {
     console.error("Rebuilding the search index failed:", err);

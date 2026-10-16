@@ -54,7 +54,8 @@ export const PERMISSIONS = {
   modules:            { admin: 'view', pastor: 'edit', leader: 'edit', member: 'view' },
   moduleProgress:     { admin: 'view', pastor: 'view', leader: 'view', member: 'own' },
   answerReview:       { pastor: 'approve', leader: 'approve', member: 'own' },
-  aiDocuments:        { admin: 'view', pastor: 'edit', leader: 'edit' },
+  // Admin adds and manages them like the Pastor (db/070).
+  aiDocuments:        { admin: 'edit', pastor: 'edit', leader: 'edit' },
   aiAssistant:        { admin: 'view', pastor: 'view', leader: 'view', finance: 'view', secretary: 'view', member: 'view' },
 
   // Messages — one-to-one chat; everyone can write to the people the database
