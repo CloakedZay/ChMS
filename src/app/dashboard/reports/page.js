@@ -8,7 +8,7 @@ import { can } from "@/app/lib/permissions";
 import {
   BarChart3, TrendingUp, PieChart,
   Download, Filter, ArrowUpRight, ArrowDownRight,
-  Users, Wallet, Calendar, TrendingDown, Sun, Moon, UserMinus, CalendarClock, UserCheck
+  Users, Wallet, Calendar, TrendingDown, Sun, Moon, UserMinus, CalendarClock, UserCheck, RefreshCw, UserPlus
 } from "lucide-react";
 import Link from "next/link";
 import BranchLabel, { branchLabelText } from "@/app/components/BranchLabel";
@@ -95,28 +95,48 @@ export default function ReportsPage() {
   const [upcomingEvents, setUpcomingEvents] = useState(0);
   const [eventsByStatus, setEventsByStatus] = useState({});
 
+  // Bumped to reload the figures (Refresh button, coming back to the tab).
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loadError, setLoadError] = useState('');
+  const [updatedAt, setUpdatedAt] = useState(null);
+
   useEffect(() => {
-    async function fetchAll() {
+    const reload = () => { if (document.visibilityState === 'visible') setReloadKey((k) => k + 1); };
+    document.addEventListener('visibilitychange', reload);
+    return () => document.removeEventListener('visibilitychange', reload);
+  }, []);
+
+  useEffect(() => {
+    // Not named fetchAll: that would hide the imported fetchAll helper, and
+    // the transactions query below would call this function forever.
+    async function loadReport() {
       setLoading(true);
+      setLoadError('');
       try {
         // ── Members ──────────────────────────────────────────
-        const { count: mTotal } = await supabase
-          .from('member_directory')
-          .select('*', { count: 'exact', head: true });
+        // Supabase reports a failed query in `error` instead of throwing, so
+        // collect them — otherwise a failure just shows as zeros.
+        const errors = [];
+        const check = (res) => { if (res.error) errors.push(res.error); return res; };
 
-        const { count: mActive } = await supabase
+        const { count: mTotal } = check(await supabase
+          .from('member_directory')
+          .select('*', { count: 'exact', head: true }));
+
+        const { count: mActive } = check(await supabase
           .from('member_directory')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'active');
+          .eq('status', 'active'));
 
-        const { count: mInactive } = await supabase
+        const { count: mInactive } = check(await supabase
           .from('member_directory')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'inactive');
+          .eq('status', 'inactive'));
 
-        const { data: members } = await supabase
+        const { data: members } = check(await fetchAll(() => supabase
           .from('member_directory')
-          .select('ministry');
+          .select('ministry')
+          .order('id')));
 
         // Group by ministry. The directory lists a member's real ministries
         // as "A, B" (db/023); someone in two ministries counts in both.
@@ -132,11 +152,11 @@ export default function ReportsPage() {
 
         // ── Transactions (only for levels that can see finance) ──
         const { data: allTrans } = showFinance
-          ? await fetchAll(() => supabase
+          ? check(await fetchAll(() => supabase
               .from('transactions')
               .select('amount, type, date_recorded, status')
               .order('date_recorded', { ascending: false })
-              .order('id'))
+              .order('id', { ascending: false })))
           : { data: [] };
         // Voided entries stay in the ledger but never count in a report.
         const trans = allTrans?.filter(countsInTotals);
@@ -149,33 +169,43 @@ export default function ReportsPage() {
           .filter(t => t.type === 'expense')
           .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-        // Group by month (last 7 months)
+        // Group by month, oldest to newest, keeping the latest 7 months.
+        // date_recorded is a plain date ("2026-10-21"), so its first 7
+        // characters are the month and sort in date order. (The rows come
+        // newest first, so grouping in arrival order and slicing the end
+        // used to keep the 7 *oldest* months — new entries never showed.)
         const monthMap = {};
         (trans || []).forEach((t) => {
           if (!t.date_recorded) return;
-          const d = new Date(t.date_recorded);
-          const key = d.toLocaleDateString('en-PH', { month: 'short', year: '2-digit' });
+          const key = String(t.date_recorded).slice(0, 7);
           if (!monthMap[key]) monthMap[key] = { income: 0, expense: 0 };
           if (t.type === 'income') monthMap[key].income += Number(t.amount || 0);
           if (t.type === 'expense') monthMap[key].expense += Number(t.amount || 0);
         });
-        const monthlyArr = Object.entries(monthMap)
+        const monthlyArr = Object.keys(monthMap)
+          .sort()
           .slice(-7)
-          .map(([month, vals]) => ({ month, ...vals }));
+          .map((key) => ({
+            month: new Date(`${key}-01T00:00:00`).toLocaleDateString('en-PH', { month: 'short', year: '2-digit' }),
+            ...monthMap[key],
+          }));
 
         // ── Events ────────────────────────────────────────────
-        const { count: evTotal } = await supabase
+        const { count: evTotal } = check(await supabase
           .from('events')
-          .select('*', { count: 'exact', head: true });
+          .select('*', { count: 'exact', head: true }));
 
         // Upcoming = approved, from today (Philippine date) on.
-        const { count: evUpcoming } = await supabase
+        const { count: evUpcoming } = check(await supabase
           .from('events')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'approved')
-          .gte('date', phToday());
+          .gte('date', phToday()));
 
-        const { data: evStatuses } = await supabase.from('events').select('status');
+        const { data: evStatuses } = check(await fetchAll(() => supabase
+          .from('events')
+          .select('status')
+          .order('id')));
         const statusMap = {};
         (evStatuses || []).forEach((e) => {
           const key = e.status || 'planning';
@@ -194,16 +224,22 @@ export default function ReportsPage() {
         setTotalEvents(evTotal || 0);
         setUpcomingEvents(evUpcoming || 0);
         setEventsByStatus(statusMap);
+        setUpdatedAt(new Date());
 
+        if (errors.length > 0) {
+          console.error('Reports fetch errors:', errors);
+          setLoadError(friendlyError(errors[0], 'Some figures could not be loaded.'));
+        }
       } catch (err) {
         console.error('Reports fetch error:', err);
+        setLoadError(friendlyError(err, 'Could not load the reports.'));
       } finally {
         setLoading(false);
       }
     }
 
-    fetchAll();
-  }, [showFinance]);
+    loadReport();
+  }, [showFinance, reloadKey]);
 
   // ── PDF export ─────────────────────────────────────────────────────────
   // NOTE: this is a temporary layout — a proper branded / print-ready
@@ -517,8 +553,13 @@ export default function ReportsPage() {
           <p className={`text-[10px] uppercase tracking-widest ${t.textFaint} mb-1`}><BranchLabel /></p>
           <h1 className={`text-3xl font-black ${t.textPrimary} tracking-tight`}>Reports & Analytics</h1>
           <p className={`${t.textMuted} text-sm mt-0.5`}>
-            {loading ? 'Syncing live data...' : 'Live data from all church modules.'}
+            {loading
+              ? 'Syncing live data...'
+              : updatedAt
+                ? `Live data from all church modules · updated ${updatedAt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })}`
+                : 'Live data from all church modules.'}
           </p>
+          {loadError && <p className={`${A(dark, "rose")} text-sm mt-1`}>{loadError}</p>}
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <button
@@ -527,6 +568,13 @@ export default function ReportsPage() {
             title={dark ? "Switch to light mode" : "Switch to dark mode"}
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <button
+            onClick={() => setReloadKey((k) => k + 1)}
+            disabled={loading}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border disabled:opacity-50 flex-1 sm:flex-none ${t.toolbarBtn}`}
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
           <button className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border flex-1 sm:flex-none ${t.toolbarBtn}`}>
             <Filter className="w-4 h-4" /> Filter Range
@@ -692,7 +740,9 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {can(role, 'attendance') && <EventAttendanceReport t={t} dark={dark} />}
+      <NewMembersTrend t={t} dark={dark} reloadKey={reloadKey} />
+
+      {can(role, 'attendance') && <EventAttendanceReport t={t} dark={dark} reloadKey={reloadKey} />}
 
       {/* Finance Summary + Recent Transactions (finance levels only) */}
       {showFinance && (
@@ -774,16 +824,194 @@ export default function ReportsPage() {
   );
 }
 
+// ─── Monthly trend chart ───────────────────────────────────────────────────
+// One series of columns, oldest month on the left. Columns are capped at
+// 24px with a rounded top, on hairline gridlines; the latest month carries
+// its value, the rest show theirs on hover or keyboard focus, and every
+// value is also in the "Show as table" view.
+//   points: [{ key, label, sub, value, detail }]  label = "Oct", sub = "'26" or ""
+function niceMax(v) {
+  if (v <= 4) return 4;
+  const step = 10 ** Math.floor(Math.log10(v));
+  return [1, 2, 2.5, 5, 10].map((m) => m * step).find((n) => n >= v) || v;
+}
+
+function MonthlyColumns({ t, points, color, unit, ariaLabel }) {
+  const [hover, setHover] = useState(null);
+  const top = niceMax(Math.max(...points.map((p) => p.value), 0));
+  const ticks = [top, top / 2, 0];
+  const fmt = (n) => (Number.isInteger(n) ? n.toLocaleString() : n.toFixed(1));
+  const last = points.length - 1;
+
+  return (
+    <div>
+      <div className="flex gap-2" role="group" aria-label={ariaLabel}>
+        {/* Y axis */}
+        <div className={`flex flex-col justify-between h-44 text-[10px] tabular-nums ${t.textSub} text-right shrink-0 -mt-1.5`} aria-hidden="true">
+          {ticks.map((v) => <span key={v}>{fmt(v)}</span>)}
+        </div>
+        <div className="relative flex-1 min-w-0">
+          {/* Gridlines */}
+          <div className="absolute inset-x-0 top-0 h-44 flex flex-col justify-between pointer-events-none" aria-hidden="true">
+            {ticks.map((v) => <div key={v} className={`border-t ${t.divider}`} />)}
+          </div>
+          {/* Columns */}
+          <div className="relative h-44 flex items-end">
+            {points.map((p, i) => {
+              const h = top > 0 ? (p.value / top) * 100 : 0;
+              const show = hover === i;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  className="relative flex-1 h-full flex items-end justify-center focus:outline-none group"
+                  onMouseEnter={() => setHover(i)}
+                  onMouseLeave={() => setHover(null)}
+                  onFocus={() => setHover(i)}
+                  onBlur={() => setHover(null)}
+                  aria-label={`${p.label} ${p.sub || ''}: ${fmt(p.value)} ${unit}${p.detail ? `, ${p.detail}` : ''}`}
+                >
+                  {/* Value on the latest month */}
+                  {i === last && !show && (
+                    <span className={`absolute text-[10px] font-bold tabular-nums ${t.textPrimary}`} style={{ bottom: `calc(${h}% + 4px)` }}>
+                      {fmt(p.value)}
+                    </span>
+                  )}
+                  <span
+                    className={`block w-full max-w-[24px] mx-[1px] rounded-t ${color} transition-opacity ${hover !== null && !show ? 'opacity-50' : ''} group-focus-visible:ring-2 group-focus-visible:ring-blue-400`}
+                    style={{ height: p.value > 0 ? `max(${h}%, 2px)` : '0' }}
+                  />
+                  {show && (
+                    <span className={`absolute z-10 px-2.5 py-1.5 rounded-lg shadow-lg border text-left whitespace-nowrap pointer-events-none ${t.modalBg} ${t.modalBorder}`}
+                      style={{ bottom: `calc(${h}% + 6px)`, left: i > points.length / 2 ? 'auto' : '50%', right: i > points.length / 2 ? '50%' : 'auto' }}>
+                      <span className={`block text-sm font-black tabular-nums ${t.textPrimary}`}>{fmt(p.value)} <span className="text-[10px] font-semibold">{unit}</span></span>
+                      <span className={`block text-[10px] ${t.textSub}`}>{p.monthName}{p.detail ? ` · ${p.detail}` : ''}</span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {/* Baseline + month labels */}
+          <div className={`border-t ${t.cardBorder}`} />
+          <div className="flex" aria-hidden="true">
+            {points.map((p) => (
+              <span key={p.key} className={`flex-1 text-center text-[9px] font-bold leading-tight pt-1 ${t.textSub}`}>
+                {p.label}{p.sub && <span className="block font-normal">{p.sub}</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <details className="mt-3">
+        <summary className={`text-[11px] font-semibold cursor-pointer ${t.textSub}`}>Show as table</summary>
+        <table className="w-full mt-2 text-xs">
+          <thead><tr className={`text-left ${t.textSub}`}><th className="py-1 font-semibold">Month</th><th className="py-1 font-semibold text-right">{unit}</th></tr></thead>
+          <tbody>
+            {[...points].reverse().map((p) => (
+              <tr key={p.key} className={`border-t ${t.divider} ${t.textPrimary}`}>
+                <td className="py-1">{p.monthName}{p.detail ? <span className={t.textSub}> · {p.detail}</span> : ''}</td>
+                <td className="py-1 text-right font-bold tabular-nums">{fmt(p.value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    </div>
+  );
+}
+
+// "2026-10-01" → the fields MonthlyColumns shows. The year rides under
+// January and the first month.
+function monthPoint(isoMonth, i) {
+  const d = new Date(`${isoMonth.slice(0, 7)}-01T00:00:00`);
+  return {
+    key: isoMonth.slice(0, 7),
+    label: d.toLocaleDateString('en-PH', { month: 'short' }),
+    sub: i === 0 || d.getMonth() === 0 ? `'${String(d.getFullYear()).slice(2)}` : '',
+    monthName: d.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }),
+  };
+}
+
+// The last n months, oldest first, as "YYYY-MM" (Philippine date).
+function lastMonths(n) {
+  const [y, m] = phToday().split('-').map(Number);
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(Date.UTC(y, m - 1 - (n - 1 - i), 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  });
+}
+
+// New members per month (db/076): by the date each member joined.
+function NewMembersTrend({ t, dark, reloadKey }) {
+  const [state, setState] = useState({ rows: null, error: '' });
+  useEffect(() => {
+    supabase.rpc('member_join_trend', { p_months: 12 }).then(({ data, error }) => setState({
+      rows: error ? [] : data || [],
+      error: !error ? ''
+        : /does not exist|schema cache|Could not find/i.test(error.message)
+          ? 'Not set up yet — ask the administrator to run db/076_member_joined_on.sql.'
+          : friendlyError(error, 'Could not load new members.'),
+    }));
+  }, [reloadKey]);
+
+  const rows = state.rows || [];
+  const points = rows.map((r, i) => ({ ...monthPoint(r.month, i), value: r.joined }));
+  const total = rows.reduce((a, r) => a + r.joined, 0);
+  const thisMonth = rows.at(-1)?.joined ?? 0;
+  const prevMonth = rows.at(-2)?.joined ?? 0;
+
+  return (
+    <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 mb-6`}>
+      <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2 mb-5 border-b ${t.divider} pb-4`}>
+        <UserPlus className={`w-4 h-4 ${A(dark, "indigo")}`} /> New Members per Month
+        <span className={`ml-auto text-[10px] ${t.textSub} normal-case tracking-normal font-semibold`}>Last 12 months · by date joined</span>
+      </h3>
+      {state.rows === null ? (
+        <p className={`${t.textFaint} text-sm text-center py-8`}>Syncing...</p>
+      ) : state.error ? (
+        <p className={`text-sm ${A(dark, "rose")} py-4`}>{state.error}</p>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 content-start">
+            {[
+              { label: 'This month', value: thisMonth, note: `${prevMonth} last month` },
+              { label: 'Last 12 months', value: total },
+              { label: 'Average per month', value: Math.round((total / 12) * 10) / 10 },
+            ].map((c) => (
+              <div key={c.label} className={`${t.deepCard} rounded-2xl p-3 text-center`}>
+                <p className={`text-xl font-black ${t.textPrimary}`}>{c.value}</p>
+                <p className={`text-[10px] ${t.textSub} mt-0.5 uppercase tracking-wider`}>{c.label}</p>
+                {c.note && <p className={`text-[10px] ${t.textFaint} mt-0.5`}>{c.note}</p>}
+              </div>
+            ))}
+          </div>
+          <div className="lg:col-span-3">
+            {total === 0 ? (
+              <div className={`h-44 flex items-center justify-center border border-dashed ${t.dashed} rounded-2xl`}>
+                <p className={`${t.textFaint} text-sm`}>Nobody joined in the last 12 months.</p>
+              </div>
+            ) : (
+              <MonthlyColumns t={t} points={points} color="bg-indigo-500" unit="joined"
+                ariaLabel="New members per month, last 12 months" />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Event attendance (db/041): the last 90 days at a glance, and the most
 // recent events whose attendance was taken.
-function EventAttendanceReport({ t, dark }) {
+function EventAttendanceReport({ t, dark, reloadKey }) {
   const [{ events, since }, setReport] = useState({ events: null, since: '' });
   useEffect(() => {
     supabase.rpc('attendance_events', { p_church: null }).then(({ data }) => setReport({
       events: data || [],
       since: new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10),
     }));
-  }, []);
+  }, [reloadKey]);
 
   const taken = (events || []).filter((e) => e.members_present + e.visitors > 0);
   const recent = taken.filter((e) => e.date >= since);
@@ -793,6 +1021,19 @@ function EventAttendanceReport({ t, dark }) {
   const visitors = recent.reduce((a, e) => a + e.visitors, 0);
   const pct = (e) => (e.active_members ? Math.min(100, Math.round((e.members_present / e.active_members) * 100)) : 0);
   const date = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  // Trend: average attendance (members + visitors) per event, each of the
+  // last 12 months — only events whose attendance was taken count.
+  const trend = lastMonths(12).map((month, i) => {
+    const inMonth = taken.filter((e) => String(e.date).slice(0, 7) === month);
+    const people = inMonth.reduce((a, e) => a + e.members_present + e.visitors, 0);
+    return {
+      ...monthPoint(month, i),
+      value: inMonth.length ? Math.round((people / inMonth.length) * 10) / 10 : 0,
+      detail: inMonth.length ? `${inMonth.length} event${inMonth.length === 1 ? '' : 's'}` : 'no attendance taken',
+    };
+  });
+  const trendHasData = trend.some((p) => p.value > 0);
 
   return (
     <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 mb-8`}>
@@ -835,6 +1076,15 @@ function EventAttendanceReport({ t, dark }) {
               </div>
             ))}
           </div>
+          {trendHasData && (
+            <div className={`lg:col-span-3 pt-5 border-t ${t.divider}`}>
+              <p className={`text-[10px] uppercase tracking-widest font-bold ${t.textSub} mb-4`}>
+                Average attendance per event · last 12 months
+              </p>
+              <MonthlyColumns t={t} points={trend} color="bg-blue-500" unit="people per event"
+                ariaLabel="Average attendance per event by month, last 12 months" />
+            </div>
+          )}
         </div>
       )}
     </div>

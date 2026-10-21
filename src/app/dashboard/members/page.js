@@ -27,6 +27,7 @@ const EMPTY_FORM = {
   phone: '',
   email: '',
   birth_date: '',
+  joined_on: '',   // date joined (db/076); empty = today when adding
   church_id: '',   // Pastor only, when adding (db/062)
 };
 
@@ -125,6 +126,7 @@ export default function MembersPage() {
   const [openMenuId, setOpenMenuId]       = useState(null);
   const [menuPos, setMenuPos]             = useState({ top: 0, right: 0 });
   const [editingMember, setEditingMember] = useState(null);
+  const [loadedJoinedOn, setLoadedJoinedOn] = useState('');   // date joined as saved (db/076)
   // ?q= (from the dashboard search) opens with the search filled in.
   const [search, setSearch]               = useState(() => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') || '' : ''));
   const [filterStatus, setFilterStatus]   = useState("all");
@@ -215,9 +217,17 @@ export default function MembersPage() {
       phone:     member.phone     || '',
       email:     member.email     || '',
       birth_date: member.birth_date || '',
+      joined_on: '',
     });
     setOpenMenuId(null);
     setShowModal(true);
+    // member_list doesn't return the date joined (db/076); read it here.
+    setLoadedJoinedOn('');
+    supabase.from('members').select('joined_on').eq('id', member.id).maybeSingle().then(({ data }) => {
+      const d = data?.joined_on || '';
+      setLoadedJoinedOn(d);
+      setForm((f) => (f.joined_on ? f : { ...f, joined_on: d }));
+    });
   }
 
   function handleChange(e) {
@@ -267,6 +277,9 @@ export default function MembersPage() {
     // Only send the birthday when there is something to save or clear.
     if (!form.birth_date && !editingMember?.birth_date) delete payload.birth_date;
     else payload.birth_date = form.birth_date || null;
+    // Date joined (db/076): only sent when changed — the database fills in
+    // today for a new member.
+    if (!form.joined_on || form.joined_on === (editingMember ? loadedJoinedOn : phToday())) delete payload.joined_on;
 
     const { error } = editingMember
       ? await supabase.from('members').update(payload).eq('id', editingMember.id)
@@ -886,6 +899,12 @@ export default function MembersPage() {
                 <DatePicker name="birth_date" value={form.birth_date} onChange={handleChange} max={phToday()}
                   yearPicker weekday={false} placeholder="Pick their birthday" ariaLabel="Birthday" className={inputStyle(t)} />
                 <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>Only the month and day are shown in the birthday widget.</p>
+              </Field>
+
+              <Field label="Date joined" t={t}>
+                <DatePicker name="joined_on" value={form.joined_on || (editingMember ? '' : phToday())} onChange={handleChange} max={phToday()}
+                  yearPicker weekday={false} placeholder="When they became a member" ariaLabel="Date joined" className={inputStyle(t)} />
+                <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>Counts in Reports → new members per month. Today if left as is.</p>
               </Field>
 
               <Field label="Status" t={t}>

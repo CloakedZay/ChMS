@@ -11,7 +11,6 @@ import {
 
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
-import GlobalSearch from "@/app/components/GlobalSearch";
 import { can } from "@/app/lib/permissions";
 import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import BranchLabel from "@/app/components/BranchLabel";
@@ -255,9 +254,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Search: pages, members, events, finance, announcements (components/GlobalSearch) */}
-          <GlobalSearch role={role} t={t} />
-
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}

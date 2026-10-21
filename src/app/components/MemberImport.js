@@ -5,6 +5,7 @@ import { supabase } from '@/app/lib/supabase';
 import { X, Upload, Download, Loader2, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 
 import { friendlyError, UserError } from '@/app/lib/errors';
+import { phToday } from '@/app/lib/phDate';
 import { useDialog } from '@/app/lib/useDialog';
 // Secretary: add many members at once from an Excel (.xlsx) file, using
 // the template in public/templates (Members sheet + a Choices sheet).
@@ -33,6 +34,7 @@ const HEADER_ALIASES = {
   email: ['email', 'e-mail', 'email address'],
   status: ['status'],
   birth_date: ['birthday', 'birth date', 'birthdate', 'date of birth', 'dob', 'kaarawan'],
+  joined_on: ['date joined', 'joined', 'joined on', 'member since', 'membership date'],   // optional (db/076)
 };
 
 const norm = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
@@ -117,6 +119,7 @@ function checkRows(rows, existingNames) {
       email: get('email').toLowerCase(),
       status: get('status').toLowerCase() || 'active',
       birth_date: '',
+      joined_on: '',
       errors: [],
       warnings: [],
     };
@@ -128,6 +131,12 @@ function checkRows(rows, existingNames) {
       const b = parseBirthday(cells[col.birth_date]);
       if (b === null) r.errors.push(`Birthday "${norm(cells[col.birth_date])}" — use YYYY-MM-DD, e.g. 1990-05-14`);
       else r.birth_date = b;
+    }
+    // Same date rules as the birthday (a real date, not in the future).
+    if (col.joined_on !== undefined) {
+      const j = parseBirthday(cells[col.joined_on]);
+      if (j === null) r.errors.push(`Date joined "${norm(cells[col.joined_on])}" — use YYYY-MM-DD, e.g. 2024-01-07`);
+      else r.joined_on = j;
     }
     if (!r.full_name) r.errors.push('Full name is missing');
     if (r.role && !ROLES.includes(r.role)) r.errors.push(`Role "${get('role')}" — use ${ROLES.join(', ')}`);
@@ -188,6 +197,8 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
     // Only send birth_date when the file has any, so importing still works
     // for a file without the column (or before db/026 is run).
     const withBirthdays = toImport.some((r) => r.birth_date);
+    // Same for the date joined (db/076); a blank cell gets today.
+    const withJoined = toImport.some((r) => r.joined_on);
     for (let i = 0; i < toImport.length; i += BATCH) {
       const chunk = toImport.slice(i, i + BATCH);
       const { data, error: insertError } = await supabase
@@ -199,6 +210,9 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
           email: r.email || null,
           status: r.status,
           ...(withBirthdays ? { birth_date: r.birth_date || null } : {}),
+          // A batch insert leaves a column out of a row as empty, not its
+          // default — so a blank cell sends today itself.
+          ...(withJoined ? { joined_on: r.joined_on || phToday() } : {}),
         })))
         .select('id');
       if (insertError) chunk.forEach((r) => failed.push({ line: r.line, reason: friendlyError(insertError) }));
@@ -270,7 +284,7 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
                   <tr>
                     <th className="px-3 py-2">Row</th><th className="px-3 py-2">Full name</th><th className="px-3 py-2">Role</th>
                     <th className="px-3 py-2">Phone</th><th className="px-3 py-2">Email</th>
-                    <th className="px-3 py-2">Birthday</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Check</th>
+                    <th className="px-3 py-2">Birthday</th><th className="px-3 py-2">Joined</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Check</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${t.divider}`}>
@@ -282,6 +296,7 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
                       <td className="px-3 py-2">{r.phone || '—'}</td>
                       <td className="px-3 py-2">{r.email || '—'}</td>
                       <td className="px-3 py-2">{r.birth_date || '—'}</td>
+                      <td className="px-3 py-2">{r.joined_on || 'Today'}</td>
                       <td className="px-3 py-2 capitalize">{r.status}</td>
                       <td className="px-3 py-2">{badge(r)}</td>
                     </tr>

@@ -10,7 +10,7 @@ import { can } from "@/app/lib/permissions";
 import {
   BookOpen, ChevronRight, ChevronDown, Upload, FileText, Trash2, Download,
   Loader2, Plus, X, Sun, Moon, CheckCircle, XCircle, Clock, MessageSquare,
-  Eye, EyeOff, HelpCircle, Users, Search,
+  Eye, EyeOff, HelpCircle, Users, Search, MessageSquarePlus,
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
@@ -18,6 +18,9 @@ import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 import { friendlyError } from '@/app/lib/errors';
 import { baseTheme } from '@/app/lib/theme';
 import { useDialog } from '@/app/lib/useDialog';
+import {
+  useTrainingFollowUp, notifyTrainingFollowUpChanged, NEVER_STARTED_DAYS, STALLED_DAYS,
+} from '@/app/lib/useTrainingFollowUp';
 function formatBytes(bytes) {
   if (!bytes) return "—";
   if (bytes < 1024) return bytes + " B";
@@ -59,6 +62,10 @@ export default function TrainingPage() {
   const { user, role } = useAuth();
   const canEdit   = can(role, 'modules', 'edit');
   const canReview = can(role, 'answerReview', 'approve');
+  // Members behind in training (db/075). Admin sees the list; Pastor and
+  // Leaders can also log follow-ups.
+  const training = useTrainingFollowUp(can(role, 'moduleProgress'));
+  const canFollowUp = can(role, 'followUp') && can(role, 'moduleProgress');
 
   const [activeTab, setActiveTab] = useState("modules");
   const [loading, setLoading]     = useState(true);
@@ -371,7 +378,7 @@ export default function TrainingPage() {
         {[
           { key: "modules",     label: "Modules & Content" },
           { key: "submissions", label: "Submissions Review" },
-          { key: "progress",    label: "Member Progress" },
+          { key: "progress",    label: "Member Progress", count: training.count },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -381,6 +388,12 @@ export default function TrainingPage() {
             }`}
           >
             {tab.label}
+            {tab.count > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white"
+                title={`${tab.count} member${tab.count === 1 ? "" : "s"} behind in training`}>
+                {tab.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -388,6 +401,7 @@ export default function TrainingPage() {
       {/* ── MEMBER PROGRESS ── */}
       {activeTab === "progress" && (
         <ProgressPanel t={t} dark={dark} card={card} modules={modules} questions={questions} submissions={submissions} loadingBase={loading}
+          training={training} canFollowUp={canFollowUp}
  />
       )}
 
@@ -860,14 +874,62 @@ function shortDate(ts) {
   return ts ? new Date(ts).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—";
 }
 
+const daysAgo = (ts) => Math.max(0, Math.floor((Date.now() - new Date(ts).getTime()) / 86400000));
+
+// Who is behind in training (db/075) — the filters above the list.
+const PROGRESS_FILTERS = [
+  { key: "all",      label: "All" },
+  { key: "needs",    label: "Needs follow-up" },
+  { key: "never",    label: "Never started" },
+  { key: "stalled",  label: "Stalled" },
+  { key: "finished", label: "Finished" },
+];
+
+// A training follow-up. "Came back" / "Not returning" are about church
+// attendance, so they aren't offered here.
+const TRAINING_OUTCOMES = {
+  contacted: "Contacted",
+  no_answer: "No answer",
+  visited:   "Visited",
+  other:     "Other",
+};
+
 // onlyMinistries: for a Ministry Head, the ministries they head — the panel
 // then shows only those ministries' members and modules (db/038).
-function ProgressPanel({ t, dark, card, modules, questions, submissions, loadingBase, onlyMinistries = null }) {
+// training: useTrainingFollowUp() — who is behind (db/075).
+function ProgressPanel({ t, dark, card, modules, questions, submissions, loadingBase, onlyMinistries = null, training, canFollowUp }) {
   const [members, setMembers]   = useState([]);
   const [views, setViews]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState("");
   const [expanded, setExpanded] = useState(null);
+  const [filter, setFilter]     = useState("all");
+  // Log a training follow-up
+  const [logFor, setLogFor]       = useState(null);   // row
+  const [outcome, setOutcome]     = useState("contacted");
+  const [note, setNote]           = useState("");
+  const [saving, setSaving]       = useState(false);
+  const [formError, setFormError] = useState("");
+  const logDialogRef = useDialog(!!logFor, () => { if (!saving) setLogFor(null); });
+
+  // login id → why they're behind
+  const dueOf = {};
+  (training?.due || []).forEach((d) => { dueOf[d.profile_id] = d; });
+
+  function openLog(r) { setLogFor(r); setOutcome("contacted"); setNote(""); setFormError(""); }
+
+  async function saveLog(e) {
+    e.preventDefault();
+    setSaving(true);
+    setFormError("");
+    const { error } = await supabase.from("member_followups").insert([{
+      member_id: logFor.due.member_id, outcome, note: note.trim() || null, topic: "training",
+    }]);
+    setSaving(false);
+    if (error) { setFormError(friendlyError(error)); return; }
+    setLogFor(null);
+    notifyTrainingFollowUpChanged();
+  }
   // login id → ministry ids, via the member record linked to that login.
   const [ministriesOfLogin, setMinistriesOfLogin] = useState({});
 
@@ -958,10 +1020,38 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
   };
 
   const q = search.toLowerCase();
-  const rows = [...memberIds]
-    .map((id) => ({ id, name: nameOf(id), email: profileOf(id)?.email || "", ...summarize(id) }))
+  const allRows = [...memberIds]
+    .map((id) => {
+      const s = summarize(id);
+      return {
+        id, name: nameOf(id), email: profileOf(id)?.email || "", ...s,
+        due: dueOf[id] || null,
+        done: s.perModule.length > 0 && s.finished === s.perModule.length,
+      };
+    });
+  const matches = {
+    all:      () => true,
+    needs:    (r) => !!r.due,
+    never:    (r) => r.due?.reason === "never_started",
+    stalled:  (r) => r.due?.reason === "stalled",
+    finished: (r) => r.done,
+  };
+  const filterCount = (key) => allRows.filter(matches[key]).length;
+  const rows = allRows
+    .filter(matches[filter])
     .filter((r) => !q || r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q))
-    .sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name));
+    // Behind in training first (never started, then longest quiet), then by progress.
+    .sort((a, b) => (filter === "all" ? !!b.due - !!a.due : 0)
+      || (a.due && b.due ? (a.due.last_activity || "").localeCompare(b.due.last_activity || "") : 0)
+      || b.pct - a.pct || a.name.localeCompare(b.name));
+
+  // Why a member is flagged, in words.
+  function dueText(d) {
+    if (d.reason === "never_started") {
+      return `Never started · login created ${daysAgo(d.login_created_at)} days ago`;
+    }
+    return `Stalled · last active ${shortDate(d.last_activity)} (${daysAgo(d.last_activity)} days ago) · ${d.answered}/${d.total_questions} answered`;
+  }
 
   if (loading || loadingBase) {
     return (
@@ -989,10 +1079,37 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
         </p>
       </div>
 
+      {/* Who is behind (db/075) */}
+      <div className="flex flex-col gap-2">
+        <div className={`flex gap-1 ${t.tabBar} border rounded-xl p-1 w-fit max-w-full overflow-x-auto`} role="tablist" aria-label="Filter members">
+          {PROGRESS_FILTERS.map((f) => (
+            <button key={f.key} role="tab" aria-selected={filter === f.key} onClick={() => setFilter(f.key)}
+              className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                filter === f.key ? "bg-blue-600 text-white shadow" : t.tabInactive
+              }`}>
+              {f.label} <span className="opacity-70">{filterCount(f.key)}</span>
+            </button>
+          ))}
+        </div>
+        <p className={`text-[11px] ${t.textMuted}`}>
+          Needs follow-up: no module opened {NEVER_STARTED_DAYS}+ days after getting a login, or started but no training
+          activity for {STALLED_DAYS}+ days with questions left — and no training follow-up in the last {STALLED_DAYS} days.
+          Busy members are left out.
+        </p>
+        {training?.error && (
+          <p className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{training.error}</p>
+        )}
+      </div>
+
       {rows.length === 0 ? (
         <div className={`py-16 text-center border border-dashed ${t.dashed} rounded-3xl`}>
           <Users className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-3`} />
-          <p className={`${t.textMuted} text-sm`}>No members found.</p>
+          <p className={`${t.textMuted} text-sm`}>
+            {q ? "No members match your search."
+              : filter === "needs" || filter === "never" || filter === "stalled" ? "Nobody is behind in training right now."
+              : filter === "finished" ? "Nobody has finished all their modules yet."
+              : "No members found."}
+          </p>
         </div>
       ) : (
         <div className={`${card} overflow-hidden divide-y ${t.innerDivider}`}>
@@ -1000,13 +1117,25 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
             const isOpen = expanded === r.id;
             return (
               <div key={r.id}>
+                <div className={`flex flex-col sm:flex-row sm:items-center ${t.hoverRow} transition-colors`}>
                 <button
                   onClick={() => setExpanded(isOpen ? null : r.id)}
-                  className={`w-full text-left px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-5 ${t.hoverRow} transition-colors`}
+                  aria-expanded={isOpen}
+                  className="flex-1 min-w-0 text-left px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-5"
                 >
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{r.name}</p>
                     {r.email && <p className={`text-xs ${t.textSub} truncate`}>{r.email}</p>}
+                    {r.due && (
+                      <p className={`text-xs font-semibold mt-1 ${A(dark, "rose")}`}>
+                        {dueText(r.due)}
+                        {r.due.last_followup_at && (
+                          <span className={`font-normal ${t.textMuted}`}>
+                            {" "}· last training follow-up {shortDate(r.due.last_followup_at)}{r.due.last_by ? ` by ${r.due.last_by}` : ""}
+                          </span>
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="sm:w-48">
                     <div className="flex justify-between text-xs mb-1">
@@ -1025,6 +1154,15 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
                     {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                   </span>
                 </button>
+                {r.due && canFollowUp && (
+                  <div className="px-5 pb-4 sm:pb-0 sm:pl-0 sm:pr-5 shrink-0">
+                    <button onClick={() => openLog(r)}
+                      className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold">
+                      <MessageSquarePlus size={14} /> Follow up
+                    </button>
+                  </div>
+                )}
+                </div>
 
                 {isOpen && (
                   <div className="px-5 pb-4">
@@ -1050,6 +1188,60 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Log a training follow-up (db/075) */}
+      {logFor && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
+          onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) setLogFor(null); }}>
+          <form ref={logDialogRef} onSubmit={saveLog} role="dialog" aria-modal="true" aria-label="Log training follow-up"
+            className={`${t.modalBg} border ${t.modalBorder} rounded-t-3xl sm:rounded-3xl p-6 w-full sm:max-w-md shadow-2xl`}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className={`text-base font-black ${t.textPrimary}`}>Training follow-up</h3>
+              <button type="button" aria-label="Close" onClick={() => setLogFor(null)} disabled={saving}
+                className={`${t.textSub} hover:text-blue-400 transition-colors`}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className={`text-xs ${t.textSub}`}>{logFor.name}</p>
+            <p className={`text-xs mt-1 mb-5 ${A(dark, "rose")}`}>{dueText(logFor.due)}</p>
+
+            <p className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-2`}>How did it go?</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {Object.entries(TRAINING_OUTCOMES).map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setOutcome(key)} aria-pressed={outcome === key}
+                  className={`h-10 rounded-xl border text-sm font-semibold transition-colors ${
+                    outcome === key ? "border-blue-600 bg-blue-600 text-white" : t.cancelBtn
+                  }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <label htmlFor="training-fu-note" className={`text-[10px] uppercase tracking-wider ${t.textSub} font-bold mb-1.5 block`}>
+              Note <span className="normal-case font-normal">(optional)</span>
+            </label>
+            <textarea id="training-fu-note" rows={4} value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000}
+              placeholder="e.g. Talked after service — will start Module 1 this week."
+              className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-4 py-2.5 text-sm ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 resize-y`} />
+            <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>
+              Saved in the member&apos;s follow-up history as a training follow-up. Visible to the Pastor and this branch&apos;s Leaders.
+              They leave the list for {STALLED_DAYS} days.
+            </p>
+
+            {formError && <p className="mt-3 text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{formError}</p>}
+
+            <div className="flex gap-3 mt-5">
+              <button type="button" onClick={() => setLogFor(null)} disabled={saving}
+                className={`flex-1 border rounded-xl h-11 text-sm font-semibold disabled:opacity-50 ${t.cancelBtn}`}>Cancel</button>
+              <button type="submit" disabled={saving}
+                className="flex-1 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-xl h-11 text-sm font-semibold">
+                {saving && <Loader2 size={15} className="animate-spin" />}
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

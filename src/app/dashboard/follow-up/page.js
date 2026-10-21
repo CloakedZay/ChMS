@@ -385,6 +385,10 @@ export default function FollowUpPage() {
                               <span className={`px-1.5 py-0.5 rounded-md font-semibold ${OUTCOMES[h.outcome]?.cls || OUTCOMES.other.cls}`}>
                                 {OUTCOMES[h.outcome]?.label || h.outcome}
                               </span>
+                              {/* Logged from Training → Member Progress (db/075) */}
+                              {h.topic === 'training' && (
+                                <span className="px-1.5 py-0.5 rounded-md font-semibold bg-indigo-500/15 text-indigo-500">Training</span>
+                              )}
                               <span className={t.muted}>{shortDate(h.created_at)} · {h.by_name}</span>
                             </div>
                             {h.note && <p className={`mt-1 whitespace-pre-wrap ${t.sub}`}>{h.note}</p>}
