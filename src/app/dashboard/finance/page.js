@@ -137,6 +137,15 @@ function Finance() {
     setMemberNames(data || []);
   }
 
+  // Active ministries for the "Which Ministry?" picker (row rules: Finance
+  // sees their own branch, the Pastor every branch).
+  const [ministries, setMinistries] = useState([]);   // { name, church_id }
+  async function fetchMinistries() {
+    const { data, error } = await supabase.from('ministries').select('name, church_id').eq('is_active', true).order('name');
+    if (error) { console.error('Error fetching ministries:', error.message); return; }
+    setMinistries(data || []);
+  }
+
   async function fetchChurches() {
     const { data, error } = await supabase.from('churches').select('id, name').order('name', { ascending: true });
     if (error) { console.error('Error fetching churches:', error.message); return; }
@@ -211,7 +220,7 @@ function Finance() {
       const p = await fetchProfile();
       if (!p) { setLoading(false); return; }
       await fetchChurches();
-      if (can(p?.role, 'finance', 'edit')) await fetchMemberNames();
+      if (can(p?.role, 'finance', 'edit')) await Promise.all([fetchMemberNames(), fetchMinistries()]);
       if (p && !GLOBAL_ROLES.includes(p.role)) {
         setForm((f) => ({ ...f, church_id: p.church_id || '' }));
       }
@@ -342,6 +351,12 @@ function Finance() {
   const currentPage = Math.min(page, totalPages);
 
   const showMemberField = !NO_MEMBER_CATEGORIES.includes(form.category);
+  // The entry's branch's ministries, plus the saved name when editing an
+  // older entry whose ministry was typed in or has since been closed.
+  const ministryOptions = [...new Set([
+    ...ministries.filter((m) => !form.church_id || m.church_id === form.church_id).map((m) => m.name),
+    ...(form.ministryName ? [form.ministryName] : []),
+  ])];
 
   function handleSearchChange(e) {
     setSearch(e.target.value);
@@ -576,7 +591,10 @@ function Finance() {
 
               {form.category === 'Ministry' && (
                 <Field label="Which Ministry?" required t={t}>
-                  <input type="text" name="ministryName" value={form.ministryName} onChange={handleChange} required placeholder="e.g. Music Ministry, Youth Ministry..." className={inputStyle(t)} />
+                  <select name="ministryName" value={form.ministryName} onChange={handleChange} required className={inputStyle(t)}>
+                    <option value="">Select a ministry…</option>
+                    {ministryOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
                 </Field>
               )}
 

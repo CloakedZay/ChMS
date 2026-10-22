@@ -49,7 +49,9 @@ export default function LoginPage() {
       // Back from Google with an error (e.g. not set up yet)?
       const back = new URLSearchParams(window.location.hash.slice(1)).get('error_description')
         || new URLSearchParams(window.location.search).get('error_description');
-      if (back) setError(`Google sign-in didn't work: ${back}`);
+      if (back) setError(/signups not allowed/i.test(back)
+        ? 'That Google account is not linked to a FaithSync login. Sign in with your username and password, then link Google on the Password & Google page.'
+        : `Google sign-in didn't work: ${back}`);
 
       // Signed out because the account was disabled? Say so.
       try {
@@ -67,8 +69,9 @@ export default function LoginPage() {
 
 
   // Sign in with Google (step E2). Google sends the person back here and the
-  // effect above takes them to their dashboard. Someone whose Google account
-  // isn't linked to a login gets a new Member login with no branch yet.
+  // effect above takes them to their dashboard. Sign-ups are off in Supabase
+  // (Auth → "Allow new users to sign up"), so a Google account that isn't
+  // linked to a login is refused instead of getting a new login.
   async function handleGoogle() {
     setError('');
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
