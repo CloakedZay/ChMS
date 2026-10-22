@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTheme } from '@/app/context/ThemeContext';
+import { supabase } from '@/app/lib/supabase';
 import {
   Users, CalendarDays, BarChart3, ArrowRight, BookOpen, Church,
   HandCoins, MapPin, Heart, Sun, Moon, Check, Menu, X, ShieldCheck,
@@ -48,11 +49,27 @@ const STATS = [
   { value: "4",    label: "Fund Categories" },
 ];
 
+// Branches come from the database (public_locations, db/079), so a new one
+// shows up here by itself. These are shown until they load, and if they can't.
 const LOCATIONS = [
   { name: "Pandi, Bulacan",   role: "Main Church", members: "100+ members", primary: true  },
   { name: "Marungko, Angat",  role: "Satellite",   members: "30+ members",  primary: false },
   { name: "Meycauayan",       role: "Satellite",   members: "20+ members",  primary: false },
 ];
+
+// One database row → one location card. Member counts arrive rounded down to
+// the nearest 10.
+function toLocation(row) {
+  return {
+    name:    row.location || row.name,
+    role:    row.is_main ? "Main Church" : "Satellite",
+    members: row.members >= 10 ? `${row.members}+ members` : "Newly planted",
+    primary: row.is_main,
+    count:   row.members,
+  };
+}
+
+const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
 // Hero photos, shown in turn (public/images, 1600×1200).
 const HERO_PHOTOS = [
@@ -73,6 +90,26 @@ export default function HomePage() {
   const [scrolled, setScrolled] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const [photo, setPhoto] = useState(0);
+  const [branches, setBranches] = useState(null);   // null until loaded
+
+  useEffect(() => {
+    let live = true;
+    supabase.rpc("public_locations").then(({ data, error }) => {
+      if (live && !error && data?.length) setBranches(data.map(toLocation));
+    });
+    return () => { live = false; };
+  }, []);
+
+  const locations = branches || LOCATIONS;
+  const memberTotal = branches
+    ? `${Math.floor(branches.reduce((n, b) => n + b.count, 0) / 10) * 10}+`
+    : "100+";
+  const locationWord = NUMBER_WORDS[locations.length] || String(locations.length);
+  const locationsLabel = `${locations.length} location${locations.length === 1 ? "" : "s"}`;
+  const stats = STATS.map(s =>
+    s.label === "Members"   ? { ...s, value: memberTotal } :
+    s.label === "Locations" ? { ...s, value: String(locations.length) } : s
+  );
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -281,8 +318,8 @@ export default function HomePage() {
                 <Users className="w-5 h-5" strokeWidth={1.75} />
               </span>
               <div>
-                <p className={`text-xl font-bold leading-none ${t.heading}`}>100+</p>
-                <p className={`text-xs mt-1 ${t.muted}`}>Members across 3 locations</p>
+                <p className={`text-xl font-bold leading-none ${t.heading}`}>{memberTotal}</p>
+                <p className={`text-xs mt-1 ${t.muted}`}>Members across {locationsLabel}</p>
               </div>
             </div>
           </div>
@@ -292,7 +329,7 @@ export default function HomePage() {
       {/* ── Stats ─────────────────────────────────────────────────────────── */}
       <section className={`${t.sectionB} border-y ${t.divider}`}>
         <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-          {STATS.map((s) => (
+          {stats.map((s) => (
             <div key={s.label}>
               <p className={`text-4xl font-bold tracking-tight ${t.stat}`}>{s.value}</p>
               <p className={`text-xs mt-2 uppercase tracking-[0.14em] ${t.muted}`}>{s.label}</p>
@@ -362,11 +399,13 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-5 sm:px-8">
           <div className="max-w-2xl mb-14">
             {eyebrow("Where we gather")}
-            <h2 className={`text-3xl sm:text-4xl font-bold leading-tight ${t.heading}`}>One church, three locations</h2>
+            <h2 className={`text-3xl sm:text-4xl font-bold leading-tight ${t.heading}`}>
+              One church, {locationWord} location{locations.length === 1 ? "" : "s"}
+            </h2>
           </div>
 
           <div className="grid md:grid-cols-3 gap-5">
-            {LOCATIONS.map(loc => (
+            {locations.map(loc => (
               <div
                 key={loc.name}
                 className={`rounded-3xl border p-7 ${
