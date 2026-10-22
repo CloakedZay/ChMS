@@ -17,8 +17,8 @@ import { friendlyError } from '@/app/lib/errors';
 import { useDialog } from '@/app/lib/useDialog';
 // Chat for both dashboards: one-to-one (db/029) and groups (db/030).
 // Chats are private to the people in them. Who can be added or messaged is
-// decided by the database (chat_contacts: your own church, plus every Admin
-// and Pastor).
+// decided by the database (chat_contacts, db/077: your own branch, plus
+// anyone who has messaged you; Admin and Pastor can message everyone).
 //
 // Like Messenger (db/073): delete your own message for everyone, delete any
 // message for yourself, delete a whole chat for yourself, and archive a

@@ -59,7 +59,8 @@ export const PERMISSIONS = {
   aiAssistant:        { admin: 'view', pastor: 'view', leader: 'view', finance: 'view', secretary: 'view', member: 'view' },
 
   // Messages — one-to-one chat; everyone can write to the people the database
-  // lists for them (own church, plus every Admin and Pastor). db/029.
+  // lists for them (own branch, plus anyone who has messaged them; Admin and
+  // Pastor everyone). db/029, db/077.
   messages:           { admin: 'edit', pastor: 'edit', leader: 'edit', finance: 'edit', secretary: 'edit', member: 'edit' },
 
   // Events and announcements. Events (db/050): Leaders add them (approved on
