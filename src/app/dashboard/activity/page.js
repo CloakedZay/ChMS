@@ -461,6 +461,8 @@ const RANGES = [
   { key: "7",     label: "7 days",  from: () => daysAgo(6) },
   { key: "30",    label: "30 days", from: () => daysAgo(29) },
   { key: "90",    label: "90 days", from: () => daysAgo(89) },
+  // Starts at the earliest recorded visit (fetched on mount), or today if none.
+  { key: "all",   label: "All time", from: (firstDay) => firstDay || daysAgo(0) },
 ];
 
 function ScreenTimePanel({ t, dark, people, selectStyle }) {
@@ -472,6 +474,16 @@ function ScreenTimePanel({ t, dark, people, selectStyle }) {
   const [pages, setPages]       = useState({});
   const [search, setSearch]     = useState("");
   const [level, setLevel]       = useState("all");
+  const [firstDay, setFirstDay] = useState(null);
+  const [custom, setCustom]     = useState(false);
+
+  useEffect(() => {
+    supabase.from("page_visits").select("started_at").order("started_at", { ascending: true }).limit(1)
+      .then(({ data, error }) => {
+        if (error) console.error("Error loading first visit:", error.message);
+        if (data?.[0]) setFirstDay(dayString(new Date(data[0].started_at)));
+      });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -488,9 +500,10 @@ function ScreenTimePanel({ t, dark, people, selectStyle }) {
 
   const onDate = (setter) => (ev) => { if (ev.target.value) { setLoading(true); setter(ev.target.value); } };
   const today = dayString(new Date());
-  const activeRange = dateTo === today ? RANGES.find((r) => r.from() === dateFrom)?.key : null;
+  const activeRange = custom ? "custom" : dateTo === today ? RANGES.find((r) => r.from(firstDay) === dateFrom)?.key : null;
   function pickRange(r) {
-    const from = r.from();
+    setCustom(false);
+    const from = r.from(firstDay);
     if (from === dateFrom && dateTo === today) return;
     setLoading(true);
     setDateFrom(from);
@@ -538,12 +551,16 @@ function ScreenTimePanel({ t, dark, people, selectStyle }) {
               {r.label}
             </button>
           ))}
+          <button onClick={() => setCustom(true)} aria-pressed={custom}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${custom ? "bg-blue-600 text-white shadow" : t.textSub}`}>
+            Custom
+          </button>
         </div>
-        <div className="flex items-center gap-2">
+        {custom && <div className="flex items-center gap-2">
           <DatePicker value={dateFrom} max={dateTo} onChange={onDate(setDateFrom)} clearable={false} weekday={false} ariaLabel="From date" className={`${selectStyle} min-w-[9.5rem]`} />
           <span className={`text-xs ${t.textSub}`}>to</span>
           <DatePicker value={dateTo} min={dateFrom} onChange={onDate(setDateTo)} clearable={false} weekday={false} ariaLabel="To date" className={`${selectStyle} min-w-[9.5rem]`} />
-        </div>
+        </div>}
         <span className={`text-xs ${t.textMuted} lg:ml-auto`}>Only time with the page open and visible is counted.</span>
       </div>
 
