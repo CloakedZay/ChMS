@@ -11,7 +11,7 @@ import { useTheme } from '@/app/context/ThemeContext';
 import { can, GLOBAL_ROLES } from '@/app/lib/permissions';
 import { levelBadge } from '@/app/lib/roleColors';
 import BranchLabel from '@/app/components/BranchLabel';
-import { notifyFollowUpChanged, MISSED_EVENTS } from '@/app/lib/useFollowUpReminder';
+import { notifyFollowUpChanged, MISSED_EVENTS, REMINDER_DAYS } from '@/app/lib/useFollowUpReminder';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
@@ -63,9 +63,10 @@ export default function FollowUpPage() {
 
   const [rows, setRows] = useState(null);
   const [loadError, setLoadError] = useState('');
-  const [threshold, setThreshold] = useState(30);
+  const [threshold, setThreshold] = useState(REMINDER_DAYS);
   const [tab, setTab] = useState('needs');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('any');   // any | active | busy | inactive
   const [openHistory, setOpenHistory] = useState(null);   // member id
   const [history, setHistory] = useState({});             // id → entries
   const [logFor, setLogFor] = useState(null);             // member row
@@ -179,6 +180,7 @@ export default function FollowUpPage() {
   const shown = people
     .filter((p) => (tab === 'needs' ? p.needs : tab === 'followed' ? p.flagged && p.followedRecently
       : tab === 'notReturning' ? p.notReturning : tab === 'noLogin' ? !p.has_login : true))
+    .filter((p) => statusFilter === 'any' || p.member_status === statusFilter)
     .filter((p) => !q || p.full_name?.toLowerCase().includes(q))
     // longest away first; never-seen at the top
     .sort((a, b) => (b.away ?? Infinity) - (a.away ?? Infinity) || a.full_name.localeCompare(b.full_name));
@@ -222,17 +224,17 @@ export default function FollowUpPage() {
 
   const branchVisitors = (visitors || []).filter((v) => inBranch(v.church_id));
   const TABS = [
+    ['all', 'All members', counts.all],
     ['needs', 'Needs follow-up', counts.needs],
     ['followed', 'Followed up', counts.followed],
     ['notReturning', 'Not returning', counts.notReturning],
     ['noLogin', 'No login', counts.noLogin],
-    ['all', 'All members', counts.all],
     ['visitors', 'Visitors', visitors ? branchVisitors.length : ''],
   ];
   const shownVisitors = branchVisitors.filter((v) => !q || v.full_name.toLowerCase().includes(q) || (v.phone || '').includes(q));
 
   // Long lists are shown 10 at a time (components/Pagination).
-  const pg = usePaged(shown, 10, `${tab}|${search}|${threshold}|${branch}`);
+  const pg = usePaged(shown, 10, `${tab}|${search}|${threshold}|${branch}|${statusFilter}`);
 
   // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
   const logDialogRef = useDialog(!!logFor, () => { if (!saving) setLogFor(null); });
@@ -284,6 +286,15 @@ export default function FollowUpPage() {
               {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
+          {tab !== 'visitors' && (
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Status"
+              className={`border rounded-xl px-3 h-10 text-sm ${t.input}`}>
+              <option value="any">All statuses</option>
+              <option value="active">Active</option>
+              <option value="busy">Busy</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          )}
           {tab !== 'visitors' && <label className={`flex items-center gap-2 text-sm ${t.sub}`}>
             <Clock size={15} />
             <span className="whitespace-nowrap">Not seen in</span>
@@ -313,9 +324,9 @@ export default function FollowUpPage() {
             <CheckCircle2 size={26} strokeWidth={1.5} />
           </span>
           <p className={`font-bold ${t.text}`}>
-            {q ? 'No members match your search.' : tab === 'needs' ? 'Everyone is accounted for' : 'Nobody here'}
+            {q || statusFilter !== 'any' ? 'No members match your filters.' : tab === 'needs' ? 'Everyone is accounted for' : 'Nobody here'}
           </p>
-          {tab === 'needs' && !q && (
+          {tab === 'needs' && !q && statusFilter === 'any' && (
             <p className={`text-sm mt-1 ${t.sub}`}>No one has been away for {threshold}+ days or missed their last {MISSED_EVENTS} events without a recent follow-up.</p>
           )}
         </div>

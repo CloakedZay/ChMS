@@ -116,7 +116,9 @@ export default function MinistriesPage() {
   const active = shown.filter((m) => m.is_active);
   const off = shown.filter((m) => !m.is_active);
   const peopleIn = (ministryId) => assignments.filter((a) => a.ministry_id === ministryId);
-  const canAssign = (m) => isPastor || (role === "leader" && m.leader_id && m.leader_id === user?.id);
+  // Only the ministry's head (a Leader) adds and removes its members; the
+  // Pastor picks the head (db/082).
+  const canAssign = (m) => role === "leader" && m.leader_id && m.leader_id === user?.id;
 
   // ── Ministry add / edit (Pastor) ────────────────────────────────────────
   function openNew() {
@@ -253,7 +255,7 @@ export default function MinistriesPage() {
                 <p className={`text-sm font-bold ${t.textPrimary}`}>{head || "Not set"}</p>
                 {m.leader_id
                   ? <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1"><Link2 size={10} /> Login: {leaderName(leaderById(m.leader_id))}</p>
-                  : <p className={`text-[10px] ${t.textMuted} mt-1`}>No login linked — only the Pastor can add members</p>}
+                  : <p className={`text-[10px] ${t.textMuted} mt-1`}>No Leader picked yet — nobody can add members until the Pastor picks one</p>}
               </div>
               <div className={`${t.innerCard} rounded-2xl p-3`}>
                 <p className={`text-[10px] ${t.textMuted} uppercase tracking-wider mb-1`}>Meets</p>
@@ -269,8 +271,8 @@ export default function MinistriesPage() {
               <div className="flex items-center justify-between mb-3">
                 <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Members</p>
                 {isPastor && (
-                  <button onClick={() => openEdit(m)} className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-bold">
-                    <Pencil size={12} /> Edit ministry
+                  <button onClick={() => openEdit(m)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-sm shrink-0">
+                    <Pencil size={14} /> Edit ministry
                   </button>
                 )}
               </div>
@@ -312,6 +314,13 @@ export default function MinistriesPage() {
                     {busy === m.id ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />} Add
                   </button>
                 </div>
+              )}
+              {!assignable && m.is_active && isPastor && (
+                <p className={`text-[11px] ${t.textMuted}`}>
+                  {m.leader_id
+                    ? `${leaderName(leaderById(m.leader_id))} (the head) adds and removes this ministry's members.`
+                    : 'Pick the head in Edit ministry. They add and remove its members.'}
+                </p>
               )}
               {assignable && m.is_active && (
                 <p className={`text-[11px] ${t.textMuted} mt-1.5`}>
@@ -449,12 +458,12 @@ export default function MinistriesPage() {
               <Field t={t} label="Description (optional)">
                 <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={`${input} resize-none`} />
               </Field>
-              <Field t={t} label="Head's name">
+              <Field t={t} label="Name shown as head (optional)">
                 <input value={form.head_name} onChange={(e) => setForm({ ...form, head_name: e.target.value })} placeholder="e.g. Mr. Juan dela Cruz" className={input} />
               </Field>
-              <Field t={t} label="Head's login (optional — lets them add members)">
+              <Field t={t} label="Head — a Leader of this branch, who adds the members">
                 <select value={form.leader_id} onChange={(e) => setForm({ ...form, leader_id: e.target.value })} className={input}>
-                  <option value="">No login linked</option>
+                  <option value="">No head yet</option>
                   {leaders.filter((l) => l.church_id === form.church_id).map((l) => (
                     <option key={l.id} value={l.id}>
                       {[l.full_name, l.email].filter(Boolean).join(" — ")} · {ROLE_LABELS[l.role] || l.role}

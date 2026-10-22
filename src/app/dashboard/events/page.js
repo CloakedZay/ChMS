@@ -119,6 +119,8 @@ export default function EventsPage() {
   const canManageAll = can(role, 'events', 'approve');
   const canSubmit    = can(role, 'events', 'submit');
   const canSeeAttendance = can(role, 'attendance', 'view');   // db/041
+  // Only the Secretary takes it; the Pastor and Leaders just view (db/081).
+  const attendanceLabel  = can(role, 'attendance', 'edit') ? 'Take attendance' : 'View attendance';
   // A branch with no Leader: the Pastor approves or sends back its pending
   // events instead (db/066).
   const [noLeader, setNoLeader] = useState(new Set());
@@ -434,7 +436,7 @@ export default function EventsPage() {
       branchName: isGlobal ? churchName(event.church_id) : null,
       onEdit: wrap(canEditEvent(event) ? openEdit : null),
       onDelete: wrap(canEditEvent(event) ? openDelete : null),
-      attendance: canSeeAttendance,
+      attendance: canSeeAttendance ? attendanceLabel : null,
       onShowSeries: event.series ? wrap(() => { setSeriesView(event.series_id); switchView('cards'); }) : null,
       onApprove: wrap((canManageAll && (event.status === 'pending' || (event.status === 'planning' && event.created_by === user?.id))) || pastorReviews(event) ? approve : null),
       onSendBack: wrap((canManageAll && event.status === 'pending') || pastorReviews(event) ? (ev) => { setSendBack(ev); setBackNote(''); } : null),
@@ -924,7 +926,7 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
         {attendance && ['approved', 'done'].includes(phase) && event.date && event.date <= phToday() && (
           <Link href={`/dashboard/attendance?event=${event.id}`}
             className="mt-4 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition-colors">
-            <ClipboardCheck size={13} /> Attendance
+            <ClipboardCheck size={13} /> {attendance}
           </Link>
         )}
       </div>

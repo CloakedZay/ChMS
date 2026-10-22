@@ -48,6 +48,8 @@ export const PERMISSIONS = {
   memberArchive:      { pastor: 'edit', secretary: 'edit' },
   // Inactive-member follow-up (db/032): own branch; Pastor every branch.
   followUp:           { pastor: 'edit', leader: 'edit', secretary: 'edit' },
+  // Ministries (db/082): the Pastor adds them and picks each head (a
+  // Leader); only the head adds and removes the ministry's members.
   ministryEnrollment: { pastor: 'edit', leader: 'edit', secretary: 'view' },
 
   // Discipleship and AI assistant
@@ -66,10 +68,11 @@ export const PERMISSIONS = {
   // Events and announcements. Events (db/050): Leaders add them (approved on
   // save) and approve the Secretary's; the Secretary submits; the Pastor views.
   events:             { admin: 'view', pastor: 'view', leader: 'approve', finance: 'view', secretary: 'submit', member: 'view' },
-  // Event attendance (db/041): Leaders / Secretary own branch. Members see
-  // their own; members the Pastor or Secretary make "attendance helpers"
-  // also take it — checked by the database.
-  attendance:         { admin: 'view', pastor: 'edit', leader: 'edit', finance: 'view', secretary: 'edit', member: 'own' },
+  // Event attendance (db/041, db/081): the Secretary takes it, own branch;
+  // the Pastor and Leaders only view it. Members see their own; members the
+  // Pastor or Secretary make "attendance helpers" also take it — checked by
+  // the database.
+  attendance:         { admin: 'view', pastor: 'view', leader: 'view', finance: 'view', secretary: 'edit', member: 'own' },
   announcements:      { admin: 'view', pastor: 'edit', leader: 'edit', finance: 'view', secretary: 'view', member: 'view' },
   bibleVerses:        { admin: 'view', pastor: 'edit', leader: 'edit', member: 'view' },
 

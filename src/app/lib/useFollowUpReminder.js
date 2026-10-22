@@ -15,7 +15,8 @@ import { supabase } from '@/app/lib/supabase';
 // "Remind me tomorrow" hides the reminder (not the sidebar count) until the
 // next day, per person on this browser.
 
-export const REMINDER_DAYS = 30;
+// Also the Follow-up page's default "Not seen in".
+export const REMINDER_DAYS = 7;
 // Events in a row a member may miss before they're flagged; the database's
 // followup_due() uses the same default (db/046).
 export const MISSED_EVENTS = 3;

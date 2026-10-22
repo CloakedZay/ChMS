@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
-import { can } from "@/app/lib/permissions";
+import { can, GLOBAL_ROLES, ROLE_LABELS } from "@/app/lib/permissions";
 import {
   BarChart3, TrendingUp, PieChart,
-  Download, Filter, ArrowUpRight, ArrowDownRight,
+  Download, ArrowUpRight, ArrowDownRight,
   Users, Wallet, Calendar, TrendingDown, Sun, Moon, UserMinus, CalendarClock, UserCheck, RefreshCw, UserPlus
 } from "lucide-react";
 import Link from "next/link";
@@ -27,6 +27,7 @@ const EVENT_STATUSES = [
   { key: "pending",  label: "Pending",  bar: "bg-orange-500" },
   { key: "approved", label: "Approved", bar: "bg-emerald-500" },
   { key: "done",     label: "Done",     bar: "bg-blue-500" },
+  { key: "cancelled", label: "Cancelled", bar: "bg-rose-500" },   // db/051
 ];
 
 const FUND_COLORS = {
@@ -73,6 +74,18 @@ export default function ReportsPage() {
   // Finance). Admin and Secretary get member and event figures instead —
   // the database wouldn't return finance rows to them anyway.
   const showFinance = can(role, 'financeReports');
+  // Admin and Pastor see every branch, together or one at a time; everyone
+  // else only ever gets their own branch from the database.
+  const isGlobal = GLOBAL_ROLES.includes(role);
+  const [branch, setBranch] = useState('all');
+  const [churches, setChurches] = useState([]);
+  const church = isGlobal && branch !== 'all' ? branch : null;
+  const churchLabel = church ? churches.find((c) => c.id === church)?.name : null;
+
+  useEffect(() => {
+    if (!isGlobal) return;
+    supabase.from('churches').select('id, name').order('name').then(({ data }) => setChurches(data || []));
+  }, [isGlobal]);
 
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -118,24 +131,26 @@ export default function ReportsPage() {
         // collect them — otherwise a failure just shows as zeros.
         const errors = [];
         const check = (res) => { if (res.error) errors.push(res.error); return res; };
+        // The chosen branch only (Admin, Pastor); otherwise unchanged.
+        const scoped = (q) => (church ? q.eq('church_id', church) : q);
 
-        const { count: mTotal } = check(await supabase
+        const { count: mTotal } = check(await scoped(supabase
           .from('member_directory')
-          .select('*', { count: 'exact', head: true }));
+          .select('*', { count: 'exact', head: true })));
 
-        const { count: mActive } = check(await supabase
-          .from('member_directory')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'active'));
-
-        const { count: mInactive } = check(await supabase
+        const { count: mActive } = check(await scoped(supabase
           .from('member_directory')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'inactive'));
+          .eq('status', 'active')));
 
-        const { data: members } = check(await fetchAll(() => supabase
+        const { count: mInactive } = check(await scoped(supabase
           .from('member_directory')
-          .select('ministry')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'inactive')));
+
+        const { data: members } = check(await fetchAll(() => scoped(supabase
+          .from('member_directory')
+          .select('ministry'))
           .order('id')));
 
         // Group by ministry. The directory lists a member's real ministries
@@ -152,9 +167,9 @@ export default function ReportsPage() {
 
         // ── Transactions (only for levels that can see finance) ──
         const { data: allTrans } = showFinance
-          ? check(await fetchAll(() => supabase
+          ? check(await fetchAll(() => scoped(supabase
               .from('transactions')
-              .select('amount, type, date_recorded, status')
+              .select('amount, type, date_recorded, status'))
               .order('date_recorded', { ascending: false })
               .order('id', { ascending: false })))
           : { data: [] };
@@ -169,11 +184,10 @@ export default function ReportsPage() {
           .filter(t => t.type === 'expense')
           .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-        // Group by month, oldest to newest, keeping the latest 7 months.
+        // Group by month: the last 7 months up to this one, oldest first,
+        // with ₱0 for a month with no entries so a quiet month still shows.
         // date_recorded is a plain date ("2026-10-21"), so its first 7
-        // characters are the month and sort in date order. (The rows come
-        // newest first, so grouping in arrival order and slicing the end
-        // used to keep the 7 *oldest* months — new entries never showed.)
+        // characters are the month.
         const monthMap = {};
         (trans || []).forEach((t) => {
           if (!t.date_recorded) return;
@@ -182,29 +196,26 @@ export default function ReportsPage() {
           if (t.type === 'income') monthMap[key].income += Number(t.amount || 0);
           if (t.type === 'expense') monthMap[key].expense += Number(t.amount || 0);
         });
-        const monthlyArr = Object.keys(monthMap)
-          .sort()
-          .slice(-7)
-          .map((key) => ({
-            month: new Date(`${key}-01T00:00:00`).toLocaleDateString('en-PH', { month: 'short', year: '2-digit' }),
-            ...monthMap[key],
-          }));
+        const monthlyArr = (trans || []).length === 0 ? [] : lastMonths(7).map((key) => ({
+          month: new Date(`${key}-01T00:00:00`).toLocaleDateString('en-PH', { month: 'short', year: '2-digit' }),
+          ...(monthMap[key] || { income: 0, expense: 0 }),
+        }));
 
         // ── Events ────────────────────────────────────────────
-        const { count: evTotal } = check(await supabase
+        const { count: evTotal } = check(await scoped(supabase
           .from('events')
-          .select('*', { count: 'exact', head: true }));
+          .select('*', { count: 'exact', head: true })));
 
         // Upcoming = approved, from today (Philippine date) on.
-        const { count: evUpcoming } = check(await supabase
+        const { count: evUpcoming } = check(await scoped(supabase
           .from('events')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'approved')
-          .gte('date', phToday()));
+          .gte('date', phToday())));
 
-        const { data: evStatuses } = check(await fetchAll(() => supabase
+        const { data: evStatuses } = check(await fetchAll(() => scoped(supabase
           .from('events')
-          .select('status')
+          .select('status'))
           .order('id')));
         const statusMap = {};
         (evStatuses || []).forEach((e) => {
@@ -239,11 +250,13 @@ export default function ReportsPage() {
     }
 
     loadReport();
-  }, [showFinance, reloadKey]);
+  }, [showFinance, reloadKey, church]);
 
   // ── PDF export ─────────────────────────────────────────────────────────
-  // NOTE: this is a temporary layout — a proper branded / print-ready
-  // report can replace it later.
+  // A4 church report in the app's colours (green and gold), with the logo,
+  // the branch picked above, every section on the page, and page numbers.
+  // New members and attendance are fetched here, for the same branch, since
+  // their sections load them on their own.
   async function handleExportPDF() {
     setExporting(true);
     // Open the tab synchronously, in direct response to the click, so
@@ -256,9 +269,17 @@ export default function ReportsPage() {
       );
     }
     try {
-      const [{ jsPDF }, autoTableMod] = await Promise.all([
+      const [{ jsPDF }, autoTableMod, joinRes, attRes, logo] = await Promise.all([
         import('jspdf'),
         import('jspdf-autotable'),
+        supabase.rpc('member_join_trend', church ? { p_months: 12, p_church: church } : { p_months: 12 }),
+        can(role, 'attendance')
+          ? supabase.rpc('attendance_events', { p_church: church })
+          : Promise.resolve({ data: [] }),
+        fetch('/logo.png')
+          .then((r) => (r.ok ? r.blob() : null))
+          .then((b) => b && new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(null); fr.readAsDataURL(b); }))
+          .catch(() => null),
       ]);
       const autoTable = autoTableMod.default;
 
@@ -266,175 +287,234 @@ export default function ReportsPage() {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const marginX = 40;
+      const bottom = pageHeight - 56;   // keep clear of the footer
+      const contentW = pageWidth - marginX * 2;
 
       // jsPDF's standard fonts don't include the ₱ glyph, so spell it out.
       const peso = pesoPdf;
+      const fmtDate = (d) => new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 
-      const BLUE   = [37, 99, 235];
-      const INDIGO = [99, 102, 241];
-      const PINK   = [219, 39, 119];
-      const ROSE   = [225, 29, 72];
-      const EMERALD= [5, 150, 105];
+      const GREEN  = [23, 63, 53];
+      const GOLD   = [197, 166, 106];
       const INK    = [30, 41, 59];
       const SUBTLE = [100, 116, 139];
+      const ROSE   = [190, 18, 60];
+      const POS    = [4, 120, 87];
+      const ZEBRA  = [248, 247, 242];
+      const LINE   = [229, 227, 216];
 
-      // ── Header band ───────────────────────────────────────────────
-      doc.setFillColor(...BLUE);
-      doc.rect(0, 0, pageWidth, 92, 'F');
-      doc.setTextColor(255, 255, 255);
+      const branchText = (churchLabel || branchLabelText(role, churchName));
+      const generated = new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' });
+
+      // ── Letterhead ────────────────────────────────────────────────
+      let textX = marginX;
+      if (logo) {
+        try { doc.addImage(logo, 'PNG', marginX, 30, 52, 52); textX = marginX + 64; } catch { /* no logo */ }
+      }
+      doc.setTextColor(...GREEN);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.text(branchLabelText(role, churchName).toUpperCase(), marginX, 30);
-      doc.setFontSize(21);
-      doc.text('Reports & Analytics', marginX, 56);
+      doc.setFontSize(13);
+      doc.text("God's Grace Christian Fellowship Global Ministries Inc.", textX, 48);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
-      doc.text(
-        `Generated ${new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}`,
-        marginX, 76
-      );
+      doc.setTextColor(...SUBTLE);
+      doc.text(branchText, textX, 63);
+      doc.text(`FaithSync Church Management · Generated ${generated}`, textX, 76);
 
-      let y = 122;
+      doc.setDrawColor(...GOLD);
+      doc.setLineWidth(1.5);
+      doc.line(marginX, 96, pageWidth - marginX, 96);
+      doc.setLineWidth(1);
 
-      // ── Summary stat cards ───────────────────────────────────────────
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(20);
+      doc.setTextColor(...INK);
+      doc.text('Church Report', marginX, 128);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...SUBTLE);
+      doc.text(`Prepared for: ${ROLE_LABELS[role] || role || 'Staff'} · Figures as of ${new Date().toLocaleDateString('en-PH', { dateStyle: 'medium' })}`, marginX, 144);
+
+      let y = 166;
+
+      // ── Summary cards ─────────────────────────────────────────────
       const cards = showFinance ? [
-        { label: 'TOTAL BALANCE',  value: peso(balance),                        color: BLUE },
-        { label: 'ACTIVE MEMBERS', value: `${activeMembers} / ${totalMembers}`, color: INDIGO },
-        { label: 'TOTAL EVENTS',   value: `${totalEvents} (${upcomingEvents} upcoming)`, color: PINK },
-        { label: 'TOTAL EXPENSES', value: peso(totalExpense),                   color: ROSE },
+        { label: 'NET BALANCE',    value: peso(balance) },
+        { label: 'ACTIVE MEMBERS', value: `${activeMembers} of ${totalMembers}` },
+        { label: 'EVENTS',         value: `${totalEvents} (${upcomingEvents} upcoming)` },
+        { label: 'TOTAL EXPENSES', value: peso(totalExpense) },
       ] : [
-        { label: 'ACTIVE MEMBERS',   value: `${activeMembers} / ${totalMembers}`, color: INDIGO },
-        { label: 'INACTIVE MEMBERS', value: String(inactiveMembers),              color: SUBTLE },
-        { label: 'TOTAL EVENTS',     value: String(totalEvents),                  color: PINK },
-        { label: 'UPCOMING EVENTS',  value: String(upcomingEvents),               color: EMERALD },
+        { label: 'ACTIVE MEMBERS',   value: `${activeMembers} of ${totalMembers}` },
+        { label: 'INACTIVE MEMBERS', value: String(inactiveMembers) },
+        { label: 'EVENTS',           value: String(totalEvents) },
+        { label: 'UPCOMING EVENTS',  value: String(upcomingEvents) },
       ];
-      const cardGap = 12;
-      const cardW = (pageWidth - marginX * 2 - cardGap * 3) / 4;
-      const cardH = 58;
+      const cardGap = 10;
+      const cardW = (contentW - cardGap * 3) / 4;
+      const cardH = 56;
       cards.forEach((c, i) => {
         const x = marginX + i * (cardW + cardGap);
-        doc.setFillColor(246, 248, 251);
-        doc.roundedRect(x, y, cardW, cardH, 6, 6, 'F');
-        doc.setFillColor(...c.color);
-        doc.roundedRect(x, y, 4, cardH, 2, 2, 'F');
+        doc.setFillColor(...ZEBRA);
+        doc.setDrawColor(...LINE);
+        doc.roundedRect(x, y, cardW, cardH, 5, 5, 'FD');
+        doc.setFillColor(...GOLD);
+        doc.rect(x, y + 8, 3, cardH - 16, 'F');
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(6.5);
         doc.setTextColor(...SUBTLE);
-        doc.text(c.label, x + 13, y + 19);
-        doc.setFontSize(11.5);
-        doc.setTextColor(...INK);
-        doc.text(c.value, x + 13, y + 40);
+        doc.text(c.label, x + 12, y + 20);
+        doc.setFontSize(11);
+        doc.setTextColor(...GREEN);
+        doc.text(doc.splitTextToSize(c.value, cardW - 20)[0], x + 12, y + 40);
       });
-      y += cardH + 30;
+      y += cardH + 28;
 
-      function sectionTitle(title, color) {
+      // ── Helpers ───────────────────────────────────────────────────
+      function ensure(space) {
+        if (y + space > bottom) { doc.addPage(); y = 56; }
+      }
+      function section(title, note) {
+        ensure(80);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(12);
-        doc.setTextColor(...INK);
+        doc.setTextColor(...GREEN);
         doc.text(title, marginX, y);
-        doc.setDrawColor(...color);
-        doc.setLineWidth(2);
-        doc.line(marginX, y + 5, marginX + 26, y + 5);
+        if (note) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(...SUBTLE);
+          doc.text(note, pageWidth - marginX, y, { align: 'right' });
+        }
+        doc.setDrawColor(...GOLD);
+        doc.setLineWidth(1.5);
+        doc.line(marginX, y + 5, marginX + 28, y + 5);
         doc.setLineWidth(1);
-        y += 16;
+        y += 14;
       }
-
-      // ── Finance Summary (finance levels) / Events by Status (others) ──
-      if (showFinance) {
-      sectionTitle('Finance Summary', BLUE);
-      autoTable(doc, {
-        startY: y,
-        margin: { left: marginX, right: marginX },
-        head: [['Category', 'Amount']],
-        body: [
-          ['Total Income', peso(totalIncome)],
-          ['Total Expenses', peso(totalExpense)],
-          ['Net Balance', peso(balance)],
-        ],
-        theme: 'plain',
-        styles: { fontSize: 10, cellPadding: 7, textColor: INK },
-        headStyles: { fillColor: BLUE, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-        alternateRowStyles: { fillColor: [247, 249, 252] },
-        columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
-      });
-      y = doc.lastAutoTable.finalY + 28;
-      } else {
-        sectionTitle('Events by Status', PINK);
+      function table(head, body, columnStyles = {}, extra = {}) {
         autoTable(doc, {
           startY: y,
-          margin: { left: marginX, right: marginX },
-          head: [['Status', 'Events']],
-          body: EVENT_STATUSES.map((st) => [st.label, String(eventsByStatus[st.key] || 0)]),
-          theme: 'striped',
-          styles: { fontSize: 10, cellPadding: 7, textColor: INK },
-          headStyles: { fillColor: PINK, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-          columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+          margin: { left: marginX, right: marginX, bottom: 56 },
+          head: [head],
+          body,
+          theme: 'plain',
+          styles: { fontSize: 9.5, cellPadding: 6, textColor: INK, lineColor: LINE },
+          headStyles: { fillColor: GREEN, textColor: 255, fontStyle: 'bold', fontSize: 8.5 },
+          alternateRowStyles: { fillColor: ZEBRA },
+          columnStyles,
+          ...extra,
         });
-        y = doc.lastAutoTable.finalY + 28;
+        y = doc.lastAutoTable.finalY + 26;
+      }
+      const right = { halign: 'right' };
+
+      // ── Membership ────────────────────────────────────────────────
+      section('Membership', `${totalMembers} members · ${activeMembers} active · ${inactiveMembers} inactive`);
+      table(
+        ['Ministry', 'Members', '% of members'],
+        membersByMinistry.length
+          ? membersByMinistry.map((m) => [m.name, String(m.count), `${totalMembers ? Math.round((m.count / totalMembers) * 100) : 0}%`])
+          : [['No member data yet.', '—', '—']],
+        { 1: right, 2: right },
+      );
+
+      // ── New members per month ─────────────────────────────────────
+      const joins = joinRes.error ? [] : joinRes.data || [];
+      if (joins.length) {
+        const joinedTotal = joins.reduce((a, r) => a + r.joined, 0);
+        section('New Members per Month', `${joinedTotal} in the last 12 months`);
+        table(
+          ['Month', 'Joined'],
+          [...joins].reverse().map((r) => [
+            new Date(`${String(r.month).slice(0, 7)}-01T00:00:00`).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }),
+            String(r.joined),
+          ]),
+          { 1: right },
+        );
       }
 
-      // ── Members by Ministry ──────────────────────────────────────────
-      sectionTitle('Members by Ministry', INDIGO);
-      const ministryRows = membersByMinistry.length > 0
-        ? membersByMinistry.map((m) => {
-            const pct = totalMembers > 0 ? Math.round((m.count / totalMembers) * 100) : 0;
-            return [m.name, String(m.count), `${pct}%`];
-          })
-        : [['No member data yet.', '—', '—']];
-      autoTable(doc, {
-        startY: y,
-        margin: { left: marginX, right: marginX },
-        head: [['Ministry', 'Members', '% of Total']],
-        body: ministryRows,
-        theme: 'striped',
-        styles: { fontSize: 10, cellPadding: 7, textColor: INK },
-        headStyles: { fillColor: INDIGO, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } },
-      });
-      y = doc.lastAutoTable.finalY + 28;
+      // ── Events ────────────────────────────────────────────────────
+      section('Events by Status', `${totalEvents} events · ${upcomingEvents} upcoming`);
+      table(
+        ['Status', 'Events'],
+        EVENT_STATUSES.map((st) => [st.label, String(eventsByStatus[st.key] || 0)]),
+        { 1: right },
+      );
 
-      // ── Recent Transactions (finance levels only) ──────────────────────
+      // ── Attendance ────────────────────────────────────────────────
+      const taken = (attRes.data || []).filter((e) => e.members_present + e.visitors > 0);
+      if (taken.length) {
+        const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+        const recent = taken.filter((e) => e.date >= since);
+        const possible = recent.reduce((a, e) => a + e.active_members, 0);
+        const rate = possible ? `${Math.round((recent.reduce((a, e) => a + e.members_present, 0) / possible) * 100)}%` : '—';
+        const visitors = recent.reduce((a, e) => a + e.visitors, 0);
+        section('Event Attendance', `Last 90 days: ${rate} attendance · ${visitors} visitors`);
+        table(
+          ['Event', 'Date', 'Members', 'Visitors', 'Rate'],
+          taken.slice(0, 10).map((e) => [
+            e.title,
+            fmtDate(e.date),
+            String(e.members_present),
+            String(e.visitors),
+            `${e.active_members ? Math.min(100, Math.round((e.members_present / e.active_members) * 100)) : 0}%`,
+          ]),
+          { 2: right, 3: right, 4: right },
+        );
+      }
+
+      // ── Finance (finance levels only) ─────────────────────────────
       if (showFinance) {
-      sectionTitle('Recent Transactions', EMERALD);
-      const txRows = recentTransactions.length > 0
-        ? recentTransactions.map((tx) => {
-            const dateStr = tx.date_recorded
-              ? new Date(tx.date_recorded).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-              : '—';
-            return [dateStr, tx.type === 'income' ? 'Income' : 'Expense', `${tx.type === 'expense' ? '-' : '+'}${peso(tx.amount)}`];
-          })
-        : [['—', 'No transactions recorded yet.', '—']];
-      autoTable(doc, {
-        startY: y,
-        margin: { left: marginX, right: marginX },
-        head: [['Date', 'Type', 'Amount']],
-        body: txRows,
-        theme: 'striped',
-        styles: { fontSize: 10, cellPadding: 7, textColor: INK },
-        headStyles: { fillColor: EMERALD, textColor: 255, fontStyle: 'bold', fontSize: 9 },
-        columnStyles: { 2: { halign: 'right', fontStyle: 'bold' } },
-        didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 2) {
-            const raw = txRows[data.row.index]?.[2];
-            if (raw?.startsWith('-')) data.cell.styles.textColor = ROSE;
-            else if (raw?.startsWith('+')) data.cell.styles.textColor = EMERALD;
-          }
-        },
-      });
+        section('Finance Summary', 'Voided entries are not counted');
+        table(
+          ['', 'Amount'],
+          [['Total income', peso(totalIncome)], ['Total expenses', peso(totalExpense)], ['Net balance', peso(balance)]],
+          { 1: { halign: 'right', fontStyle: 'bold' } },
+        );
+
+        if (monthlyTotals.length) {
+          section('Monthly Income and Expenses', 'Last 7 months');
+          const monthRows = monthlyTotals.map((m) => [m.month, peso(m.income), peso(m.expense), peso(m.income - m.expense)]);
+          table(['Month', 'Income', 'Expenses', 'Net'], monthRows, { 1: right, 2: right, 3: { halign: 'right', fontStyle: 'bold' } }, {
+            didParseCell: (data) => {
+              if (data.section === 'body' && data.column.index === 3) {
+                const m = monthlyTotals[data.row.index];
+                data.cell.styles.textColor = m && m.income - m.expense < 0 ? ROSE : POS;
+              }
+            },
+          });
+        }
+
+        section('Recent Transactions');
+        const txRows = recentTransactions.length
+          ? recentTransactions.map((tx) => [
+              tx.date_recorded ? fmtDate(tx.date_recorded) : '—',
+              tx.type === 'income' ? 'Income' : 'Expense',
+              `${tx.type === 'expense' ? '-' : '+'}${peso(tx.amount)}`,
+            ])
+          : [['—', 'No transactions recorded yet.', '—']];
+        table(['Date', 'Type', 'Amount'], txRows, { 2: { halign: 'right', fontStyle: 'bold' } }, {
+          didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 2) {
+              const raw = txRows[data.row.index]?.[2];
+              if (raw?.startsWith('-')) data.cell.styles.textColor = ROSE;
+              else if (raw?.startsWith('+')) data.cell.styles.textColor = POS;
+            }
+          },
+        });
       }
 
-      // ── Footer on every page ──────────────────────────────────────────
+      // ── Footer on every page ──────────────────────────────────────
       const pageCount = doc.internal.getNumberOfPages();
       for (let p = 1; p <= pageCount; p++) {
         doc.setPage(p);
-        doc.setDrawColor(226, 232, 240);
-        doc.line(marginX, pageHeight - 36, pageWidth - marginX, pageHeight - 36);
-        doc.setFont('helvetica', 'italic');
+        doc.setDrawColor(...LINE);
+        doc.line(marginX, pageHeight - 38, pageWidth - marginX, pageHeight - 38);
+        doc.setFont('helvetica', 'normal');
         doc.setFontSize(7.5);
         doc.setTextColor(...SUBTLE);
-        doc.text('Temporary auto-generated report — a formatted, branded layout is coming soon.', marginX, pageHeight - 22);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Page ${p} of ${pageCount}`, pageWidth - marginX, pageHeight - 22, { align: 'right' });
+        doc.text(`GGCF-GMI · ${branchText} · For church leadership use only`, marginX, pageHeight - 24);
+        doc.text(`Page ${p} of ${pageCount}`, pageWidth - marginX, pageHeight - 24, { align: 'right' });
       }
 
       if (lastBlobUrl.current) URL.revokeObjectURL(lastBlobUrl.current);
@@ -550,7 +630,7 @@ export default function ReportsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
-          <p className={`text-[10px] uppercase tracking-widest ${t.textFaint} mb-1`}><BranchLabel /></p>
+          <p className={`text-[10px] uppercase tracking-widest ${t.textFaint} mb-1`}>{churchLabel || <BranchLabel />}</p>
           <h1 className={`text-3xl font-black ${t.textPrimary} tracking-tight`}>Reports & Analytics</h1>
           <p className={`${t.textMuted} text-sm mt-0.5`}>
             {loading
@@ -569,15 +649,19 @@ export default function ReportsPage() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
+          {isGlobal && churches.length > 1 && (
+            <select value={branch} onChange={(e) => setBranch(e.target.value)} aria-label="Branch"
+              className={`px-3 py-2 rounded-xl text-sm font-bold border flex-1 sm:flex-none ${t.toolbarBtn}`}>
+              <option value="all">All branches</option>
+              {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
           <button
             onClick={() => setReloadKey((k) => k + 1)}
             disabled={loading}
             className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border disabled:opacity-50 flex-1 sm:flex-none ${t.toolbarBtn}`}
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-          </button>
-          <button className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border flex-1 sm:flex-none ${t.toolbarBtn}`}>
-            <Filter className="w-4 h-4" /> Filter Range
           </button>
           <button
             onClick={handleExportPDF}
@@ -740,9 +824,9 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <NewMembersTrend t={t} dark={dark} reloadKey={reloadKey} />
+      <NewMembersTrend t={t} dark={dark} reloadKey={reloadKey} church={church} />
 
-      {can(role, 'attendance') && <EventAttendanceReport t={t} dark={dark} reloadKey={reloadKey} />}
+      {can(role, 'attendance') && <EventAttendanceReport t={t} dark={dark} reloadKey={reloadKey} church={church} canTake={can(role, 'attendance', 'edit')} />}
 
       {/* Finance Summary + Recent Transactions (finance levels only) */}
       {showFinance && (
@@ -943,17 +1027,19 @@ function lastMonths(n) {
 }
 
 // New members per month (db/076): by the date each member joined.
-function NewMembersTrend({ t, dark, reloadKey }) {
+// church: one branch (db/083), or null for every branch the caller sees.
+function NewMembersTrend({ t, dark, reloadKey, church }) {
   const [state, setState] = useState({ rows: null, error: '' });
   useEffect(() => {
-    supabase.rpc('member_join_trend', { p_months: 12 }).then(({ data, error }) => setState({
+    const args = church ? { p_months: 12, p_church: church } : { p_months: 12 };
+    supabase.rpc('member_join_trend', args).then(({ data, error }) => setState({
       rows: error ? [] : data || [],
       error: !error ? ''
         : /does not exist|schema cache|Could not find/i.test(error.message)
-          ? 'Not set up yet — ask the administrator to run db/076_member_joined_on.sql.'
+          ? `Not set up yet — ask the administrator to run ${church ? 'db/083_join_trend_by_branch.sql' : 'db/076_member_joined_on.sql'}.`
           : friendlyError(error, 'Could not load new members.'),
     }));
-  }, [reloadKey]);
+  }, [reloadKey, church]);
 
   const rows = state.rows || [];
   const points = rows.map((r, i) => ({ ...monthPoint(r.month, i), value: r.joined }));
@@ -1004,14 +1090,14 @@ function NewMembersTrend({ t, dark, reloadKey }) {
 
 // Event attendance (db/041): the last 90 days at a glance, and the most
 // recent events whose attendance was taken.
-function EventAttendanceReport({ t, dark, reloadKey }) {
+function EventAttendanceReport({ t, dark, reloadKey, church, canTake }) {
   const [{ events, since }, setReport] = useState({ events: null, since: '' });
   useEffect(() => {
-    supabase.rpc('attendance_events', { p_church: null }).then(({ data }) => setReport({
+    supabase.rpc('attendance_events', { p_church: church }).then(({ data }) => setReport({
       events: data || [],
       since: new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10),
     }));
-  }, [reloadKey]);
+  }, [reloadKey, church]);
 
   const taken = (events || []).filter((e) => e.members_present + e.visitors > 0);
   const recent = taken.filter((e) => e.date >= since);
@@ -1039,7 +1125,7 @@ function EventAttendanceReport({ t, dark, reloadKey }) {
     <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 mb-8`}>
       <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2 mb-5 border-b ${t.divider} pb-4`}>
         <UserCheck className={`w-4 h-4 ${A(dark, "blue")}`} /> Event Attendance
-        <Link href="/dashboard/attendance" className={`ml-auto text-[10px] ${A(dark, "blue")} normal-case tracking-normal font-bold hover:underline`}>Take attendance →</Link>
+        <Link href="/dashboard/attendance" className={`ml-auto text-[10px] ${A(dark, "blue")} normal-case tracking-normal font-bold hover:underline`}>{canTake ? 'Take attendance' : 'View attendance'} →</Link>
       </h3>
       {events === null ? (
         <p className={`${t.textFaint} text-sm text-center py-8`}>Syncing...</p>
