@@ -10,7 +10,7 @@ import { useUnreadMessages } from '@/app/lib/useUnreadMessages';
 import AppShell from '@/app/components/AppShell';
 import {
   LayoutDashboard, CalendarDays, ClipboardList,
-  BookOpen, UserCircle, Bot, KeyRound, NotebookPen, MessageCircle, CalendarCheck2
+  BookOpen, UserCircle, Bot, NotebookPen, MessageCircle, CalendarCheck2
 } from 'lucide-react';
 
 // Navigation, grouped. A group with no page the person can open is hidden.
@@ -91,7 +91,6 @@ export default function MemberDashboardLayout({ children }) {
         onSignOut={handleSignOut}
         menuLinks={[
           { href: '/member-dashboard/profile', icon: UserCircle, label: 'My Profile' },
-          { href: '/change-password', icon: KeyRound, label: 'Password & Google' },
         ]}
         themeToggle={toggleTheme}
       >

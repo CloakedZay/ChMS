@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import {
   LayoutDashboard, Users, Calendar, Wallet,
-  ClipboardList, BarChart3, Bot, KeyRound,
+  ClipboardList, BarChart3, Bot,
   Book, BookOpen, UserCog, History, NotebookPen, MessageCircle, Megaphone, HeartHandshake, UserCircle, ClipboardCheck
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
@@ -114,7 +114,6 @@ export default function DashboardLayout({ children }) {
       onSignOut={handleSignOut}
       menuLinks={[
         { href: "/dashboard/profile", icon: UserCircle, label: "My Profile" },
-        { href: "/change-password", icon: KeyRound, label: "Password & Google" },
       ]}
     >
       {children}

@@ -9,6 +9,7 @@ import { useTheme } from '@/app/context/ThemeContext';
 import { homePathFor } from '@/app/lib/permissions';
 import { Eye, EyeOff, KeyRound } from 'lucide-react';
 import GoogleAccountCard from '@/app/components/GoogleAccountCard';
+import RecoveryEmailCard from '@/app/components/RecoveryEmailCard';
 
 import { friendlyError } from '@/app/lib/errors';
 import { confirmDialog } from '@/app/lib/dialog';
@@ -316,8 +317,9 @@ export default function ChangePasswordPage() {
 
         {/* Not during the forced first change — one thing at a time. */}
         {!mustChangePassword && (
-          <div className="mt-5">
+          <div className="mt-5 space-y-5">
             <GoogleAccountCard dark={dark} />
+            <RecoveryEmailCard dark={dark} />
           </div>
         )}
       </div>

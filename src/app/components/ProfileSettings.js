@@ -10,6 +10,7 @@ import { ROLE_LABELS } from '@/app/lib/permissions';
 import { levelBadge } from '@/app/lib/roleColors';
 import { branchLabelText } from '@/app/components/BranchLabel';
 import GoogleAccountCard from '@/app/components/GoogleAccountCard';
+import RecoveryEmailCard from '@/app/components/RecoveryEmailCard';
 import DatePicker from '@/app/components/DatePicker';
 import { phToday } from '@/app/lib/phDate';
 
@@ -194,6 +195,7 @@ export default function ProfileSettings() {
           </section>
 
           <GoogleAccountCard dark={dark} />
+          <RecoveryEmailCard dark={dark} />
         </div>
       </div>
     </div>
