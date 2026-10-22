@@ -67,6 +67,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key                  # required (public 
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key              # required, secret: creating logins, resetting passwords, the assistant's index
 ASSISTANT_DAILY_LIMIT=50                                     # optional: questions per Member per day (staff have no limit)
 NEXT_PUBLIC_PASSWORD_EMAIL_CODE=on                           # optional: email a 6-digit code before a password change (needs email sending, step 5)
+SMTP_USER=yourchurch@gmail.com                               # for "Forgot password?" and recovery emails (step 5): the Gmail sender
+SMTP_PASS=abcdefghijklmnop                                   # its app password (secret)
+# SMTP_HOST=smtp-relay.brevo.com                             # optional: another sender such as Brevo (also SMTP_PORT=587)
+# SMTP_FROM=yourchurch@gmail.com                             # optional: the From address, if SMTP_USER isn't one (Brevo); verify it there
+NEXT_PUBLIC_SITE_URL=https://faithsync.vercel.app            # optional: the app's address for reset links (default: the address the request came to)
 ```
 
    The `NEXT_PUBLIC_` values are built into the app, so after changing them restart `npm run dev` or build again.
@@ -90,12 +95,13 @@ npm run dev        # http://localhost:3000
   2. In Supabase → **Authentication → Emails → SMTP Settings**, turn on **Custom SMTP**: sender email = the Gmail address, sender name = FaithSync, host `smtp.gmail.com`, port `587`, username = the Gmail address, password = the app password. Save.
   3. In **Authentication → Rate Limits**, raise **emails per hour** (for example 30). Gmail sends up to about 500 emails a day.
   4. In **Authentication → Emails → Templates → Reauthentication**, keep `{{ .Token }}` in the message: that is the 6-digit code.
+- **Forgot password** (db/080): put the same Gmail address and app password in `SMTP_USER` / `SMTP_PASS` (step 4, and Vercel). The app sends recovery-email codes and reset links itself, because most logins are made-up usernames that Supabase can't email. Members add a recovery email on **Password & Google** (or Profile); then "Forgot password?" on the sign-in page emails them a reset link. Without a recovery email they still ask the Admin.
 - **Password-change code**: after email sending works, turn on **Secure password change** (Authentication → Providers → Email), so the server itself refuses a password change without a recent sign-in or code. Then add `NEXT_PUBLIC_PASSWORD_EMAIL_CODE=on` to `.env.local` (and Vercel) and restart / redeploy. From then on, changing a password asks for the current password and then a code sent to the person's email. Not asked: the first sign-in with a temporary password, and logins with a made-up username (`…@members.faithsync.app`, no real email), which keep the current-password check.
 
 ## 6. Put it online (Vercel)
 
 1. Push the project to GitHub and **Import** it in Vercel (framework: Next.js; the defaults are right).
-2. In **Settings → Environment Variables**, add the same values as `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and `ASSISTANT_DAILY_LIMIT`, `NEXT_PUBLIC_PASSWORD_EMAIL_CODE` if wanted).
+2. In **Settings → Environment Variables**, add the same values as `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and `ASSISTANT_DAILY_LIMIT`, `NEXT_PUBLIC_PASSWORD_EMAIL_CODE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `NEXT_PUBLIC_SITE_URL` if wanted).
 3. Deploy. Every push to the main branch deploys again.
 4. Put the Vercel address in Supabase's Site URL / Redirect URLs (step 5).
 

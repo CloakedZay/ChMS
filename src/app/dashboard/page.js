@@ -3,9 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import {
-  Users, Bell, TrendingUp, UserCheck,
-  CalendarDays, HandCoins, ChevronRight,
-  ArrowUpRight,
+  Users, Bell, TrendingUp,
+  CalendarDays, ChevronRight,
   Zap, Sun, Moon, Quote
 } from "lucide-react";
 
@@ -27,6 +26,7 @@ import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
 import { collapseSeries } from "@/app/lib/eventSeries";
 import Link from "next/link";
+import KpiCards from "@/app/components/KpiCards";
 
 import { baseTheme } from '@/app/lib/theme';
 // ─── Theme token maps ──────────────────────────────────────────────────────────
@@ -91,13 +91,8 @@ export default function DashboardPage() {
   const notifRef                        = useRef(null);
 
   // ── DB states ─────────────────────────────────────────────────────────────
-  const [memberCount, setMemberCount]         = useState(0);
-  const [activeMembers, setActiveMembers]     = useState(0);
-  // Event attendance, last 90 days (db/041): null = none taken yet.
-  const [attendance, setAttendance]           = useState(null);
-  const [totalFunds, setTotalFunds]           = useState(0);
+  // The headline figures are in components/KpiCards.
   const [upcomingEvents, setUpcomingEvents]   = useState([]);
-  const [upcomingCount, setUpcomingCount]     = useState(0);
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [recentMembers, setRecentMembers]     = useState([]);
   const [verseOfDay, setVerseOfDay]           = useState(undefined); // undefined = loading, null = none yet
@@ -107,12 +102,8 @@ export default function DashboardPage() {
     async function fetchLiveStats() {
       setLoading(true);
       try {
-        const { count: mCount } = await supabase.from('member_directory').select('*', { count: 'exact', head: true });
-        const { count: aCount } = await supabase.from('member_directory').select('*', { count: 'exact', head: true }).eq('status', 'active');
         const { data: latestMembers } = await supabase.from('member_directory').select('full_name, status, ministry').order('id', { ascending: false }).limit(3);
-        // Total funds from the database (voided entries left out, db/069), so it
-        // stays right past 1,000 entries; plus the 5 latest entries that count.
-        const { data: fundRows } = await supabase.rpc('finance_summary', { p_church: null });
+        // The 5 latest finance entries that count (voided ones left out).
         const { data: latestTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status')
           .or('status.is.null,status.neq.Void')
           .order('date', { ascending: false, nullsFirst: false }).order('date_recorded', { ascending: false }).limit(5);
@@ -123,23 +114,8 @@ export default function DashboardPage() {
           .eq('status', 'approved').gte('date', phToday()).order('date', { ascending: true });
         const upcoming = collapseSeries(allUpcoming || []);
 
-        setMemberCount(mCount || 0);
-        setActiveMembers(aCount || 0);
-
-        // Members present ÷ members (not archived or Busy, db/058), over the events with attendance
-        // taken in the last 90 days.
-        const { data: attended } = await supabase.rpc('attendance_events', { p_church: null });
-        const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
-        const taken = (attended || []).filter((e) => e.date >= since && e.members_present + e.visitors > 0);
-        const possible = taken.reduce((a, e) => a + e.active_members, 0);
-        setAttendance(taken.length && possible
-          ? { rate: Math.round((taken.reduce((a, e) => a + e.members_present, 0) / possible) * 100), events: taken.length }
-          : null);
         setUpcomingEvents(upcoming.slice(0, 4));
-        setUpcomingCount(upcoming.length);
         setRecentMembers(latestMembers || []);
-
-        setTotalFunds((fundRows || []).reduce((a, r) => a + (Number(r.income) || 0) - (Number(r.expense) || 0), 0));
         setRecentTransactions(latestTrans || []);
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -224,18 +200,6 @@ export default function DashboardPage() {
       time: e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : "—",
     })),
   ].slice(0, 6);
-
-  const STATS = [
-    { label: "Active Members",    value: loading ? "..." : memberCount.toString(),             sub: `${activeMembers} active`,     icon: Users,      color: A(dark, "blue"),   trend: "up"                        },
-    { label: "Attendance Rate",   value: loading ? "..." : attendance ? `${attendance.rate}%` : "—",
-      sub: attendance ? `Average of ${attendance.events} event${attendance.events === 1 ? "" : "s"}, last 90 days` : "No attendance taken yet",
-      icon: UserCheck,  color: A(dark, "indigo"), trend: "neutral" },
-    // Hidden for levels without finance access (Admin, Secretary) — they'd only see ₱0.
-    ...(can(role, 'finance') ? [
-    { label: "Total Church Funds",value: loading ? "..." : `₱${totalFunds.toLocaleString()}`,  sub: "Live balance",                icon: HandCoins,  color: A(dark, "purple"), trend: totalFunds >= 0 ? "up" : "down" },
-    ] : []),
-    { label: "Upcoming Events",   value: loading ? "..." : upcomingCount.toString(),   sub: "From today onward",           icon: CalendarDays,color: A(dark, "pink"),  trend: "neutral"                   },
-  ];
 
   // ─── Shared card classname builder ────────────────────────────────────────
   const card = `${t.cardBg} border ${t.cardBorder} rounded-3xl backdrop-blur-sm`;
@@ -401,21 +365,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-          {STATS.map((s) => (
-            <div key={s.label} className={`${card} p-6 hover:border-slate-600 transition-colors`}>
-              <div className="flex items-center justify-between mb-3">
-                <p className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>{s.label}</p>
-                <s.icon className={`w-4 h-4 ${t.textMuted}`} />
-              </div>
-              <p className={`text-3xl font-black mb-1 ${s.color}`}>{s.value}</p>
-              <p className={`text-xs flex items-center gap-1 font-medium ${s.trend === "up" ? A(dark, "emerald") : t.textMuted}`}>
-                {s.trend === "up" && <ArrowUpRight className="w-3 h-3" />}
-                {s.sub}
-              </p>
-            </div>
-          ))}
-        </div>
+        <KpiCards role={role} dark={dark} t={t} followUpCount={followUp.count} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Next Schedule */}

@@ -107,10 +107,10 @@ erDiagram
 | Members | names only | **Add, edit, archive** (all branches) | View | names in Finance | **Add, edit, import, logins, archive** | own |
 | Follow-up | — | Manage (all) | Log follow-ups | — | Manage | — |
 | Events | View | View; approve where a branch has no Leader | **Add, approve, cancel** | View | Add (for approval) | View approved |
-| Attendance | View | Take (all) | Take | View | Take | Own; helpers take |
+| Attendance | View | View (all) | View | View | Take | Own; helpers take |
 | Finance ledger | — | View (all) | View | **Record, void** | — | — |
 | Spending requests | — | Request, approve, set limits | Request, approve (Elders: large, love gifts) | Release, check receipts | — | — |
-| Ministries | View | **Manage** | Members of the ministry they head | — | View | Own |
+| Ministries | View | **Manage**, pick each head (a Leader) | **Add / remove members** of the ministry they head | — | View | Own |
 | Training | View | Manage, review | Manage (general + own ministry), review | — | — | Take |
 | Announcements | View | Post (all branches) | Post (own branch) | View | View | View |
 | Bible verses | View | Add, **delete** | Add | — | — | Verse of the day |
