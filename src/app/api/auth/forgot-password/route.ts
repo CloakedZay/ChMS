@@ -57,12 +57,16 @@ export async function POST(req: NextRequest) {
       : isRealEmail(profile.email) ? profile.email : null;
     if (!to) continue;
 
+    // The link goes to our own page, which spends the token only when the
+    // person saves a new password. Supabase's ready-made link spends it on
+    // the first visit, so a mail scanner or click tracker opening it first
+    // would leave the person an "expired" link.
     const { data: link, error: linkErr } = await admin.auth.admin.generateLink({
       type: "recovery",
       email: profile.email,
-      options: { redirectTo: `${site}/reset-password` },
     });
-    if (linkErr || !link?.properties?.action_link) continue;
+    if (linkErr || !link?.properties?.hashed_token) continue;
+    const resetUrl = `${site}/reset-password?token_hash=${encodeURIComponent(link.properties.hashed_token)}`;
 
     try {
       await sendMail(
@@ -71,7 +75,7 @@ export async function POST(req: NextRequest) {
         `Someone asked to reset the password for this FaithSync login:\n\n` +
         `    ${profile.email}\n\n` +
         `Open this link to choose a new password (it works once, for a short time):\n\n` +
-        `${link.properties.action_link}\n\n` +
+        `${resetUrl}\n\n` +
         `If you didn't ask for this, ignore this email. Your password stays the same.`
       );
       await admin.from("password_reset_log").insert({ user_id: id });

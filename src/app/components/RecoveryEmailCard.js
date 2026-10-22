@@ -12,6 +12,17 @@ import { friendlyError } from '@/app/lib/errors';
 // with a 6-digit code sent to it (api/recovery-email), so only an address
 // the person can open is ever saved.
 
+// l**************d@gmail.com: only the first and last letter before the @,
+// so the address isn't readable over someone's shoulder or in a screenshot,
+// but the owner still recognises it. The domain stays, to show which inbox.
+function maskEmail(email) {
+  const at = email.lastIndexOf('@');
+  if (at < 1) return email;
+  const name = email.slice(0, at);
+  const hidden = name.length <= 2 ? name[0] + '*' : name[0] + '*'.repeat(name.length - 2) + name.slice(-1);
+  return hidden + email.slice(at);
+}
+
 export default function RecoveryEmailCard({ dark = true }) {
   const [saved, setSaved]     = useState(undefined);   // undefined while loading
   const [editing, setEditing] = useState(false);
@@ -48,7 +59,7 @@ export default function RecoveryEmailCard({ dark = true }) {
       const { pending_email } = await call('POST', { action: 'send', email: (pending || email).trim() });
       setPending(pending_email);
       setCode('');
-      setNote(`A 6-digit code was sent to ${pending_email}. Check the spam folder too.`);
+      setNote(`A 6-digit code was sent to ${maskEmail(pending_email)}. Check the spam folder too.`);
     } catch (err) {
       setError(err.message);
     }
@@ -102,7 +113,7 @@ export default function RecoveryEmailCard({ dark = true }) {
         <p className={`flex items-center gap-2 text-xs ${sub}`}><Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking...</p>
       ) : pending ? (
         <form onSubmit={confirm} className="space-y-3">
-          <label htmlFor="recovery-code" className={`block text-xs ${sub}`}>Code sent to {pending}</label>
+          <label htmlFor="recovery-code" className={`block text-xs ${sub}`}>Code sent to {maskEmail(pending)}</label>
           <input
             id="recovery-code"
             inputMode="numeric"
@@ -147,7 +158,7 @@ export default function RecoveryEmailCard({ dark = true }) {
       ) : (
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className={`text-sm font-bold ${main} truncate`}>{saved}</p>
+            <p className={`text-sm font-bold ${main} truncate`} title="Hidden for privacy">{maskEmail(saved)}</p>
             <p className={`text-xs ${sub}`}>Reset links for &ldquo;Forgot password?&rdquo; go here.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">

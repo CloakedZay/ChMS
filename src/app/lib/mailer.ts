@@ -7,6 +7,9 @@ import nodemailer from "nodemailer";
 //   SMTP_USER   the Gmail address
 //   SMTP_PASS   its app password
 //   SMTP_HOST / SMTP_PORT   optional, default smtp.gmail.com / 587
+//   SMTP_FROM   optional, the address emails come from (default SMTP_USER).
+//               Needed for services like Brevo, whose login isn't an email
+//               address; the sender must be verified there.
 // Returns false when it isn't set up, so the route can say so.
 
 export function mailerReady(): boolean {
@@ -23,7 +26,7 @@ export async function sendMail(to: string, subject: string, text: string): Promi
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   });
   await transport.sendMail({
-    from: `FaithSync <${process.env.SMTP_USER}>`,
+    from: `FaithSync <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
     to,
     subject,
     text,

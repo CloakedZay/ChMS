@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/app/lib/supabase';
@@ -9,37 +9,31 @@ import { useTheme } from '@/app/context/ThemeContext';
 import { Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
 
 import { friendlyError } from '@/app/lib/errors';
-// Where the reset link from "Forgot password?" lands (db/080). Supabase signs
-// the person in from the link; they choose a new password here without the
-// old one. Only for someone who arrived from a reset link: anyone already
-// signed in uses Change password, which asks for the current password.
+// Where the reset link from "Forgot password?" lands (db/080). The link
+// carries a one-time token (api/auth/forgot-password); it is spent only when
+// the person presses Save, which signs them in from it and sets the new
+// password, without the old one. Opening the page spends nothing, so a mail
+// scanner or click tracker that opens the link first doesn't break it.
+// Anyone already signed in uses Change password, which asks for the current
+// password.
 
 const MIN_LENGTH = 8;
 
-// Read before Supabase reads the link and clears it from the address bar.
-const FROM_LINK = typeof window !== 'undefined' && /type=recovery/.test(window.location.hash);
-const LINK_ERROR = typeof window !== 'undefined'
-  ? new URLSearchParams(window.location.hash.slice(1)).get('error_description')
-  : null;
+// The token from the address bar; undefined while rendering on the server.
+const noSubscribe = () => () => {};
+const readToken = () => new URLSearchParams(window.location.search).get('token_hash') || '';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
   const { dark } = useTheme();
-  const [state, setState]       = useState('checking');   // checking | ready | invalid
+  const token = useSyncExternalStore(noSubscribe, readToken, () => undefined);
+  const [spent, setSpent]       = useState(false);        // the token didn't work
+  const state = token === undefined ? 'checking' : token && !spent ? 'ready' : 'invalid';
   const [password, setPassword] = useState('');
   const [confirm, setConfirm]   = useState('');
   const [showPass, setShowPass] = useState(false);
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState('');
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (LINK_ERROR) setState('invalid');
-      else if (event === 'PASSWORD_RECOVERY' || (FROM_LINK && session)) setState('ready');
-      else if (event === 'INITIAL_SESSION') setState((s) => (s === 'ready' ? s : 'invalid'));
-    });
-    return () => subscription.unsubscribe();
-  }, []);
 
   async function save(e) {
     e.preventDefault();
@@ -47,6 +41,14 @@ export default function ResetPasswordPage() {
     if (password !== confirm) { setError('The two passwords are not the same.'); return; }
     setSaving(true);
     setError('');
+
+    const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: token, type: 'recovery' });
+    if (otpError) {
+      setSpent(true);
+      setSaving(false);
+      return;
+    }
+    window.history.replaceState(null, '', window.location.pathname);
 
     const { data, error: pwError } = await supabase.auth.updateUser({ password });
     if (pwError) {
