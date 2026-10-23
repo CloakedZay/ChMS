@@ -72,6 +72,8 @@ SMTP_PASS=abcdefghijklmnop                                   # its app password 
 # SMTP_HOST=smtp-relay.brevo.com                             # optional: another sender such as Brevo (also SMTP_PORT=587)
 # SMTP_FROM=yourchurch@gmail.com                             # optional: the From address, if SMTP_USER isn't one (Brevo); verify it there
 NEXT_PUBLIC_SITE_URL=https://faithsync.vercel.app            # optional: the app's address for reset links (default: the address the request came to)
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x4AAAA...                    # optional: "Verify you are human" check (step 5); public
+TURNSTILE_SECRET_KEY=0x4AAAA...                              # its secret key (secret); set both or neither
 ```
 
    The `NEXT_PUBLIC_` values are built into the app, so after changing them restart `npm run dev` or build again.
@@ -86,6 +88,11 @@ npm run dev        # http://localhost:3000
 ## 5. Sign-in settings (Supabase → Authentication)
 
 - **URL Configuration**: set **Site URL** to the app's address (e.g. `https://faithsync.vercel.app`) and add it, and `http://localhost:3000`, to **Redirect URLs**.
+- **Password rules**: in **Authentication → Sign In / Providers**, open **Email**, set **Minimum password length** to `8` and **Password Requirements** to **Letters and digits**, and save. Turn on **Leaked password protection** too if the plan offers it (Pro only). The app checks the same rules (plus common passwords and the username) before sending, in `src/app/lib/passwordRules.js`; this setting makes the server refuse a weak password even if someone skips the app.
+- **"Verify you are human" check** (Cloudflare Turnstile, optional but recommended): it stops scripts from guessing passwords on the sign-in, Forgot password and Change password pages.
+  1. At <https://dash.cloudflare.com>, open **Application security → Turnstile → Add widget**. Name it FaithSync, add the hostnames `localhost` and the app's domain (e.g. `faithsync.vercel.app`, no `https://`), mode **Managed**, and create it. Copy the site key and secret key. If the domain changes later, add the new one to the widget's hostnames first; the keys stay the same.
+  2. Put both keys in `.env.local` and Vercel (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, step 4) and redeploy. The check now shows; Supabase ignores the token until the next step.
+  3. Only after the new version is live: in Supabase → **Authentication → Attack Protection**, turn on **CAPTCHA protection**, choose **Turnstile**, paste the secret key and save. Doing this before step 2 is live stops every sign-in.
 - **Google** (optional):
   1. In Google Cloud Console → **APIs & Services → Credentials**, create an **OAuth client ID** (Web application). Add the redirect URI Supabase shows on its Google provider page (`https://<project>.supabase.co/auth/v1/callback`).
   2. In Supabase → **Authentication → Providers → Google**, turn it on and paste the client ID and secret.
@@ -101,7 +108,7 @@ npm run dev        # http://localhost:3000
 ## 6. Put it online (Vercel)
 
 1. Push the project to GitHub and **Import** it in Vercel (framework: Next.js; the defaults are right).
-2. In **Settings → Environment Variables**, add the same values as `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and `ASSISTANT_DAILY_LIMIT`, `NEXT_PUBLIC_PASSWORD_EMAIL_CODE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `NEXT_PUBLIC_SITE_URL` if wanted).
+2. In **Settings → Environment Variables**, add the same values as `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and `ASSISTANT_DAILY_LIMIT`, `NEXT_PUBLIC_PASSWORD_EMAIL_CODE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` if wanted).
 3. Deploy. Every push to the main branch deploys again.
 4. Put the Vercel address in Supabase's Site URL / Redirect URLs (step 5).
 
