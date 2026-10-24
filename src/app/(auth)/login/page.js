@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
@@ -10,6 +10,7 @@ import { IDLE_MESSAGE, IDLE_FLAG } from '@/app/lib/IdleLogout';
 import { Eye, EyeOff, Sun, Moon } from 'lucide-react';
 import { friendlyError } from '@/app/lib/errors';
 import { useTheme } from '@/app/context/ThemeContext';
+import Turnstile, { TURNSTILE_ON, TURNSTILE_NEEDED, TURNSTILE_FAILED } from '@/app/components/Turnstile';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,6 +21,8 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
+  const [captcha, setCaptcha]   = useState(null);   // "Verify you are human" token
+  const captchaRef = useRef(null);
 
   // Send a signed-in person to their dashboard (or out, if disabled).
   const redirectByRole = useCallback(async (userId) => {
@@ -90,16 +93,24 @@ export default function LoginPage() {
       setError('Please enter your email and password.');
       return;
     }
+    if (TURNSTILE_ON && !captcha) {
+      setError(TURNSTILE_NEEDED);
+      return;
+    }
     setError('');
     setLoading(true);
 
     const { data, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
+      options: captcha ? { captchaToken: captcha } : undefined,
     });
+    captchaRef.current?.reset();   // a token works once
 
     if (authError) {
-      setError('Invalid email or password. Please try again.');
+      setError(/captcha/i.test(authError.message)
+        ? TURNSTILE_FAILED
+        : 'Invalid email or password. Please try again.');
       setLoading(false);
       return;
     }
@@ -201,6 +212,8 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            <Turnstile ref={captchaRef} onToken={setCaptcha} dark={dark} />
 
             {/* Error */}
             {error && (

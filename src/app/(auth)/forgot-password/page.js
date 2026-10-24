@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTheme } from '@/app/context/ThemeContext';
 import { KeyRound, Loader2 } from 'lucide-react';
+import Turnstile, { TURNSTILE_ON, TURNSTILE_NEEDED } from '@/app/components/Turnstile';
 
 // "Forgot password?" from the sign-in page (db/080). The person types their
 // username or recovery email; api/auth/forgot-password emails a reset link
@@ -16,23 +17,27 @@ export default function ForgotPasswordPage() {
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState('');
   const [sent, setSent]     = useState(false);
+  const [captcha, setCaptcha] = useState(null);   // "Verify you are human" token
+  const captchaRef = useRef(null);
 
   async function submit(e) {
     e.preventDefault();
     if (!login.trim()) { setError('Enter your username or recovery email.'); return; }
+    if (TURNSTILE_ON && !captcha) { setError(TURNSTILE_NEEDED); return; }
     setBusy(true);
     setError('');
     try {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: login.trim() }),
+        body: JSON.stringify({ login: login.trim(), captchaToken: captcha }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'Something went wrong. Please try again.');
       setSent(true);
     } catch (err) {
       setError(err.message);
+      captchaRef.current?.reset();   // a token works once
     }
     setBusy(false);
   }
@@ -81,6 +86,7 @@ export default function ForgotPasswordPage() {
                   className={`w-full border rounded-xl px-4 py-3 text-sm ${inputCls} focus:outline-none focus:border-blue-500 transition-colors`}
                 />
               </div>
+              <Turnstile ref={captchaRef} onToken={setCaptcha} dark={dark} />
               {error && (
                 <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{error}</p>
               )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/app/lib/supabase';
@@ -10,6 +10,7 @@ import { homePathFor } from '@/app/lib/permissions';
 import { Eye, EyeOff, KeyRound } from 'lucide-react';
 import GoogleAccountCard from '@/app/components/GoogleAccountCard';
 import RecoveryEmailCard from '@/app/components/RecoveryEmailCard';
+import Turnstile, { TURNSTILE_ON, TURNSTILE_NEEDED, TURNSTILE_FAILED } from '@/app/components/Turnstile';
 
 import { friendlyError } from '@/app/lib/errors';
 import { confirmDialog } from '@/app/lib/dialog';
@@ -48,6 +49,8 @@ export default function ChangePasswordPage() {
   const [codeSent, setCodeSent] = useState(false);   // waiting for the emailed code
   const [code, setCode]         = useState('');
   const [wait, setWait]         = useState(0);       // seconds until "Send a new code"
+  const [captcha, setCaptcha]   = useState(null);    // "Verify you are human" token
+  const captchaRef = useRef(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -94,6 +97,7 @@ export default function ChangePasswordPage() {
     if (askCurrent && !current) { setError('Enter your current password.'); return; }
     if (password.length < MIN_LENGTH) { setError(`Use at least ${MIN_LENGTH} characters.`); return; }
     if (password !== confirm) { setError("The two passwords don't match."); return; }
+    if (askCurrent && TURNSTILE_ON && !captcha) { setError(TURNSTILE_NEEDED); return; }
     // Ask first, so a password isn't changed by a slip. Not on the first
     // sign-in: there, setting a password is the only way on.
     if (!mustChangePassword && !await confirmDialog({
@@ -107,9 +111,16 @@ export default function ChangePasswordPage() {
     setDone(false);
 
     if (askCurrent) {
-      const { error: checkError } = await supabase.auth.signInWithPassword({ email: user.email, password: current });
+      // Supabase asks for the "Verify you are human" token on every sign-in,
+      // this check included.
+      const { error: checkError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: current,
+        options: captcha ? { captchaToken: captcha } : undefined,
+      });
+      captchaRef.current?.reset();   // a token works once
       if (checkError) {
-        setError('Your current password is not correct.');
+        setError(/captcha/i.test(checkError.message) ? TURNSTILE_FAILED : 'Your current password is not correct.');
         setSaving(false);
         return;
       }
@@ -286,6 +297,7 @@ export default function ChangePasswordPage() {
               Your login has no email, so no code can be sent to confirm this change. Ask the Secretary to add your email, or link Google below, for the extra check.
             </p>
           )}
+          {askCurrent && <Turnstile ref={captchaRef} onToken={setCaptcha} dark={dark} />}
           </>)}
 
           {error && (

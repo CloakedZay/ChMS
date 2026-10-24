@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/app/lib/supabaseAdmin";
 import { sendMail, mailerReady, isRealEmail, NO_EMAIL_DOMAIN } from "@/app/lib/mailer";
+import { humanCheckPassed } from "@/app/lib/turnstile";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,9 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
+  if (!await humanCheckPassed(req, body?.captchaToken)) {
+    return NextResponse.json({ error: 'The "Verify you are human" check failed or expired. Please try again.' }, { status: 400 });
+  }
   const typed = String(body?.login || "").trim().toLowerCase();
   if (!typed || typed.length > 254) {
     return NextResponse.json({ error: "Enter your username or recovery email." }, { status: 400 });
