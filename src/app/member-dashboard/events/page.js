@@ -17,10 +17,13 @@ const STATUS_COLORS = {
   cancelled: 'bg-red-500/10 text-red-400 border-red-500/20',
 };
 
-// Each event takes its ministry's color (set on the Ministries page); events
-// with no ministry, or one that isn't listed, get a steady color from this set.
+// An event with a ministry takes its color (set on the Ministries page); a
+// ministry that isn't listed gets a steady color from this set.
 const FALLBACK = ['#173f35', '#c5a66a', '#4f8a73', '#9c7f45', '#2b7a78', '#7a5c8f', '#b9703a', '#b03c3c'];
 const NEUTRAL = '#858b87';
+// Events without a ministry (the usual case since db/050) take their
+// status's color instead, so the page isn't all grey.
+const STATUS_TINT = { approved: '#2f6b57', done: NEUTRAL, cancelled: '#b03c3c' };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function hashColor(name) {
@@ -134,7 +137,7 @@ export default function MemberEventsPage() {
       <div className="mb-8">
         <p className="text-[10px] uppercase tracking-widest text-slate-600 mb-1"><BranchLabel /></p>
         <h1 className="text-2xl font-black text-white">Events &amp; Services</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Church activities and ministry projects, color-coded by ministry</p>
+        <p className="text-slate-500 text-sm mt-0.5">Church activities and services: upcoming in green, done in grey, cancelled in red</p>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
@@ -208,14 +211,14 @@ export default function MemberEventsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {pg.items.map((ev) => {
-            const color = colorFor(ev.ministry);
+            const color = ev.ministry ? colorFor(ev.ministry) : (STATUS_TINT[ev.status] || STATUS_TINT.approved);
             const days = ev.date ? daysUntil(ev.date) : null;
             const past = days !== null && days < 0;
             const d = ev.date ? new Date(ev.date + 'T00:00:00') : null;
             return (
               <div
                 key={ev.id}
-                className={`relative overflow-hidden bg-[#1b2420] border border-white/10 rounded-3xl p-6 pt-7 transition-all hover:-translate-y-0.5 hover:shadow-lg ${past || ev.status === 'cancelled' ? 'opacity-70' : ''}`}
+                className={`relative overflow-hidden bg-[#1b2420] border border-white/10 rounded-3xl p-6 pt-7 transition-all hover:-translate-y-0.5 hover:shadow-lg ${past || ev.status === 'cancelled' ? 'opacity-85' : ''}`}
                 style={{ backgroundImage: `linear-gradient(135deg, ${color}14, transparent 55%)` }}
               >
                 <span className="absolute inset-x-0 top-0 h-1.5" style={{ backgroundColor: color }} aria-hidden="true" />
@@ -245,13 +248,15 @@ export default function MemberEventsPage() {
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <span
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border text-white/70"
-                    style={{ backgroundColor: `${color}1f`, borderColor: `${color}55` }}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-                    {ev.ministry || 'No ministry assigned'}
-                  </span>
+                  {ev.ministry && (
+                    <span
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border text-white/70"
+                      style={{ backgroundColor: `${color}1f`, borderColor: `${color}55` }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                      {ev.ministry}
+                    </span>
+                  )}
                   {days !== null && (
                     <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${days >= 0 && days <= 7 ? 'text-blue-400' : 'text-white/40'}`}>
                       <Clock size={12} /> {whenLabel(days)}
