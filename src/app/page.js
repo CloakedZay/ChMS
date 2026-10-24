@@ -18,7 +18,7 @@ const FEATURES = [
   {
     id: "events", Icon: CalendarDays, title: "Events & Services",
     desc: "From Sunday worship to outreach programs and Bible studies — plan, track, and record every gathering across all our ministries.",
-    bullets: ["Annual calendar", "Weekly services", "Leader approval workflow", "Per-event attendance logs"],
+    bullets: ["Annual calendar", "Weekly services", "Planned by church leaders", "Per-event attendance logs"],
   },
   {
     id: "finance", Icon: HandCoins, title: "Tithes & Finance",

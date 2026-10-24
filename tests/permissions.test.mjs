@@ -32,7 +32,7 @@ test('accessFor returns a list, empty when there is no access', () => {
 test('edit, approve and submit also let you view', () => {
   assert.equal(can('secretary', 'members'), true);      // edit
   assert.equal(can('leader', 'events'), true);          // approve
-  assert.equal(can('secretary', 'events'), true);       // submit
+  assert.equal(can('leader', 'expenseRequests'), true); // submit + approve
   assert.equal(can('leader', 'finance', 'edit'), false);
 });
 
@@ -49,10 +49,11 @@ test('finance: no Admin, no Secretary, no Member; only Finance edits', () => {
   assert.equal(can('pastor', 'finance', 'edit'), false);
 });
 
-test('events: Leaders approve, the Secretary submits, the Pastor only views', () => {
+test('events: only Leaders add and manage them; the Secretary and Pastor only view', () => {
   assert.equal(can('leader', 'events', 'approve'), true);
-  assert.equal(can('secretary', 'events', 'submit'), true);
+  assert.equal(can('secretary', 'events', 'submit'), false);
   assert.equal(can('secretary', 'events', 'approve'), false);
+  assert.equal(can('secretary', 'events'), true);
   assert.equal(can('pastor', 'events', 'approve'), false);
   assert.equal(can('pastor', 'events'), true);
 });

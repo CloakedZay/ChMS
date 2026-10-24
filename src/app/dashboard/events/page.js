@@ -112,10 +112,11 @@ export default function EventsPage() {
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
   const today = phToday();
 
-  // db/050: Leaders add events (approved on save), approve the Secretary's
-  // and manage every event of their branch. The Secretary adds events for a
-  // Leader to approve and edits their own until then. The Pastor, Admin and
-  // everyone else only view. Anyone who adds events may give a past date.
+  // db/050, db/084: only Leaders add events (approved on save) and manage
+  // every event of their branch. The Secretary, Pastor, Admin and everyone
+  // else only view. Leaders may give a past date. The approve / send back /
+  // submit parts stay for events the Secretary filed before db/084 that are
+  // still waiting; no level has 'submit' now, so canSubmit is always false.
   const canManageAll = can(role, 'events', 'approve');
   const canSubmit    = can(role, 'events', 'submit');
   const canSeeAttendance = can(role, 'attendance', 'view');   // db/041

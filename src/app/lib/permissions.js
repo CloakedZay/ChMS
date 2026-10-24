@@ -65,9 +65,10 @@ export const PERMISSIONS = {
   // every other level: everyone). db/029, db/078.
   messages:           { admin: 'edit', pastor: 'edit', leader: 'edit', finance: 'edit', secretary: 'edit', member: 'edit' },
 
-  // Events and announcements. Events (db/050): Leaders add them (approved on
-  // save) and approve the Secretary's; the Secretary submits; the Pastor views.
-  events:             { admin: 'view', pastor: 'view', leader: 'approve', finance: 'view', secretary: 'submit', member: 'view' },
+  // Events and announcements. Events (db/050, db/084): only Leaders add them
+  // (approved on save), since the Leaders and Pastor plan them together; the
+  // Secretary and Pastor view.
+  events:             { admin: 'view', pastor: 'view', leader: 'approve', finance: 'view', secretary: 'view', member: 'view' },
   // Event attendance (db/041, db/081): the Secretary takes it, own branch;
   // the Pastor and Leaders only view it. Members see their own; members the
   // Pastor or Secretary make "attendance helpers" also take it — checked by

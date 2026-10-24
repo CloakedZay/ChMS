@@ -170,7 +170,7 @@ They check the app's own rules in `src/app/lib/` without a database or browser:
 
 | File | What it checks |
 |---|---|
-| `tests/permissions.test.mjs` | Each level's access matches the roles doc: only Finance edits finance, Leaders approve events and the Secretary submits, the journal is private to everyone, only the Admin manages logins, members can't open staff pages, unknown pages are closed |
+| `tests/permissions.test.mjs` | Each level's access matches the roles doc: only Finance edits finance, only Leaders add events (the Secretary and Pastor view), the journal is private to everyone, only the Admin manages logins, members can't open staff pages, unknown pages are closed |
 | `tests/financeTotals.test.mjs` | Every saved entry counts in totals; voided entries never do |
 | `tests/format.test.mjs` | Peso amounts (`₱1,234.50`, negatives, bad input → `₱0.00`, the PDF's `PHP` form) |
 | `tests/errors.test.mjs` | Database errors become plain sentences with no table or rule names; messages written for people pass through; the technical error is still logged |
