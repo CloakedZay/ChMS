@@ -11,6 +11,7 @@ import {
   Trash2, Loader2, Users, CalendarClock, Link2, BookOpen,
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
+import ModuleHandouts from "@/app/components/ModuleHandouts";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 import { friendlyError } from '@/app/lib/errors';
@@ -60,6 +61,7 @@ export default function MinistriesPage() {
   const [branch, setBranch]           = useState("all");
   const [loading, setLoading]         = useState(true);
   const [expanded, setExpanded]       = useState(null);
+  const [openModule, setOpenModule]   = useState(null);   // module whose handouts are shown
   const [showOff, setShowOff]         = useState(false);
 
   const [editing, setEditing]   = useState(null);   // ministry being edited, or {} for new
@@ -337,7 +339,7 @@ export default function MinistriesPage() {
               <div className="flex items-center justify-between mb-3">
                 <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold`}>Training modules</p>
                 <Link href="/dashboard/training" className="text-xs text-blue-400 hover:text-blue-300 font-bold">
-                  Questions &amp; handouts on Training →
+                  Questions on Training →
                 </Link>
               </div>
               {ministryModules.length === 0 ? (
@@ -345,12 +347,23 @@ export default function MinistriesPage() {
               ) : (
                 <div className={`border ${t.cardBorder} rounded-2xl divide-y ${t.divider} mb-3`}>
                   {ministryModules.map((x, i) => (
-                    <div key={x.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <div key={x.id}>
+                    {/* Tap a module for its handouts; its head uploads them here (db/088). */}
+                    <button type="button" onClick={() => setOpenModule(openModule === x.id ? null : x.id)} aria-expanded={openModule === x.id}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left ${t.hoverRow} transition-colors`}>
                       <span className={`text-xs font-black ${t.textMuted} w-5`}>{i + 1}</span>
                       <BookOpen size={14} className="text-blue-400 shrink-0" />
                       <p className={`flex-1 min-w-0 text-sm font-semibold ${t.textPrimary} truncate`}>{x.title}</p>
                       <span className={`text-[10px] ${t.textMuted}`}>{questionCount[x.id] || 0} question{questionCount[x.id] === 1 ? "" : "s"}</span>
                       {!x.is_active && <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Hidden</span>}
+                      <span className={`text-[11px] font-bold ${assignable ? "text-blue-400" : t.textMuted}`}>{assignable ? "Handouts" : "View handouts"}</span>
+                      {openModule === x.id ? <ChevronDown size={14} className={t.textMuted} /> : <ChevronRight size={14} className={t.textMuted} />}
+                    </button>
+                    {openModule === x.id && (
+                      <div className="px-4 pb-4 pt-1">
+                        <ModuleHandouts moduleId={x.id} canEdit={assignable} t={t} />
+                      </div>
+                    )}
                     </div>
                   ))}
                 </div>
