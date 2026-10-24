@@ -53,9 +53,13 @@ export default function Turnstile({ ref, onToken, dark }) {
     let gone = false;
     loadScript().then(() => {
       if (gone || !box.current) return;
+      // The normal widget is at least 300px wide; narrow phones get the
+      // compact one so it doesn't stick out of the card.
+      const size = box.current.clientWidth < 300 ? 'compact' : 'flexible';
       widget.current = window.turnstile.render(box.current, {
         sitekey: SITE_KEY,
         theme: dark ? 'dark' : 'light',
+        size,
         callback: (token) => onTokenRef.current?.(token),
         'expired-callback': () => onTokenRef.current?.(null),
         'error-callback': () => onTokenRef.current?.(null),
@@ -77,5 +81,5 @@ export default function Turnstile({ ref, onToken, dark }) {
       </p>
     );
   }
-  return <div ref={box} className="flex justify-center min-h-[65px]" />;
+  return <div ref={box} className="w-full flex justify-center min-h-[65px]" />;
 }

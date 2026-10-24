@@ -316,7 +316,7 @@ export default function HomePage() {
       </header>
 
       {/* ── About ─────────────────────────────────────────────────────────── */}
-      <section id="about" className={`${t.sectionA} py-20 sm:py-28 scroll-mt-16`}>
+      <section id="about" className={`${t.sectionA} pt-12 sm:pt-16 pb-20 sm:pb-28 scroll-mt-16`}>
         <div className="max-w-3xl mx-auto px-5 sm:px-8 text-center">
           {eyebrow("Our story")}
           <h2 className={`text-3xl sm:text-4xl font-bold leading-tight ${t.heading}`}>
