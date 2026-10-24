@@ -103,3 +103,9 @@ test('an unknown page is closed to everyone', () => {
     assert.equal(canOpenPage(role, '/member-dashboard/secret'), false, role);
   }
 });
+
+test('only the Pastor approves discipleship answers; Leaders only see them', () => {
+  assert.equal(can('pastor', 'answerReview', 'approve'), true);
+  assert.equal(can('leader', 'answerReview', 'approve'), false);
+  assert.equal(can('leader', 'answerReview'), true);
+});

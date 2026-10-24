@@ -731,7 +731,7 @@ export default function TrainingPage() {
                                         ) : (
                                           <div className="space-y-2 pt-1">
                                             <div className={`flex items-center gap-1.5 text-xs ${A(dark, "yellow")} font-bold mb-2`}>
-                                              <Clock className="w-3.5 h-3.5" /> Awaiting Review
+                                              <Clock className="w-3.5 h-3.5" /> {canReview ? "Awaiting Review" : "Awaiting the Pastor’s review"}
                                             </div>
                                             {canReview && (
                                               <>

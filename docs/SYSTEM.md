@@ -111,7 +111,7 @@ erDiagram
 | Finance ledger | — | View (all) | View | **Record, void** | — | — |
 | Expense receipts (db/086; spending requests removed) | — | View | View | **Add, remove** | — | — |
 | Ministries | View | **Manage**, pick each head (a Leader) | **Add / remove members** of the ministry they head | — | View | Own |
-| Training | View | Manage general path (db/088), review | Manage own ministry's modules (db/088), review | — | — | Take |
+| Training | View | Manage general path (db/088), approve answers (db/089) | Manage own ministry's modules (db/088), see answers | — | — | Take |
 | Announcements | View | Post (all branches) | Post (own branch) | View | View | View |
 | Bible verses | View | Add, **delete** | Add | — | — | Verse of the day |
 | Assistant | Ask, documents (all branches) | Ask, documents (all branches) | Ask, documents (own branch) | Ask | Ask | Ask (daily limit) |

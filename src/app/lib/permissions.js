@@ -55,7 +55,8 @@ export const PERMISSIONS = {
   // Discipleship and AI assistant
   modules:            { admin: 'view', pastor: 'edit', leader: 'edit', member: 'view' },
   moduleProgress:     { admin: 'view', pastor: 'view', leader: 'view', member: 'own' },
-  answerReview:       { pastor: 'approve', leader: 'approve', member: 'own' },
+  // Approving / rejecting answers is the Pastor's (db/089); Leaders see them.
+  answerReview:       { pastor: 'approve', leader: 'view', member: 'own' },
   // Admin adds and manages them like the Pastor (db/070).
   aiDocuments:        { admin: 'edit', pastor: 'edit', leader: 'edit' },
   aiAssistant:        { admin: 'view', pastor: 'view', leader: 'view', finance: 'view', secretary: 'view', member: 'view' },
