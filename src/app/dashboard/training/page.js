@@ -1094,7 +1094,6 @@ function ProgressPanel({ t, dark, card, modules, questions, submissions, loading
         <p className={`text-[11px] ${t.textMuted}`}>
           Needs follow-up: no module opened {NEVER_STARTED_DAYS}+ days after getting a login, or started but no training
           activity for {STALLED_DAYS}+ days with questions left — and no training follow-up in the last {STALLED_DAYS} days.
-          Busy members are left out.
         </p>
         {training?.error && (
           <p className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{training.error}</p>

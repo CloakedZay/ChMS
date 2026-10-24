@@ -22,7 +22,7 @@ const TEMPLATE_URL = '/templates/faithsync-members-template.xlsx';
 const EXAMPLE_NAME = 'juan dela cruz';
 const EXAMPLE_EMAIL = 'juan@example.com';
 const ROLES = ['pastor', 'leader', 'member', 'volunteer'];
-const STATUSES = ['active', 'busy', 'inactive'];
+const STATUSES = ['active', 'inactive'];   // no Busy (db/087)
 const MAX_ROWS = 1000;
 const BATCH = 100;
 

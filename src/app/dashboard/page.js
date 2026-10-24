@@ -64,8 +64,6 @@ function A(dark, color) {
 
 const STATUS_BADGE = {
   approved: "bg-emerald-500/15 text-emerald-400",
-  pending:  "bg-yellow-500/15 text-yellow-400",
-  planning: "bg-blue-500/15 text-blue-400",
   done:     "bg-slate-500/15 text-slate-400",
 };
 
@@ -303,6 +301,44 @@ export default function DashboardPage() {
         {/* Attendance not taken (Leader, Secretary; db/051) */}
         {['leader', 'secretary'].includes(role) && <AttendanceReminder />}
 
+        {/* Next Schedule */}
+        <div className={`${card} p-6`}>
+          <div className={`flex items-center justify-between mb-5 border-b ${t.divider} pb-3`}>
+            <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>
+              Next Schedule
+            </h3>
+            <a href="/dashboard/events" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+              View all <ChevronRight className="w-3 h-3" />
+            </a>
+          </div>
+          {loading ? (
+            <p className={`${t.textMuted} text-sm text-center py-8`}>Syncing...</p>
+          ) : upcomingEvents.length === 0 ? (
+            <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
+              <CalendarDays className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
+              <p className={`text-xs ${t.textMuted}`}>No upcoming events found.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {upcomingEvents.map((ev) => (
+                <div key={ev.id} className={`flex items-start justify-between gap-3 p-3 rounded-2xl ${t.innerCard} ${t.hoverRow} transition-colors`}>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{ev.title}</p>
+                    <p className={`text-xs ${t.textMuted} mt-0.5`}>
+                      {ev.date ? new Date(ev.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}
+                      {ev.start_time ? `, ${formatEventTime(ev.start_time)}` : ''}
+                      {ev.venue ? ` · ${ev.venue}` : ''}
+                      {ev.ministry ? ` · ${ev.ministry}` : ''}
+                    </p>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${STATUS_BADGE[ev.status] || STATUS_BADGE.approved}`}>
+                    {eventStatusLabel(ev.status)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className={`${card} p-6 flex items-start gap-4`}>
           <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">
@@ -325,46 +361,7 @@ export default function DashboardPage() {
 
         <KpiCards role={role} dark={dark} t={t} followUpCount={followUp.count} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Next Schedule */}
-          <div className={`${card} p-6`}>
-            <div className={`flex items-center justify-between mb-5 border-b ${t.divider} pb-3`}>
-              <h3 className={`text-[10px] uppercase font-bold tracking-widest ${t.textSub}`}>
-                Next Schedule
-              </h3>
-              <a href="/dashboard/events" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
-                View all <ChevronRight className="w-3 h-3" />
-              </a>
-            </div>
-            {loading ? (
-              <p className={`${t.textMuted} text-sm text-center py-8`}>Syncing...</p>
-            ) : upcomingEvents.length === 0 ? (
-              <div className={`py-10 text-center border border-dashed ${t.dashed} rounded-2xl`}>
-                <CalendarDays className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-2`} />
-                <p className={`text-xs ${t.textMuted}`}>No upcoming events found.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {upcomingEvents.map((ev) => (
-                  <div key={ev.id} className={`flex items-start justify-between gap-3 p-3 rounded-2xl ${t.innerCard} ${t.hoverRow} transition-colors`}>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-bold ${t.textPrimary} truncate`}>{ev.title}</p>
-                      <p className={`text-xs ${t.textMuted} mt-0.5`}>
-                        {ev.date ? new Date(ev.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}
-                        {ev.start_time ? `, ${formatEventTime(ev.start_time)}` : ''}
-                        {ev.venue ? ` · ${ev.venue}` : ''}
-                        {ev.ministry ? ` · ${ev.ministry}` : ''}
-                      </p>
-                    </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${STATUS_BADGE[ev.status] || STATUS_BADGE.planning}`}>
-                      {ev.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
+        <div className="grid grid-cols-1 gap-6">
           {/* Activity Log */}
           <div className={`${card} p-6`}>
             <div className={`mb-5 border-b ${t.divider} pb-3`}>

@@ -9,7 +9,7 @@ import { can } from "@/app/lib/permissions";
 import { notifyEventsChanged } from "@/app/lib/useEventNotices";
 import {
   Calendar, Plus, Search, MoreHorizontal,
-  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, MapPin, Repeat, ArrowLeft, Ban, RotateCcw, LayoutGrid
+  X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, MapPin, Repeat, ArrowLeft, Ban, RotateCcw, LayoutGrid
 } from "lucide-react";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
@@ -669,12 +669,8 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
   // Anything not Done or Cancelled shows as Upcoming (db/085).
   const phase = ['done', 'cancelled'].includes(event.status) ? event.status : 'approved';
   const cancelled = phase === 'cancelled';
-
-  const steps = [
-    { key: "approved", label: "Upcoming", Icon: CircleDot },
-    { key: "done",     label: "Done",     Icon: CheckCircle2 },
-  ];
-  const stepIndex = phase === 'done' ? 1 : 0;
+  // Attendance opens on the event's date (Philippine time).
+  const showAttendance = attendance && !cancelled && event.date && event.date <= phToday();
 
   return (
     <div className={`${t.cardBg} border ${t.cardBorder} p-6 rounded-3xl backdrop-blur-sm hover:border-blue-500/40 transition-all group relative`}>
@@ -701,7 +697,7 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
       {event.ministry && <p className="text-blue-400 text-[10px] font-bold uppercase tracking-wider mb-1">{event.ministry}</p>}
       {branchName ? <p className={`${t.textMuted} text-[10px] font-bold uppercase tracking-wider mb-4`}>{branchName}</p> : <div className="mb-4" />}
 
-      <div className="space-y-2 mb-6">
+      <div className={`space-y-2 ${cancelled || showAttendance ? "mb-6" : ""}`}>
         <div className={`flex items-center gap-2 ${t.textSub}`}>
           <Calendar size={13} className={`${t.textMuted} shrink-0`} />
           <span className="text-xs">
@@ -735,29 +731,20 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
         {byline && <p className={`text-[11px] ${t.textMuted}`}>{byline}</p>}
       </div>
 
-      <div className={`pt-4 border-t ${t.divider}`}>
-        {cancelled ? (
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-red-400"><Ban size={12} /> Cancelled — no attendance</p>
-        ) : <div className="flex items-center justify-between">
-          {steps.map((step, i) => {
-            const reached = stepIndex >= i;
-            return (
-              <div key={step.key} className="flex items-center gap-1">
-                <step.Icon size={12} className={reached ? (step.key === "done" ? A(dark, "emerald") : A(dark, "blue")) : (dark ? "text-slate-700" : "text-slate-400")} />
-                <span className={`text-[9px] font-bold uppercase tracking-wider ${reached ? t.textSub : t.emptyIcon}`}>{step.label}</span>
-                {i < steps.length - 1 && <div className={`w-6 h-px mx-1 ${stepIndex > i ? "bg-blue-500/40" : (dark ? "bg-slate-800" : "bg-slate-300")}`} />}
-              </div>
-            );
-          })}
-        </div>}
-        {/* Attendance opens on the event's date (Philippine time). */}
-        {attendance && ['approved', 'done'].includes(phase) && event.date && event.date <= phToday() && (
-          <Link href={`/dashboard/attendance?event=${event.id}`}
-            className="mt-4 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition-colors">
-            <ClipboardCheck size={13} /> {attendance}
-          </Link>
-        )}
-      </div>
+      {/* The status is on the badge at the top; this footer only has the
+          attendance button, or why there's none. */}
+      {(cancelled || showAttendance) && (
+        <div className={`pt-4 border-t ${t.divider}`}>
+          {cancelled ? (
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-red-400"><Ban size={12} /> Cancelled — no attendance</p>
+          ) : (
+            <Link href={`/dashboard/attendance?event=${event.id}`}
+              className="flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition-colors">
+              <ClipboardCheck size={13} /> {attendance}
+            </Link>
+          )}
+        </div>
+      )}
     </div>
   );
 }

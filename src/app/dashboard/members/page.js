@@ -36,7 +36,6 @@ const EMPTY_FORM = {
 
 const STATUS_COLORS = {
   active:   "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  busy:     "bg-orange-500/10 text-orange-400 border-orange-500/20",
   inactive: "bg-slate-500/10 text-slate-400 border-slate-500/20",
   archived: "bg-slate-500/5 text-slate-500 border-slate-500/30",
 };
@@ -496,11 +495,10 @@ export default function MembersPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: "Total Members", value: counts.total,    color: t.textPrimary },
           { label: "Active",        value: counts.active,   color: A(dark, "emerald") },
-          { label: "Busy",          value: counts.busy,     color: A(dark, "orange") },
           { label: "Inactive",      value: counts.inactive, color: t.textMuted },
         ].map((c) => (
           <div key={c.label} className={`${t.cardBg} border ${t.cardBorder} rounded-2xl px-5 py-4 backdrop-blur-sm`}>
@@ -530,7 +528,7 @@ export default function MembersPage() {
               {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
-          {["all", "active", "busy", "inactive", ARCHIVED].map((s) => (
+          {["all", "active", "inactive", ARCHIVED].map((s) => (
             <button
               key={s}
               onClick={() => changeStatus(s)}
@@ -910,12 +908,11 @@ export default function MembersPage() {
               <Field label="Status" t={t}>
                 <select name="status" value={form.status} onChange={handleChange} className={inputStyle(t)}>
                   <option value="active">Active</option>
-                  <option value="busy">Busy</option>
                   <option value="inactive">Inactive</option>
                 </select>
                 <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>
                   Active members become Inactive by themselves after {AUTO_DAYS} days with no sign-in or attendance, or after missing {AUTO_MISSED} events in a row, and Active again when they come back.
-                  Busy members, and Inactive set here by hand, are left alone.
+                  Inactive set here by hand is left alone.
                 </p>
               </Field>
 

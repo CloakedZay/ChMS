@@ -36,7 +36,6 @@ const OUTCOMES = {
 };
 const STATUS_STYLE = {
   active:   'bg-emerald-500/10 text-emerald-500 border-emerald-500/25',
-  busy:     'bg-orange-500/10 text-orange-500 border-orange-500/25',
   inactive: 'bg-rose-500/10 text-rose-500 border-rose-500/25',
 };
 
@@ -66,7 +65,7 @@ export default function FollowUpPage() {
   const [threshold, setThreshold] = useState(REMINDER_DAYS);
   const [tab, setTab] = useState('needs');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('any');   // any | active | busy | inactive
+  const [statusFilter, setStatusFilter] = useState('any');   // any | active | inactive
   const [openHistory, setOpenHistory] = useState(null);   // member id
   const [history, setHistory] = useState({});             // id → entries
   const [logFor, setLogFor] = useState(null);             // member row
@@ -162,8 +161,7 @@ export default function FollowUpPage() {
     const notReturning = r.last_outcome === 'not_returning'
       && !(r.last_seen && new Date(r.last_seen) > new Date(r.last_followup_at))
       && !(r.last_attended && r.last_attended > manilaDate(r.last_followup_at));
-    // Busy = away on purpose; they aren't chased (db/059).
-    const flagged = (quiet || missing || r.member_status === 'inactive') && !notReturning && r.member_status !== 'busy';
+    const flagged = (quiet || missing || r.member_status === 'inactive') && !notReturning;
     const followedRecently = sinceFollowUp !== null && sinceFollowUp < threshold;
     return { ...r, away, quiet, missing, notReturning, flagged, followedRecently, needs: flagged && !followedRecently };
   }), [rows, threshold, branch]);
@@ -291,7 +289,6 @@ export default function FollowUpPage() {
               className={`border rounded-xl px-3 h-10 text-sm ${t.input}`}>
               <option value="any">All statuses</option>
               <option value="active">Active</option>
-              <option value="busy">Busy</option>
               <option value="inactive">Inactive</option>
             </select>
           )}
@@ -367,7 +364,6 @@ export default function FollowUpPage() {
                       <select value={p.member_status} onChange={(e) => changeStatus(p, e.target.value)} aria-label={`Status of ${p.full_name}`}
                         className={`border rounded-xl px-3 h-9 text-xs font-semibold ${t.input}`}>
                         <option value="active">Active</option>
-                        <option value="busy">Busy</option>
                         <option value="inactive">Inactive</option>
                       </select>
                     )}

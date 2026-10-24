@@ -21,7 +21,8 @@ import { useDialog } from '@/app/lib/useDialog';
 //   Pastor            add / edit / switch off ministries; add or remove
 //                     members of any ministry
 //   ministry's head   (a Leader set as its login) add or remove members of
-//                     their own ministry
+//                     their own ministry; a Leader sees only the
+//                     ministries they head
 //   others            view
 // Each ministry lists its own modules (step M3, db/025); the Pastor or the
 // ministry's head can add one here. Questions and handouts are managed on
@@ -112,7 +113,10 @@ export default function MinistriesPage() {
   const leaderById = (id) => leaders.find((l) => l.id === id);
   const leaderName = (l) => l?.full_name || l?.email || "a Leader";
   const inBranch = (m) => !isGlobal || branch === "all" || m.church_id === branch;
-  const shown = ministries.filter(inBranch);
+  // A Leader sees only the ministries they head; the others are hidden.
+  const isLeader = role === "leader";
+  const mine = (m) => !isLeader || m.leader_id === user?.id;
+  const shown = ministries.filter((m) => inBranch(m) && mine(m));
   const active = shown.filter((m) => m.is_active);
   const off = shown.filter((m) => !m.is_active);
   const peopleIn = (ministryId) => assignments.filter((a) => a.ministry_id === ministryId);
@@ -414,7 +418,7 @@ export default function MinistriesPage() {
       ) : active.length === 0 && off.length === 0 ? (
         <div className={`py-16 text-center border border-dashed ${t.dashed} rounded-3xl`}>
           <Users className={`w-8 h-8 ${t.emptyIcon} mx-auto mb-3`} />
-          <p className={`${t.textMuted} text-sm`}>No ministries in this branch yet.</p>
+          <p className={`${t.textMuted} text-sm`}>{isLeader ? "You don't head a ministry yet. The Pastor sets who heads each one." : "No ministries in this branch yet."}</p>
           {isPastor && <p className={`${t.textMuted} text-xs mt-1`}>Use “Add ministry” to create the first one.</p>}
         </div>
       ) : (

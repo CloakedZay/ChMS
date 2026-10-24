@@ -226,7 +226,7 @@ export function AttendanceEventList({ t, events, churchName, onOpen }) {
     <ul className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
       {events.map((ev) => {
         const taken = ev.members_present + ev.visitors > 0;
-        // active_members = every member of the branch except archived and Busy (db/058).
+        // active_members = every member of the branch except archived (db/058; no Busy since db/087).
         const rate = ev.active_members > 0 ? Math.min(100, Math.round((ev.members_present / ev.active_members) * 100)) : null;
         return (
           <li key={ev.id} className={`border rounded-3xl p-5 flex flex-col ${t.card}`}>
