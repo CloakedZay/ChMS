@@ -330,11 +330,10 @@ export default function TrainingPage() {
       .map((id) => ({ key: id, label: ministryName(id), modules: modules.filter((m) => m.ministry_id === id).sort(byOrder) }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   ].filter((g) => g.modules.length);
-  // Where the signed-in person may add a module.
-  const addableGroups = [
-    ...(canEditGroup(null) ? [{ id: "", name: "General discipleship path" }] : []),
-    ...ministries.filter((m) => m.is_active && canEditGroup(m.id)).map((m) => ({ id: m.id, name: m.name })),
-  ];
+  // "Add Module" here is the Pastor's, for the general path only. A ministry
+  // head adds their ministry's modules on the Ministries page (db/088) and
+  // edits them here.
+  const addableGroups = canEditGroup(null) ? [{ id: "", name: "General discipleship path" }] : [];
 
   // Pop-ups: focus, Tab, Esc and a name for screen readers (lib/useDialog).
   const moduleDialogRef = useDialog(showAddModule, () => { setShowAddModule(false); setNewModuleTitle(""); setNewModuleDesc(""); });
