@@ -7,14 +7,12 @@ import { formatEventTime } from '@/app/lib/eventTime';
 import { phToday } from '@/app/lib/phDate';
 import { groupSeries, seriesLabel } from '@/app/lib/eventSeries';
 import BranchLabel from '@/app/components/BranchLabel';
-import EventCalendar from '@/app/components/EventCalendar';
+import EventCalendar, { eventStatusLabel } from '@/app/components/EventCalendar';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import { useDialog } from '@/app/lib/useDialog';
 const STATUS_COLORS = {
   approved: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  pending:  'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  planning: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   done:     'bg-slate-500/10 text-slate-400 border-slate-500/20',
   cancelled: 'bg-red-500/10 text-red-400 border-red-500/20',
 };
@@ -66,7 +64,7 @@ export default function MemberEventsPage() {
     async function fetchEvents() {
       setLoading(true);
       const [evts, mins] = await Promise.all([
-        // Planning / pending events are drafts; members see them once approved (db/044).
+        // Upcoming, Done and Cancelled (db/044; old drafts never show).
         // Cancelled ones stay listed, marked, so nobody turns up for nothing (db/051).
         supabase.from('events').select('*').in('status', ['approved', 'done', 'cancelled']).order('date', { ascending: true }),
         supabase.from('ministries').select('name, color_code'),
@@ -201,8 +199,7 @@ export default function MemberEventsPage() {
           {[0, 1, 2].map((i) => <div key={i} className="skeleton h-48 w-full rounded-3xl" />)}
         </div>
       ) : view === 'calendar' ? (
-        <EventCalendar events={matching} onSelect={(e) => setOpenId(e.id)} dark
-          legend={[['approved', 'Coming up'], ['done', 'Done'], ['cancelled', 'Cancelled']]} />
+        <EventCalendar events={matching} onSelect={(e) => setOpenId(e.id)} dark />
       ) : filtered.length === 0 ? (
         <div className="text-center py-20">
           <CalendarDays className="w-8 h-8 text-slate-700 mx-auto mb-2" />
@@ -240,8 +237,8 @@ export default function MemberEventsPage() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[ev.status] || STATUS_COLORS.planning}`}>
-                      {ev.status || 'planning'}
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[ev.status] || STATUS_COLORS.approved}`}>
+                      {eventStatusLabel(ev.status)}
                     </span>
                     <h3 className={`text-base font-black text-white mt-2 leading-snug ${ev.status === 'cancelled' ? 'line-through' : ''}`}>{ev.title}</h3>
                   </div>

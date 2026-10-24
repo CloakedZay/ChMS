@@ -9,15 +9,15 @@ import { can } from "@/app/lib/permissions";
 import { notifyEventsChanged } from "@/app/lib/useEventNotices";
 import {
   Calendar, Plus, Search, MoreHorizontal,
-  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, Undo2, Send, Check, MapPin, Repeat, ArrowLeft, Ban, RotateCcw, LayoutGrid
+  CheckCircle2, CircleDot, X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, MapPin, Repeat, ArrowLeft, Ban, RotateCcw, LayoutGrid
 } from "lucide-react";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
 import DatePicker from "@/app/components/DatePicker";
 import TimePicker from "@/app/components/TimePicker";
-import { weeklyDates, lastSeriesDate, weekdayOf, groupSeries, collapseSeries, seriesLabel, MAX_SERIES_DATES } from "@/app/lib/eventSeries";
+import { weeklyDates, lastSeriesDate, weekdayOf, groupSeries, seriesLabel, MAX_SERIES_DATES } from "@/app/lib/eventSeries";
 import BranchLabel from "@/app/components/BranchLabel";
-import EventCalendar from "@/app/components/EventCalendar";
+import EventCalendar, { EVENT_STATUS_LABEL, eventStatusLabel } from "@/app/components/EventCalendar";
 
 import Pagination, { usePaged } from "@/app/components/Pagination";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
@@ -29,7 +29,7 @@ const EMPTY_FORM = {
   date: '',
   start_time: '',
   venue: '',
-  status: 'planning',
+  status: 'approved',
   description: '',
   church_id: '',
   repeat: 'none',     // 'none' | 'weekly' (db/049) — new events only
@@ -40,20 +40,16 @@ const shortDate = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', {
 
 const STATUS_COLORS = {
   approved: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  pending:  "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  planning: "bg-blue-500/10 text-blue-400 border-blue-500/20",
   done:     "bg-slate-500/10 text-slate-400 border-slate-500/20",
   cancelled: "bg-red-500/10 text-red-400 border-red-500/20",
 };
 
-const FILTERS = ["all", "planning", "pending", "approved", "done", "cancelled"];
+// Upcoming -> Done, or Cancelled (db/085: no more Planning / Pending).
+const FILTERS = ["all", "approved", "done", "cancelled"];
 
 // Short level names for "Added by … (Secretary)".
 const LEVEL = { admin: 'Admin', pastor: 'Pastor', leader: 'Leader', secretary: 'Secretary', finance: 'Finance' };
 const GLOBAL_ROLES = ["admin", "pastor"];
-// The Secretary may still edit their own event while it's in one of these;
-// approving is a Leader's job (db/050).
-const SUBMITTED_STATUSES = ["planning", "pending"];
 
 // ─── Theme token map — same pattern as DashboardPage.js ────────────────────
 // Light mode is deliberately dimmed a notch off pure white/slate-100 (~90%
@@ -79,7 +75,7 @@ function A(dark, color) {
 export default function EventsPage() {
   const { dark, toggle: toggleTheme } = useTheme();
   const t = T(dark);
-  const { user, role } = useAuth();
+  const { role } = useAuth();
 
   const [events, setEvents]         = useState([]);
   const [churches, setChurches]     = useState([]);
@@ -90,13 +86,11 @@ export default function EventsPage() {
   const [editingEvent, setEditingEvent] = useState(null);
   // ?q= (from the dashboard search) opens with the search filled in.
   const [search, setSearch]         = useState(() => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') || '' : ''));
-  // ?filter=pending (from the dashboard bell) opens on that tab.
+  // ?filter=done etc. opens on that tab.
   const [activeFilter, setActiveFilter] = useState(() => {
     const f = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('filter') : null;
     return FILTERS.includes(f) ? f : 'all';
   });
-  const [sendBack, setSendBack]     = useState(null);   // event being sent back
-  const [backNote, setBackNote]     = useState("");
   const [acting, setActing]         = useState(false);
   const [form, setForm]             = useState(EMPTY_FORM);
   const [applyLater, setApplyLater] = useState(false);  // edit: also the series' later dates
@@ -112,23 +106,14 @@ export default function EventsPage() {
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
   const today = phToday();
 
-  // db/050, db/084: only Leaders add events (approved on save) and manage
-  // every event of their branch. The Secretary, Pastor, Admin and everyone
-  // else only view. Leaders may give a past date. The approve / send back /
-  // submit parts stay for events the Secretary filed before db/084 that are
-  // still waiting; no level has 'submit' now, so canSubmit is always false.
+  // db/084, db/085: only Leaders add events and manage every event of their
+  // branch; an event is Upcoming as soon as it's saved, no approval step.
+  // The Secretary, Pastor, Admin and everyone else only view. Leaders may
+  // give a past date.
   const canManageAll = can(role, 'events', 'approve');
-  const canSubmit    = can(role, 'events', 'submit');
   const canSeeAttendance = can(role, 'attendance', 'view');   // db/041
   // Only the Secretary takes it; the Pastor and Leaders just view (db/081).
   const attendanceLabel  = can(role, 'attendance', 'edit') ? 'Take attendance' : 'View attendance';
-  // A branch with no Leader: the Pastor approves or sends back its pending
-  // events instead (db/066).
-  const [noLeader, setNoLeader] = useState(new Set());
-  const pastorReviews = (ev) => role === 'pastor' && ev.status === 'pending' && noLeader.has(ev.church_id);
-  const canEditEvent = (ev) =>
-    canManageAll ||
-    (canSubmit && ev.created_by === user?.id && SUBMITTED_STATUSES.includes(ev.status));
 
   async function fetchProfile() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -155,8 +140,8 @@ export default function EventsPage() {
     const { data } = await supabase.from('events').select('*').order('date', { ascending: true });
     if (data) setEvents(data);
     setLoading(false);
-    // Names for "Added by / Approved by / Cancelled by".
-    const ids = [...new Set((data || []).flatMap((e) => [e.created_by, e.approved_by, e.cancelled_by]).filter(Boolean))];
+    // Names for "Added by / Cancelled by".
+    const ids = [...new Set((data || []).flatMap((e) => [e.created_by, e.cancelled_by]).filter(Boolean))];
     if (ids.length) {
       const { data: logins } = await supabase.from('profiles').select('id, full_name, email, role').in('id', ids);
       setPeople(Object.fromEntries((logins || []).map((p) => [p.id, p])));
@@ -166,10 +151,6 @@ export default function EventsPage() {
   useEffect(() => {
     async function init() {
       const p = await fetchProfile();
-      if (p?.role === 'pastor') {
-        const { data: leaderless } = await supabase.rpc('branches_without_leader');   // empty before db/066
-        setNoLeader(new Set(leaderless || []));
-      }
       try { if (localStorage.getItem('faithsync-events-view') === 'calendar') setView('calendar'); } catch { /* storage blocked */ }
       await fetchChurches();
       await fetchEvents();
@@ -193,7 +174,7 @@ export default function EventsPage() {
       date:        event.date        || '',
       start_time:  event.start_time?.slice(0, 5) || '',
       venue:       event.venue       || '',
-      status:      event.status      || 'planning',
+      status:      event.status      || 'approved',
       description: event.description || '',
       church_id:   event.church_id   || '',
       repeat: 'none',
@@ -227,9 +208,9 @@ export default function EventsPage() {
     const payload = {
       ...rest,
       church_id: isGlobal ? form.church_id : profile?.church_id,
-      // A Leader's events are approved on save; the Secretary's go straight
-      // to the Leaders for approval (db/050).
-      status: editingEvent ? editingEvent.status : canManageAll ? 'approved' : 'pending',
+      // Upcoming ('approved') on save (db/085). Editing keeps Done and
+      // Cancelled; an old Planning / Pending one becomes Upcoming.
+      status: ['done', 'cancelled'].includes(editingEvent?.status) ? editingEvent.status : 'approved',
     };
     // Time and venue only when set (or being cleared), so events still save
     // before db/043 has been run.
@@ -268,58 +249,6 @@ export default function EventsPage() {
     setEditingEvent(null);
     setForm(EMPTY_FORM);
     await fetchEvents();
-  }
-
-  // ── Approval (db/042) ──────────────────────────────────────────────────
-  // A weekly event (db/049) is decided as a whole: every date of the series
-  // that is still in the same step as this one.
-  const sameStep = (ev) => (ev.series_id
-    ? events.filter((e) => e.series_id === ev.series_id && e.status === ev.status).map((e) => e.id)
-    : [ev.id]);
-  const datesNote = (ev) => {
-    const n = sameStep(ev).length;
-    return n > 1 ? ` (all ${n} dates)` : '';
-  };
-
-  // The Pastor's decision in a branch with no Leader (db/066).
-  async function pastorReview(ev, approveIt, note) {
-    setActing(true);
-    const { error } = await supabase.rpc('pastor_review_events', { p_ids: sameStep(ev), p_approve: approveIt, p_note: note || null });
-    setActing(false);
-    if (error) { alertDialog(friendlyError(error)); return false; }
-    await fetchEvents();
-    notifyEventsChanged();
-    return true;
-  }
-
-  async function setStatus(ev, changes) {
-    setActing(true);
-    const { error } = await supabase.from('events').update(changes).in('id', sameStep(ev));
-    setActing(false);
-    if (error) { alertDialog(friendlyError(error)); return false; }
-    await fetchEvents();
-    notifyEventsChanged();
-    return true;
-  }
-
-  async function approve(ev) {
-    if (!ev.date) { alertDialog(`Set the date of "${ev.title}" before approving it.`); openEdit(ev); return; }
-    if (ev.series_id && !await confirmDialog(`Approve "${ev.title}"${datesNote(ev)}?`)) return;
-    if (pastorReviews(ev)) pastorReview(ev, true);
-    else setStatus(ev, { status: 'approved' });
-  }
-
-  async function confirmSendBack(e) {
-    e.preventDefault();
-    const done = pastorReviews(sendBack)
-      ? await pastorReview(sendBack, false, backNote.trim())
-      : await setStatus(sendBack, { status: 'planning', review_note: backNote.trim() });
-    if (done) setSendBack(null);
-  }
-
-  async function submitForApproval(ev) {
-    if (!await confirmDialog(`Send "${ev.title}"${datesNote(ev)} to the Leaders for approval?`)) return;
-    setStatus(ev, { status: 'pending' });
   }
 
   // ── Delete: one date, or this date and the later ones of its series ─────
@@ -379,7 +308,7 @@ export default function EventsPage() {
     notifyEventsChanged();
   }
 
-  // "Added by Maria (Secretary) · Approved by Juan (Leader)"
+  // "Added by Juan (Leader) · Cancelled by Maria (Leader)"
   function whoLine(ev) {
     const name = (id) => {
       const p = people[id];
@@ -389,15 +318,8 @@ export default function EventsPage() {
     };
     const parts = [];
     if (name(ev.created_by)) parts.push(`Added by ${name(ev.created_by)}`);
-    if (ev.approved_by && ev.approved_by !== ev.created_by && name(ev.approved_by)) parts.push(`Approved by ${name(ev.approved_by)}`);
     if (ev.status === 'cancelled' && name(ev.cancelled_by)) parts.push(`Cancelled by ${name(ev.cancelled_by)}`);
     return parts.join(' · ');
-  }
-
-  async function dismissReviews() {
-    await supabase.rpc('mark_event_reviews_seen', { p_ids: null });
-    await fetchEvents();
-    notifyEventsChanged();
   }
 
   const churchName = (id) => churches.find((c) => c.id === id)?.name;
@@ -411,16 +333,11 @@ export default function EventsPage() {
   const filtered = seriesView ? matching : groupSeries(matching, phToday());
   const viewedSeries = seriesView ? events.find((e) => e.series_id === seriesView) : null;
 
-  // One line per weekly event, not per date.
-  const waiting = collapseSeries(events.filter((e) => e.status === 'pending' && (canManageAll || pastorReviews(e))));
-  const myReviews = collapseSeries(events.filter((e) => e.created_by === user?.id && e.review_seen === false));
-  const withDates = (e) => (e.dates > 1 ? `${e.title} (${e.dates} dates)` : e.title);
-
   const counts = {
     total:    events.length,
-    approved: events.filter((e) => e.status === "approved").length,
-    pending:  events.filter((e) => e.status === "pending").length,
-    done:     events.filter((e) => e.status === "done").length,
+    upcoming:  events.filter((e) => e.status === "approved").length,
+    done:      events.filter((e) => e.status === "done").length,
+    cancelled: events.filter((e) => e.status === "cancelled").length,
   };
 
   function switchView(v) {
@@ -435,17 +352,14 @@ export default function EventsPage() {
     return {
       event,
       branchName: isGlobal ? churchName(event.church_id) : null,
-      onEdit: wrap(canEditEvent(event) ? openEdit : null),
-      onDelete: wrap(canEditEvent(event) ? openDelete : null),
+      onEdit: wrap(canManageAll ? openEdit : null),
+      onDelete: wrap(canManageAll ? openDelete : null),
       attendance: canSeeAttendance ? attendanceLabel : null,
       onShowSeries: event.series ? wrap(() => { setSeriesView(event.series_id); switchView('cards'); }) : null,
-      onApprove: wrap((canManageAll && (event.status === 'pending' || (event.status === 'planning' && event.created_by === user?.id))) || pastorReviews(event) ? approve : null),
-      onSendBack: wrap((canManageAll && event.status === 'pending') || pastorReviews(event) ? (ev) => { setSendBack(ev); setBackNote(''); } : null),
-      onSubmit: wrap(canSubmit && !canManageAll && event.created_by === user?.id && event.status === 'planning' ? submitForApproval : null),
       onCancel: wrap(canManageAll && event.status === 'approved' ? (ev) => { setCancelFor(ev); setCancelNote(''); } : null),
       onRestore: wrap(canManageAll && event.status === 'cancelled' ? restore : null),
       byline: whoLine(event),
-      busy: acting, t, dark,
+      t, dark,
     };
   }
 
@@ -464,7 +378,6 @@ export default function EventsPage() {
   const openedDialogRef = useDialog(!!selected, () => setSelectedId(null));
   const deleteDialogRef = useDialog(!!toDelete, () => { if (!acting) setToDelete(null); });
   const cancelDialogRef = useDialog(!!cancelFor, () => { if (!acting) setCancelFor(null); });
-  const sendBackDialogRef = useDialog(!!sendBack, () => { if (!acting) setSendBack(null); });
   const eventDialogRef = useDialog(showModal, () => setShowModal(false));
 
   return (
@@ -484,7 +397,7 @@ export default function EventsPage() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          {(canManageAll || canSubmit) && (
+          {canManageAll && (
             <button
               onClick={openAdd}
               className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20 shrink-0"
@@ -495,43 +408,12 @@ export default function EventsPage() {
         </div>
       </div>
 
-      {/* Leaders (and the Pastor, for branches with no Leader): events waiting for approval */}
-      {waiting.length > 0 && activeFilter !== 'pending' && (
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-5 py-4">
-          <p className={`text-sm ${t.textPrimary} flex-1`}>
-            <b>{waiting.length} event{waiting.length === 1 ? '' : 's'}</b> waiting for your approval: {waiting.map(withDates).join(', ')}
-          </p>
-          <button onClick={() => setActiveFilter('pending')}
-            className="shrink-0 bg-orange-500 hover:bg-orange-400 text-white px-4 py-2 rounded-xl text-xs font-bold">Review</button>
-        </div>
-      )}
-
-      {/* Whoever filed events: the Leaders' decisions */}
-      {myReviews.length > 0 && (
-        <div className={`mb-6 rounded-2xl border ${t.cardBorder} ${t.cardBg} px-5 py-4`}>
-          <ul className="space-y-2">
-            {myReviews.map((e) => (
-              <li key={e.id} className="text-sm flex items-start gap-2">
-                {e.status === 'approved'
-                  ? <CheckCircle2 size={16} className={`${A(dark, 'emerald')} shrink-0 mt-0.5`} />
-                  : <Undo2 size={16} className={`${A(dark, 'orange')} shrink-0 mt-0.5`} />}
-                <span className={t.textPrimary}>
-                  <b>{withDates(e)}</b> {e.status === 'approved' ? 'was approved.' : 'was sent back to planning.'}
-                  {e.status !== 'approved' && e.review_note && <span className={t.textSub}> Reason: “{e.review_note}”</span>}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <button onClick={dismissReviews} className={`mt-3 text-xs font-bold ${A(dark, 'blue')} hover:underline`}>Got it</button>
-        </div>
-      )}
-
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { label: "Total Events", value: counts.total,    color: A(dark, "blue") },
-          { label: "Approved",     value: counts.approved, color: A(dark, "emerald") },
-          { label: "Pending",      value: counts.pending,  color: A(dark, "orange") },
-          { label: "Completed",    value: counts.done,     color: t.textMuted },
+          { label: "Upcoming",     value: counts.upcoming,  color: A(dark, "emerald") },
+          { label: "Done",         value: counts.done,      color: t.textMuted },
+          { label: "Cancelled",    value: counts.cancelled, color: A(dark, "orange") },
         ].map((c) => (
           <div key={c.label} className={`${t.cardBg} border ${t.cardBorder} rounded-2xl px-5 py-4 backdrop-blur-sm`}>
             <p className={`text-[10px] uppercase tracking-widest ${t.textSub} font-bold mb-1`}>{c.label}</p>
@@ -553,7 +435,7 @@ export default function EventsPage() {
           {FILTERS.map((f) => (
             <button key={f} onClick={() => setActiveFilter(f)}
               className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${activeFilter === f ? "bg-blue-600 text-white" : t.filterInactive}`}>
-              {f}
+              {EVENT_STATUS_LABEL[f] || f}
             </button>
           ))}
         </div>
@@ -677,26 +559,6 @@ export default function EventsPage() {
         </div>
       )}
 
-      {sendBack && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          onMouseDown={(e) => { if (e.target === e.currentTarget && !acting) setSendBack(null); }}>
-          <form ref={sendBackDialogRef} onSubmit={confirmSendBack} role="dialog" aria-modal="true" aria-label="Send back"
-            className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4`}>
-            <h2 className={`text-lg font-black ${t.textPrimary}`}>Send back to planning</h2>
-            <p className={`text-xs ${t.textSub} mt-1 mb-4`}>“{sendBack.title}” — tell them what to change. They&apos;ll see this, then they can fix it and submit again.</p>
-            <textarea value={backNote} onChange={(e) => setBackNote(e.target.value)} required maxLength={1000} rows={4} autoFocus
-              placeholder="e.g. Please move it to Saturday and add the venue."
-              className={`${inputStyle(t)} resize-none`} />
-            <div className="flex gap-3 pt-4">
-              <button type="button" onClick={() => setSendBack(null)} disabled={acting} className={`flex-1 ${t.cancelBtn} rounded-xl py-2.5 text-sm font-semibold`}>Cancel</button>
-              <button type="submit" disabled={acting || !backNote.trim()} className="flex-1 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-bold">
-                {acting ? 'Sending…' : 'Send back'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div ref={eventDialogRef} role="dialog" aria-modal="true" aria-label={editingEvent ? 'Edit event' : 'Add new event'} className={`${t.modalBg} border ${t.modalBorder} rounded-2xl w-full max-w-md p-6 shadow-2xl mx-4 max-h-[90vh] overflow-y-auto`}>
@@ -779,14 +641,7 @@ export default function EventsPage() {
 
               {!editingEvent && (
                 <p className={`text-[11px] ${t.textSub}`}>
-                  {canManageAll
-                    ? <>Your events are <b>Approved</b> as soon as you save them, and members see them right away.</>
-                    : <>It goes to the <b>Leaders</b> for approval when you save it. You can still change it until they approve it.</>}
-                </p>
-              )}
-              {editingEvent?.status === 'planning' && canSubmit && !canManageAll && (
-                <p className={`text-[11px] ${A(dark, 'orange')}`}>
-                  This event was sent back. After saving your changes, press <b>Submit for approval</b> on its card to send it to the Leaders again.
+                  Members see it as <b>Upcoming</b> as soon as you save it. It turns <b>Done</b> by itself after its date.
                 </p>
               )}
 
@@ -809,22 +664,22 @@ function inputStyle(t) {
 }
 
 
-function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel, onRestore, byline, attendance, onApprove, onSendBack, onSubmit, busy, t, dark }) {
+function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel, onRestore, byline, attendance, t, dark }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const phase = event.status || "planning";
+  // Anything not Done or Cancelled shows as Upcoming (db/085).
+  const phase = ['done', 'cancelled'].includes(event.status) ? event.status : 'approved';
   const cancelled = phase === 'cancelled';
 
   const steps = [
-    { key: "planning", label: "Planning", Icon: CircleDot },
-    { key: "approved", label: "Approved", Icon: CircleDot },
+    { key: "approved", label: "Upcoming", Icon: CircleDot },
     { key: "done",     label: "Done",     Icon: CheckCircle2 },
   ];
-  const stepIndex = ["planning", "pending", "approved", "done"].indexOf(phase);
+  const stepIndex = phase === 'done' ? 1 : 0;
 
   return (
     <div className={`${t.cardBg} border ${t.cardBorder} p-6 rounded-3xl backdrop-blur-sm hover:border-blue-500/40 transition-all group relative`}>
       <div className="flex justify-between items-start mb-4">
-        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[phase] || STATUS_COLORS.planning}`}>{phase}</span>
+        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[phase]}`}>{eventStatusLabel(phase)}</span>
         {(onEdit || onDelete || onCancel || onRestore) && <div className="relative">
           <button aria-label="More actions" onClick={() => setMenuOpen(!menuOpen)} className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${t.menuHover}`}><MoreHorizontal size={16} /></button>
           {menuOpen && (
@@ -878,42 +733,14 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
           </p>
         )}
         {byline && <p className={`text-[11px] ${t.textMuted}`}>{byline}</p>}
-        {phase === 'planning' && event.review_note && (
-          <p className={`text-xs rounded-xl px-3 py-2 bg-orange-500/10 border border-orange-500/20 ${t.textSub}`}>
-            <span className={`font-bold ${A(dark, 'orange')}`}>Sent back:</span> {event.review_note}
-          </p>
-        )}
       </div>
-
-      {(onApprove || onSendBack || onSubmit) && (
-        <div className="flex gap-2 mb-5">
-          {onApprove && (
-            <button onClick={() => onApprove(event)} disabled={busy}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold">
-              <Check size={14} /> Approve
-            </button>
-          )}
-          {onSendBack && (
-            <button onClick={() => onSendBack(event)} disabled={busy}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-xl border border-orange-500/30 text-orange-500 hover:bg-orange-500/10 disabled:opacity-50 text-xs font-bold">
-              <Undo2 size={14} /> Send back
-            </button>
-          )}
-          {onSubmit && (
-            <button onClick={() => onSubmit(event)} disabled={busy}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold">
-              <Send size={13} /> Submit for approval
-            </button>
-          )}
-        </div>
-      )}
 
       <div className={`pt-4 border-t ${t.divider}`}>
         {cancelled ? (
           <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-red-400"><Ban size={12} /> Cancelled — no attendance</p>
         ) : <div className="flex items-center justify-between">
           {steps.map((step, i) => {
-            const reached = stepIndex >= ["planning", "pending", "approved", "done"].indexOf(step.key === "approved" ? "approved" : step.key);
+            const reached = stepIndex >= i;
             return (
               <div key={step.key} className="flex items-center gap-1">
                 <step.Icon size={12} className={reached ? (step.key === "done" ? A(dark, "emerald") : A(dark, "blue")) : (dark ? "text-slate-700" : "text-slate-400")} />
@@ -923,7 +750,7 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
             );
           })}
         </div>}
-        {/* Attendance opens on the event's date (Philippine time) once it's approved. */}
+        {/* Attendance opens on the event's date (Philippine time). */}
         {attendance && ['approved', 'done'].includes(phase) && event.date && event.date <= phToday() && (
           <Link href={`/dashboard/attendance?event=${event.id}`}
             className="mt-4 flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 transition-colors">

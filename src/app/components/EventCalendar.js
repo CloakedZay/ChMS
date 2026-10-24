@@ -18,16 +18,19 @@ const WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const pad = (n) => String(n).padStart(2, '0');
 
 // Fixed hex colors on purpose: the theme remaps the named Tailwind colors
-// (blue → green…), which made Approved and Sent back look alike (same
-// reason as lib/roleColors.js).
+// (blue → green…), which made two statuses look alike (same reason as
+// lib/roleColors.js).
 const CHIP = {
   approved:  { dark: 'bg-[#2f6b58]/40 text-[#a8dcc0]', light: 'bg-[#2f6b58]/15 text-[#1f4d3f]', dot: 'bg-[#2f6b58]' },
-  pending:   { dark: 'bg-[#c27c2c]/25 text-[#f2bf85]', light: 'bg-[#c27c2c]/15 text-[#7f4610]', dot: 'bg-[#c27c2c]' },
-  planning:  { dark: 'bg-[#7a5c8f]/30 text-[#d2b6e8]', light: 'bg-[#7a5c8f]/15 text-[#553a6b]', dot: 'bg-[#7a5c8f]' },
   done:      { dark: 'bg-white/[0.07] text-[#b5bab7]', light: 'bg-[#858b87]/15 text-[#4c534f]', dot: 'bg-[#858b87]' },
   cancelled: { dark: 'bg-[#b03c3c]/15 text-[#f0a0a0]/80 line-through', light: 'bg-[#b03c3c]/10 text-[#9c2f2f]/80 line-through', dot: 'bg-[#b03c3c]' },
 };
-export const STATUS_LEGEND = [['approved', 'Approved'], ['pending', 'Waiting'], ['planning', 'Sent back'], ['done', 'Done'], ['cancelled', 'Cancelled']];
+// What each status is called on screen (db/085). 'approved' stays the
+// database value; people see "Upcoming" until the date passes and it turns
+// 'done' by itself (complete_past_events, db/042).
+export const EVENT_STATUS_LABEL = { approved: 'Upcoming', done: 'Done', cancelled: 'Cancelled' };
+export const eventStatusLabel = (status) => EVENT_STATUS_LABEL[status] || EVENT_STATUS_LABEL.approved;
+export const STATUS_LEGEND = [['approved', 'Upcoming'], ['done', 'Done'], ['cancelled', 'Cancelled']];
 
 export default function EventCalendar({ events, onSelect, dark, legend = STATUS_LEGEND }) {
   const today = phToday();
@@ -43,7 +46,7 @@ export default function EventCalendar({ events, onSelect, dark, legend = STATUS_
         hover: 'hover:bg-white/10', btn: 'border-white/10 text-slate-300 hover:bg-white/5', dim: 'bg-black/10' }
     : { card: 'bg-white border-[#e5e3d8]', head: 'text-[#173f35]', muted: 'text-[#858b87]', line: 'border-[#efede4]',
         hover: 'hover:bg-[#f0efe8]', btn: 'border-[#d9d6c8] text-[#4c534f] hover:bg-[#f8f7f2]', dim: 'bg-[#f8f7f2]' };
-  const chip = (status) => (CHIP[status] || CHIP.planning)[dark ? 'dark' : 'light'];
+  const chip = (status) => (CHIP[status] || CHIP.approved)[dark ? 'dark' : 'light'];
 
   // This month's events by date, earliest time first.
   const byDay = useMemo(() => {

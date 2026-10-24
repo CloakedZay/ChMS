@@ -15,13 +15,13 @@ import { verseOfDayIndex, nextLocalMidnight } from "@/app/lib/verseOfDay";
 import BranchLabel from "@/app/components/BranchLabel";
 import UpcomingBirthdays from "@/app/components/UpcomingBirthdays";
 import CalendarWidget from "@/app/components/CalendarWidget";
+import { eventStatusLabel } from "@/app/components/EventCalendar";
 import ScriptureLink from "@/app/components/ScriptureLink";
 import AnnouncementsBanner from "@/app/components/AnnouncementsBanner";
 import FollowUpReminder from "@/app/components/FollowUpReminder";
 import AttendanceReminder from "@/app/components/AttendanceReminder";
 import SpendingReminder from "@/app/components/SpendingReminder";
 import { useFollowUpReminder, REMINDER_DAYS, MISSED_EVENTS } from "@/app/lib/useFollowUpReminder";
-import { useEventNotices } from "@/app/lib/useEventNotices";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
 import { collapseSeries } from "@/app/lib/eventSeries";
@@ -83,7 +83,6 @@ export default function DashboardPage() {
   const { role, user } = useAuth();
   // Follow-up reminder — staff who follow up members only, never members.
   const followUp = useFollowUpReminder(user?.id, can(role, 'followUp'));
-  const eventNotices = useEventNotices(user?.id, role, can(role, 'events'));   // db/042
   const t = T(dark);
 
   const [loading, setLoading]           = useState(true);
@@ -107,9 +106,8 @@ export default function DashboardPage() {
         const { data: latestTrans } = await supabase.from('transactions').select('amount, type, fund, category, member, date, status')
           .or('status.is.null,status.neq.Void')
           .order('date', { ascending: false, nullsFirst: false }).order('date_recorded', { ascending: false }).limit(5);
-        // Upcoming = approved, from today (Philippine date) on. Planning and
-        // pending events aren't happening yet. A weekly event counts once,
-        // at its next date (db/049).
+        // Upcoming = status 'approved', from today (Philippine date) on. A
+        // weekly event counts once, at its next date (db/049).
         const { data: allUpcoming } = await supabase.from('events').select('*')
           .eq('status', 'approved').gte('date', phToday()).order('date', { ascending: true });
         const upcoming = collapseSeries(allUpcoming || []);
@@ -179,10 +177,11 @@ export default function DashboardPage() {
   }, []);
 
   // ── Computed ──────────────────────────────────────────────────────────────
-  // The bell: follow-up reminder and event notices, each scoped by role and
-  // branch. (The old shared notifications feed is gone, db/067.)
+  // The bell: the follow-up reminder, scoped by role and branch. (The old
+  // shared notifications feed is gone, db/067; event approval notices,
+  // db/085.)
   const showReminder   = followUp.count > 0 && !followUp.snoozed;
-  const bellCount      = (showReminder ? 1 : 0) + (eventNotices.pending.length ? 1 : 0) + eventNotices.reviews.length;
+  const bellCount      = showReminder ? 1 : 0;
   const activityFeed = [
     ...recentTransactions.slice(0, 3).map((t) => ({
       type: "finance",
@@ -196,7 +195,7 @@ export default function DashboardPage() {
     })),
     ...upcomingEvents.slice(0, 2).map((e) => ({
       type: "event",
-      text: `${e.title} — ${e.status}`,
+      text: `${e.title} — ${eventStatusLabel(e.status)}`,
       time: e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : "—",
     })),
   ].slice(0, 6);
@@ -277,46 +276,7 @@ export default function DashboardPage() {
                       </div>
                     </Link>
                   )}
-                  {eventNotices.pending.length > 0 && (
-                    <Link
-                      href="/dashboard/events?filter=pending"
-                      onClick={() => setShowNotifs(false)}
-                      className={`flex items-start gap-3 px-4 py-3 border-b ${t.divider} bg-orange-500/10 hover:bg-orange-500/15 transition-colors`}
-                    >
-                      <div className="mt-0.5 w-7 h-7 rounded-xl flex items-center justify-center shrink-0 bg-orange-500/20 text-orange-500">
-                        <CalendarDays className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-bold truncate ${t.textPrimary}`}>
-                          {eventNotices.pending.length} event{eventNotices.pending.length === 1 ? '' : 's'} waiting for your approval
-                        </p>
-                        <p className={`text-[10px] ${t.textSub} mt-0.5 line-clamp-2`}>
-                          {eventNotices.pending.map((e) => (e.dates > 1 ? `${e.title} (${e.dates} dates)` : e.title)).join(', ')}
-                        </p>
-                      </div>
-                    </Link>
-                  )}
-                  {eventNotices.reviews.map((r) => (
-                    <Link
-                      key={`review-${r.id}`}
-                      href="/dashboard/events"
-                      onClick={() => setShowNotifs(false)}
-                      className={`flex items-start gap-3 px-4 py-3 border-b ${t.divider} ${r.status === 'approved' ? 'bg-emerald-500/10 hover:bg-emerald-500/15' : 'bg-orange-500/10 hover:bg-orange-500/15'} transition-colors`}
-                    >
-                      <div className={`mt-0.5 w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${r.status === 'approved' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-orange-500/20 text-orange-500'}`}>
-                        <CalendarDays className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-bold truncate ${t.textPrimary}`}>
-                          {`“${r.title}”${r.dates > 1 ? ` (${r.dates} dates)` : ''} was ${r.status === 'approved' ? 'approved' : 'sent back'}`}
-                        </p>
-                        <p className={`text-[10px] ${t.textSub} mt-0.5 line-clamp-2`}>
-                          {r.status === 'approved' ? 'Your event was approved.' : r.review_note || 'It was sent back to planning.'}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                  {!showReminder && !eventNotices.count && (
+                  {!showReminder && (
                     <div className="py-10 text-center">
                       <Bell className={`w-6 h-6 ${t.emptyIcon} mx-auto mb-2`} />
                       <p className={`text-xs ${t.textMuted}`}>No notifications.</p>

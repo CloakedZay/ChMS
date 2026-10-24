@@ -106,7 +106,7 @@ erDiagram
 | Users (levels, branches, Elders, disable, reset password) | **Manage** | — | — | — | — | — |
 | Members | names only | **Add, edit, archive** (all branches) | View | names in Finance | **Add, edit, import, logins, archive** | own |
 | Follow-up | — | Manage (all) | Log follow-ups | — | Manage | — |
-| Events | View | View; approve where a branch has no Leader | **Add, approve, cancel** | View | Add (for approval) | View approved |
+| Events | View | View | **Add, edit, cancel** (Upcoming on save, no approval) | View | View | View |
 | Attendance | View | View (all) | View | View | Take | Own; helpers take |
 | Finance ledger | — | View (all) | View | **Record, void** | — | — |
 | Spending requests | — | Request, approve, set limits | Request, approve (Elders: large, love gifts) | Release, check receipts | — | — |
@@ -142,7 +142,7 @@ Branch scope: the **Admin and Pastor** see all branches (with a branch picker); 
 | What | When | Where |
 |---|---|---|
 | Active → Inactive after 14 days unseen or 3 missed events in a row, and back when they return | Nightly, 1 AM (Philippine time) | `pg_cron` job → `auto_member_status()` (db/056, 072) |
-| Approved events past their date become Done | When event pages load | `complete_past_events()` (db/042) |
+| Upcoming events past their date become Done | When event pages load | `complete_past_events()` (db/042) |
 | Visitors 6 months after their last visit are deleted | When attendance / visitor lists load | `purge_old_visitors()` (db/041) |
 | Sign-in sheet photos older than 6 months are deleted | When the Attendance page loads | `purge_old_sheet_photos()` (db/060) |
 | Released request → expense in the ledger; accepted receipts with change → income | When Finance acts | trigger `guard_expense_request` (db/019, 053) |

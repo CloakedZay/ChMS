@@ -23,9 +23,7 @@ import { baseTheme } from '@/app/lib/theme';
 // Event statuses in order, for the "Events by Status" section shown to
 // levels without finance access.
 const EVENT_STATUSES = [
-  { key: "planning", label: "Planning", bar: "bg-slate-500" },
-  { key: "pending",  label: "Pending",  bar: "bg-orange-500" },
-  { key: "approved", label: "Approved", bar: "bg-emerald-500" },
+  { key: "approved", label: "Upcoming", bar: "bg-emerald-500" },   // db/085
   { key: "done",     label: "Done",     bar: "bg-blue-500" },
   { key: "cancelled", label: "Cancelled", bar: "bg-rose-500" },   // db/051
 ];
@@ -219,7 +217,7 @@ export default function ReportsPage() {
           .order('id')));
         const statusMap = {};
         (evStatuses || []).forEach((e) => {
-          const key = e.status || 'planning';
+          const key = e.status || 'approved';
           statusMap[key] = (statusMap[key] || 0) + 1;
         });
 

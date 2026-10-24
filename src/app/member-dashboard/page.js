@@ -13,11 +13,10 @@ import UpcomingBirthdays from '@/app/components/UpcomingBirthdays';
 import CalendarWidget from '@/app/components/CalendarWidget';
 import ScriptureLink from '@/app/components/ScriptureLink';
 import AnnouncementsBanner from '@/app/components/AnnouncementsBanner';
+import { eventStatusLabel } from '@/app/components/EventCalendar';
 
 const EVENT_BADGE = {
   approved: 'bg-emerald-500/15 text-emerald-400',
-  pending:  'bg-yellow-500/15 text-yellow-400',
-  planning: 'bg-blue-500/15 text-blue-400',
   done:     'bg-slate-500/15 text-slate-400',
 };
 
@@ -43,7 +42,7 @@ export default function MemberDashboard() {
           .from('ministry_assignments').select('id', { count: 'exact', head: true });
         setMyMinistryCount(myMinCount || 0);
 
-        // Approved events from today (Philippine date) on; drafts stay hidden.
+        // Upcoming events (status 'approved') from today (Philippine date) on.
         // A weekly event counts once, at its next date (db/049).
         const { data: allUpcoming } = await supabase
           .from('events').select('*')
@@ -186,8 +185,8 @@ export default function MemberDashboard() {
                             {formatDate(ev.date)}{ev.start_time ? `, ${formatEventTime(ev.start_time)}` : ''}{ev.venue ? ` · ${ev.venue}` : ''}{ev.ministry ? ` · ${ev.ministry}` : ''}
                           </p>
                         </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${EVENT_BADGE[ev.status] || EVENT_BADGE.planning}`}>
-                          {ev.status || 'planning'}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${EVENT_BADGE[ev.status] || EVENT_BADGE.approved}`}>
+                          {eventStatusLabel(ev.status)}
                         </span>
                       </div>
                     ))}

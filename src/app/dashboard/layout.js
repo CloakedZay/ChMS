@@ -14,7 +14,7 @@ import { usePageVisit } from "@/app/lib/usePageVisit";
 import { useUnreadMessages } from "@/app/lib/useUnreadMessages";
 import { useFollowUpReminder } from "@/app/lib/useFollowUpReminder";
 import { useTrainingFollowUp } from "@/app/lib/useTrainingFollowUp";
-import { useEventNotices } from "@/app/lib/useEventNotices";
+import { useCompletePastEvents } from "@/app/lib/useEventNotices";
 import AppShell from "@/app/components/AppShell";
 import { branchLabelText } from "@/app/components/BranchLabel";
 
@@ -80,8 +80,8 @@ export default function DashboardLayout({ children }) {
   // training progress and can follow up.
   const trainingFollowUp = useTrainingFollowUp(!loading && allowed && !mustChangePassword
     && can(level, 'followUp') && can(level, 'moduleProgress'));
-  // Events waiting for the Pastor / the Pastor's decisions on yours (db/042).
-  const eventNotices = useEventNotices(user?.id, level, !loading && allowed && !mustChangePassword && can(level, 'events'));
+  // Past Upcoming events → Done (db/042). No approval notices since db/085.
+  useCompletePastEvents(!loading && allowed && !mustChangePassword && can(level, 'events'));
 
   // Don't render the page (or let it fetch data) until access is confirmed.
   if (loading || !allowed) {
@@ -98,8 +98,7 @@ export default function DashboardLayout({ children }) {
   const groups = NAV_GROUPS
     .map((g) => ({ ...g, links: g.links.filter(({ href }) => canOpenPage(level, href)).map((l) => (l.href.endsWith('/messages') ? { ...l, badge: unreadMessages }
       : l.href === '/dashboard/follow-up' ? { ...l, badge: followUp.count }
-      : l.href === '/dashboard/training' ? { ...l, badge: trainingFollowUp.count }
-      : l.href === '/dashboard/events' ? { ...l, badge: eventNotices.count } : l)) }))
+      : l.href === '/dashboard/training' ? { ...l, badge: trainingFollowUp.count } : l)) }))
     .filter((g) => g.links.length > 0);
 
   return (

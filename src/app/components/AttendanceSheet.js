@@ -217,7 +217,7 @@ export function AttendanceEventList({ t, events, churchName, onOpen }) {
     return (
       <div className={`border border-dashed rounded-3xl p-10 text-center ${t.card}`}>
         <p className={`font-bold ${t.text}`}>No events to take attendance for yet</p>
-        <p className={`text-sm mt-1 ${t.sub}`}>Approved events show up here from their date onward.</p>
+        <p className={`text-sm mt-1 ${t.sub}`}>Events show up here from their date onward.</p>
       </div>
     );
   }
