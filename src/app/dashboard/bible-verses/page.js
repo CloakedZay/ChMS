@@ -15,7 +15,6 @@ import { baseTheme } from '@/app/lib/theme';
 function T(dark) {
   return {
     ...baseTheme(dark),
-    dropzone: dark ? "border-slate-700 bg-[#1b2420]/40 hover:border-blue-500/50" : "border-slate-400 bg-slate-50 hover:border-blue-500/50",
   };
 }
 
@@ -189,7 +188,7 @@ export default function BibleVersesPage() {
           <Upload className="w-4 h-4 text-blue-400" /> Upload Verses PDF
         </h2>
         <label
-          className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl py-10 cursor-pointer transition-colors ${t.dropzone}`}
+          className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-2xl py-10 cursor-pointer transition-colors ${t.uploadBorder}`}
         >
           {uploading ? (
             <>
@@ -198,8 +197,8 @@ export default function BibleVersesPage() {
             </>
           ) : (
             <>
-              <Upload className={`w-6 h-6 ${t.textMuted}`} />
-              <p className={`text-sm ${t.textSub}`}>Click to choose a PDF, or drag one here</p>
+              <Upload className="w-6 h-6" />
+              <p className="text-sm font-bold">Click to choose a PDF, or drag one here</p>
               <p className={`text-xs ${t.textMuted}`}>Verses are detected by &ldquo;Book Chapter:Verse&rdquo; references, e.g. John 3:16</p>
             </>
           )}
@@ -207,7 +206,7 @@ export default function BibleVersesPage() {
             ref={fileInputRef}
             type="file"
             accept="application/pdf"
-            className="hidden"
+            className="sr-only"
             disabled={uploading}
             onChange={handleFileChange}
           />

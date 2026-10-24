@@ -574,7 +574,7 @@ export default function TrainingPage() {
                               onChange={(e) => setUploadDesc((p) => ({ ...p, [mod.id]: e.target.value }))}
                               className={`w-full ${t.inputBg} border ${t.inputBorder} rounded-xl px-3 py-2 text-xs ${t.textPrimary} placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors`}
                             />
-                            <label className={`flex items-center justify-center gap-2 w-full border border-dashed rounded-xl py-3 cursor-pointer transition-colors text-xs font-bold ${
+                            <label className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-xl py-3.5 cursor-pointer transition-colors text-sm font-bold ${
                               uploading[mod.id] ? `${t.uploadBorderDisabled} cursor-not-allowed` : t.uploadBorder
                             }`}>
                               {uploading[mod.id]
@@ -583,7 +583,7 @@ export default function TrainingPage() {
                               }
                               <input
                                 type="file"
-                                className="hidden"
+                                className="sr-only"
                                 accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg"
                                 disabled={uploading[mod.id]}
                                 ref={(el) => { fileInputRefs.current[mod.id] = el; }}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { uploadZone } from '@/app/lib/theme';
 import { ArrowLeft, Check, Search, UserPlus, X, Loader2, Users, UserRound, Phone, Lock, Camera, ImageIcon } from 'lucide-react';
 import { supabase } from '@/app/lib/supabase';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
@@ -472,10 +473,10 @@ function SheetPhotos({ t, eventId, canMark }) {
       <div className="flex items-center gap-2 mb-1">
         <h2 className={`font-bold flex items-center gap-2 ${t.text}`}><ImageIcon size={17} /> Sign-in sheet</h2>
         {canMark && (
-          <label className={`ml-auto inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border text-xs font-semibold cursor-pointer ${t.ghost} ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+          <label className={`ml-auto inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border-2 border-dashed text-xs font-bold cursor-pointer transition-colors ${uploadZone(dark)} ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
             {uploading ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
             {uploading ? 'Uploading…' : 'Attach photo'}
-            <input type="file" accept="image/*" multiple className="hidden" disabled={uploading}
+            <input type="file" accept="image/*" multiple className="sr-only" disabled={uploading}
               onChange={(e) => { upload(e.target.files); e.target.value = ''; }} />
           </label>
         )}

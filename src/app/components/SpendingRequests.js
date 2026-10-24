@@ -558,9 +558,9 @@ export default function SpendingRequests({ t, dark, role, userId, churches, isGl
                       <button onClick={() => removeReceipt(rc)} className={`${t.textSub} hover:text-rose-400 shrink-0`} title="Remove"><Trash2 size={13} /></button>
                     </div>
                   ))}
-                  <label className={`flex items-center justify-center gap-2 border border-dashed rounded-xl py-3 text-xs font-bold cursor-pointer ${t.inputBorder} ${t.textSub} hover:text-blue-400 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-3 text-sm font-bold cursor-pointer transition-colors ${t.uploadBorder} ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                     {uploading ? <><Loader2 size={14} className="animate-spin" /> Uploading...</> : <><Upload size={14} /> Add receipt</>}
-                    <input type="file" multiple accept="image/*,application/pdf" className="hidden" disabled={uploading}
+                    <input type="file" multiple accept="image/*,application/pdf" className="sr-only" disabled={uploading}
                       onChange={(e) => { uploadReceipts(e.target.files); e.target.value = ''; }} />
                   </label>
                 </div>

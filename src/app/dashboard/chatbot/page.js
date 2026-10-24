@@ -466,7 +466,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit, canShare })
             </label>
           )}
 
-          <label className={`flex items-center justify-center gap-2 w-full border border-dashed rounded-xl py-3 cursor-pointer transition-colors text-xs font-bold ${
+          <label className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-xl py-3.5 cursor-pointer transition-colors text-sm font-bold ${
             uploading ? `${t.uploadBorderDisabled} cursor-not-allowed` : t.uploadBorder
           }`}>
             {uploading
@@ -476,7 +476,7 @@ function DocumentsPanel({ t, dark, churchId, loadingChurch, canEdit, canShare })
             <input
               ref={fileInputRef}
               type="file"
-              className="hidden"
+              className="sr-only"
               accept=".pdf,.docx,.txt"
               disabled={uploading}
               onChange={handleFileChange}

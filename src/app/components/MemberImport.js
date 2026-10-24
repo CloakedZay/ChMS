@@ -250,9 +250,9 @@ export default function MemberImport({ t, existingMembers, onClose, onImported }
               className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border ${t.iconBtn}`}>
               <Download size={15} /> Download Excel template
             </a>
-            <label className={`flex-1 flex items-center justify-center gap-2 border border-dashed rounded-xl py-2.5 px-4 text-sm font-bold cursor-pointer ${t.inputBorder} ${t.textSub} hover:text-blue-400 ${reading || importing ? 'opacity-50 pointer-events-none' : ''}`}>
+            <label className={`flex-1 flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-2.5 px-4 text-sm font-bold cursor-pointer transition-colors ${t.uploadBorder} ${reading || importing ? 'opacity-50 pointer-events-none' : ''}`}>
               {reading ? <><Loader2 size={15} className="animate-spin" /> Reading...</> : <><Upload size={15} /> {fileName || 'Choose the filled-in file'}</>}
-              <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden"
+              <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only"
                 onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ''; }} />
             </label>
           </div>

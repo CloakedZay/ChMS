@@ -32,9 +32,20 @@ export function baseTheme(dark) {
     hoverRow:             dark ? "hover:bg-slate-800/20" : "hover:bg-slate-200",
     deepCard:             dark ? "bg-slate-900/60"      : "bg-slate-200",
     innerBorder:          dark ? "border-slate-800/40"  : "border-slate-300",
-    uploadBorder:         dark ? "border-slate-700 hover:border-blue-500/50 text-slate-500 hover:text-blue-400" : "border-slate-400 hover:border-blue-500/50 text-slate-600 hover:text-blue-600",
+    uploadBorder:         uploadZone(dark),
     uploadBorderDisabled: dark ? "border-slate-700 text-slate-600" : "border-slate-400 text-slate-500",
     menuBg:               dark ? "bg-[#1b2420] border-slate-700" : "bg-slate-50 border-slate-300",
     menuHover:            dark ? "hover:bg-slate-800"    : "hover:bg-slate-200",
   };
+}
+
+// Every "add a file" control (Training handouts, Assistant documents, Bible
+// verses PDF, member import, receipts, sign-in sheet photos): tinted in the
+// brand green with a strong outline so it stands out from the form around
+// it, and a ring when reached with Tab (the file input inside is sr-only,
+// not hidden, so the keyboard can reach it).
+export function uploadZone(dark) {
+  return dark
+    ? "border-blue-400/70 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25 hover:border-blue-300 focus-within:ring-2 focus-within:ring-blue-400/60"
+    : "border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:border-blue-600 focus-within:ring-2 focus-within:ring-blue-500/40";
 }
