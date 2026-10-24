@@ -71,13 +71,14 @@ export default function TrainingPage() {
   const [loading, setLoading]     = useState(true);
 
   // ── Ministries (step M3, db/025): a module is general (no ministry) or
-  // belongs to one ministry. Pastor edits any module; a Leader edits general
-  // modules and those of ministries they head. ─────────────────────────────
+  // belongs to one ministry. The Pastor manages the general modules; a
+  // Leader only those of ministries they head (db/088). ─────────────────────
   const [ministries, setMinistries] = useState([]);
   const headedIds = new Set(ministries.filter((m) => m.leader_id && m.leader_id === user?.id).map((m) => m.id));
+  // One owner per module (db/088): the general path is the Pastor's; a
+  // ministry's modules belong to the Leader who heads it.
   const canEditGroup = (ministryId) =>
-    role === "pastor"
-    || (role === "leader" && (!ministryId || headedIds.has(ministryId)));
+    ministryId ? role === "leader" && headedIds.has(ministryId) : role === "pastor";
   const canEditModule = (mod) => canEditGroup(mod.ministry_id);
   const ministryName = (id) => ministries.find((m) => m.id === id)?.name || "Ministry";
 

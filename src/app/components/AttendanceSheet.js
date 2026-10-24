@@ -201,7 +201,7 @@ export default function AttendanceSheet({ eventId, dark, onBack }) {
           {/* Visitors */}
           <VisitorsBox t={t} eventId={eventId} canMark={canMark} visitors={visitors} onChange={load} />
           {/* Photos of the paper sheet */}
-          {!error && <SheetPhotos t={t} eventId={eventId} canMark={canMark} />}
+          {!error && <SheetPhotos t={t} dark={dark} eventId={eventId} canMark={canMark} />}
         </div>
       </div>
     </div>
@@ -411,7 +411,7 @@ async function shrinkPhoto(file) {
   }
 }
 
-function SheetPhotos({ t, eventId, canMark }) {
+function SheetPhotos({ t, dark, eventId, canMark }) {
   const [photos, setPhotos] = useState(null);   // with .url (signed)
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');

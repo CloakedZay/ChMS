@@ -24,8 +24,8 @@ import { useDialog } from '@/app/lib/useDialog';
 //                     their own ministry; a Leader sees only the
 //                     ministries they head
 //   others            view
-// Each ministry lists its own modules (step M3, db/025); the Pastor or the
-// ministry's head can add one here. Questions and handouts are managed on
+// Each ministry lists its own modules (step M3, db/025); only the
+// ministry's head can add one here (db/088). Questions and handouts are managed on
 // the Training page.
 
 const COLORS = ["#173f35", "#c5a66a", "#4f8a73", "#9c7f45", "#8fb59f", "#b03c3c", "#858b87"];
