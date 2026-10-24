@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCaller, resolveChurchId } from "@/app/lib/apiAuth";
-import { analyzeQuestion, detectIntent, wantsDetail, isMoreRequest, pickAnswer, coverage, splitSentences, tokenize, type Analysis } from "@/app/lib/nlp";
+import { analyzeQuestion, detectIntent, wantsDetail, isMoreRequest, isChurchTopic, headingQuestion, looksLikeContents, isHeading, pickAnswer, coverage, splitSentences, tokenize, type Analysis } from "@/app/lib/nlp";
 import { embedQuery, embedPassages, toVector } from "@/app/lib/embeddings";
 import { correctQuestion } from "@/app/lib/spelling";
-import { rerank, fillSimilarity, sectionPart, type Hit } from "@/app/lib/assistantSearch";
+import { rerank, fillSimilarity, sectionPart, relatedQuestions, type Hit } from "@/app/lib/assistantSearch";
 import { loadJourney, describeProgress, describeLessonProgress, findModule, describeModule } from "@/app/lib/discipleship";
 
 export const runtime = "nodejs";
@@ -21,16 +21,15 @@ type Source = { title: string; subtitle: string | null; type: "document" | "hand
 const looksTagalog = (q: string) =>
   /\b(po|ang|ng|mga|sa|ano|paano|saan|kailan|bakit|sino|ba|naman|kumusta|kamusta|salamat)\b/i.test(q);
 
-// How many questions a Member may ask per day (Philippine date). Staff have
-// no limit. Change it with ASSISTANT_DAILY_LIMIT in the environment.
+// How many questions each person may ask per day (Philippine date), every
+// level the same. Change it with ASSISTANT_DAILY_LIMIT in the environment.
 const DAILY_LIMIT = Math.max(1, Number(process.env.ASSISTANT_DAILY_LIMIT) || 50);
 
 
-// Members: how many questions are left today (for the chat pages).
+// How many questions are left today (for the chat pages).
 export async function GET(req: NextRequest) {
   const caller = await getCaller(req);
   if (caller instanceof NextResponse) return caller;
-  if (caller.role !== "member") return NextResponse.json({ limit: null, remaining: null });
   const { data, error } = await caller.db.rpc("my_assistant_questions_today");
   const used = error ? 0 : Number(data) || 0;
   return NextResponse.json({ limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - used) });
@@ -52,10 +51,31 @@ function chunkByParagraph(content: string): string[] {
   return chunks.length ? chunks : [content];
 }
 
+function chapterRe(n: number): RegExp {
+  return new RegExp(`^(?:(?:article|chapter|section)\\s+)?(?:${toRoman(n)}|${n})[.:)]\\s`, "im");
+}
+
 function findHeadingChunk(content: string, n: number): string | null {
-  const roman = toRoman(n);
-  const re = new RegExp(`^(?:(?:article|chapter|section)\\s+)?(?:${roman}|${n})[.:)]\\s`, "im");
+  const re = chapterRe(n);
   return chunkByParagraph(content).find((c) => re.test(c)) ?? null;
+}
+
+// Chapter N in pages: the first page is the paragraph "What is in chapter
+// N?" shows; the rest are the following paragraphs up to the next heading,
+// about 1,500 characters a page, for "tell me more".
+function chapterPages(content: string, n: number): string[] {
+  const paras = chunkByParagraph(content);
+  const start = paras.findIndex((c) => chapterRe(n).test(c));
+  if (start < 0) return [];
+  const pages = [paras[start]];
+  let page = "";
+  for (const p of paras.slice(start + 1)) {
+    if (isHeading(p) || /^(?:(?:article|chapter|section)\s+)?(?:\d{1,3}|[IVXLC]{1,7})[.:)]\s/i.test(p)) break;
+    if (page && page.length + p.length > 1500) { pages.push(page); page = ""; }
+    page += (page ? "\n\n" : "") + p;
+  }
+  if (page) pages.push(page);
+  return pages;
 }
 
 // ── Before db/035 is run: the old word-count search ──────────────────────────
@@ -124,10 +144,10 @@ export async function POST(req: NextRequest) {
         : "the church's own materials: the documents uploaded in Assistant → Documents and the discipleship handouts in Training";
       return reply(tl
         ? `Ako ang church assistant. Sinasagot ko ang mga tanong tungkol sa simbahan mula sa ${isMember ? "mga dokumento ng simbahan at sa inyong mga aralin" : "mga dokumento at handouts ng simbahan"}.\n\n` +
-          "Halimbawa:\n• Anong oras ang pagsamba sa Linggo?\n• Paano sumali sa isang ministeryo?\n• Ano ang ikapu?\n• Ano ang susunod kong module?\n• Ipaliwanag nang buo ang kaligtasan\n\n" +
+          "Halimbawa:\n• Ano ang susunod kong module?\n• Ano ang laman ng module 2?\n• Ano ang nasa chapter 1?\n• Ano ang progress ko?\n• Pagkatapos ng sagot, sabihin “ano pa” para sa kasunod\n\n" +
           "Kung wala sa mga dokumento ang sagot, sasabihin ko po para makapagtanong kayo sa pastor."
         : `I'm the church assistant. I answer questions about the church from ${where}.\n\n` +
-          "Try things like:\n• What time is the Sunday service?\n• How do I join a ministry?\n• Ano ang ikapu?\n• What's my next module?\n• What is module 2 about?\n• Explain salvation in detail (or ask \"tell me more\" after any answer)\n\n" +
+          "Try things like:\n• What's my next module?\n• What is module 2 about?\n• What is in chapter 1?\n• What is my progress?\n• Any topic in the church's documents — then \"tell me more\" for the rest\n\n" +
           "I answer from that material only. If something isn't written down there, I'll tell you so you can ask a pastor."
       );
     }
@@ -141,8 +161,8 @@ export async function POST(req: NextRequest) {
         { confidence: "none" });
     }
 
-    // ── Daily limit for Members ───────────────────────────────────────────
-    if (isMember) {
+    // ── Daily limit, every level (db/039 counts them) ──────────────────────
+    {
       const { data: used, error: usageError } = await caller.db.rpc("count_assistant_question");
       if (!usageError && used != null) {
         const n = Number(used);
@@ -172,6 +192,39 @@ export async function POST(req: NextRequest) {
         : `There's no Module ${intent.number}${total ? ` — your Discipleship path has ${total} module${total === 1 ? "" : "s"}` : ""}.`);
     }
 
+    // ── "Tell me more" after "What is in chapter N?": the rest of that
+    // chapter, a page at a time, then the next chapter to tap.
+    if (isMoreRequest(question) && church_id && !lesson) {
+      let page = 1;
+      let chapter = 0;
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (isMoreRequest(history[i])) { page++; continue; }
+        const prev = detectIntent(history[i]);
+        if (prev.kind === "chapter") chapter = prev.number;
+        break;
+      }
+      if (chapter) {
+        const { data: docs } = await caller.db.from("chatbot_documents")
+          .select("title, content").or(branchDocs).eq("is_active", true);
+        const doc = (docs || []).find((d) => findHeadingChunk(d.content, chapter));
+        if (doc) {
+          const pages = chapterPages(doc.content, chapter);
+          const nextChunk = findHeadingChunk(doc.content, chapter + 1);
+          const next = nextChunk ? headingQuestion(nextChunk.split("\n")[0]) : null;
+          const related = next ? [next] : [];
+          if (page < pages.length) {
+            const more = page + 1 < pages.length;
+            return reply(pages[page] + (more ? (tl ? "\n\n(May kasunod pa — sabihin “ano pa” para ituloy.)" : "\n\n(There's more — ask “tell me more” to continue.)") : ""),
+              { confidence: "high", related, sources: [{ title: doc.title, subtitle: null, type: "document", excerpt: pages[page].slice(0, 1500) }] });
+          }
+          return reply(tl
+            ? `Iyan na po ang buong chapter ${chapter}.${next ? " Puwede ninyong buksan ang susunod na chapter sa ibaba." : ""}`
+            : `That's all of chapter ${chapter}.${next ? " You can open the next chapter below." : ""}`,
+            { confidence: "high", related });
+        }
+      }
+    }
+
     // ── "What is in chapter / article N" ───────────────────────────────────
     if (intent.kind === "chapter" && church_id && !lesson) {
       const { data: docs } = await caller.db.from("chatbot_documents")
@@ -180,11 +233,17 @@ export async function POST(req: NextRequest) {
         .map((d) => ({ d, text: findHeadingChunk(d.content, intent.number) }))
         .filter((x): x is { d: typeof x.d; text: string } => !!x.text);
       if (found.length) {
+        // Related: the next and previous chapter of the same document.
+        const related = [intent.number + 1, intent.number - 1]
+          .map((n) => (n > 0 ? findHeadingChunk(found[0].d.content, n) : null))
+          .map((c) => (c ? headingQuestion(c.split("\n")[0]) : null))
+          .filter((r): r is NonNullable<typeof r> => !!r);
         return NextResponse.json({
           ...usage,
           answer: found[0].text,
           sources: found.slice(0, 3).map(({ d, text }) => ({ title: d.title, subtitle: null, type: "document", excerpt: text })),
           confidence: "high",
+          related,
         });
       }
       // otherwise fall through to a normal search
@@ -256,7 +315,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const results = rerank(hits, analysis);
+    // A table of contents shares words with everything but answers nothing.
+    const results = rerank(hits, analysis).filter((h) => !looksLikeContents(h.content));
     const best = results[0];
     const bestCoverage = best ? best.cov : 0;
     const sim = best?.similarity ?? 0;
@@ -278,6 +338,20 @@ export async function POST(req: NextRequest) {
         || (exact >= 0.99 && sim >= (manyWords ? 0.79 : 0.84))
         || (sim >= 0.88 && (!lesson || Math.max(exact, bestCoverage) > 0))
       : best.text_rank > 0 && Math.max(exact, bestCoverage) >= 0.67);
+
+    // Only church, Bible / faith and FaithSync questions (nlp isChurchTopic).
+    // One with none of those words is answered only when a passage matches
+    // it very closely; "what should I eat?" sharing the word "eat" with a
+    // Genesis passage isn't enough.
+    const onTopic = !!lesson || isChurchTopic(topic) || (sim >= 0.88 && exact >= 0.99);
+    if (!onTopic) {
+      // Members don't get FaithSync how-to answers (see above), so don't offer them.
+      return reply(tl
+        ? `Pasensya na po, mga tanong lang tungkol sa simbahan${isMember ? " at" : ","} sa Biblia at pananampalataya${isMember ? "" : ", at sa paggamit ng FaithSync"} ang kaya kong sagutin. Itanong po ang “Ano ang kaya mong gawin?” para sa mga halimbawa.`
+        : `Sorry, I can only help with questions about the church${isMember ? " and" : ","} the Bible and our faith${isMember ? "" : ", and using FaithSync"}. Ask “What can you do?” for examples.`,
+        { confidence: "none", offTopic: true });
+    }
+
     if (!relevant) {
       const nothingIndexed = results.length === 0;
       if (lesson) {
@@ -344,7 +418,10 @@ export async function POST(req: NextRequest) {
     if (!detail && tokenize(answer).length < 8) answer = best.content.slice(0, 600);
     if (confidence === "medium") answer = (tl ? "Ito po ang pinakamalapit na nakita ko:\n\n" : "Here's the closest thing I found:\n\n") + answer;
 
-    return NextResponse.json({ answer, sources, confidence, mode: vector ? "meaning+keyword" : "keyword", ...usage });
+    // Questions to tap next (nearby sections, other close matches).
+    const related = await relatedQuestions(caller.db, best, results, { numbered: !lesson, asked: [question, ...history] })
+      .catch(() => []);
+    return NextResponse.json({ answer, sources, confidence, related, mode: vector ? "meaning+keyword" : "keyword", ...usage });
   } catch (err) {
     console.error("Chatbot API error:", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });

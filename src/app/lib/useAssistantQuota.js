@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { authFetch } from '@/app/lib/authFetch';
 
-// A Member's daily assistant questions (db/039, api/chatbot). For staff the
-// limit is null (no limit). Every answer from /api/chatbot carries the new
+// Today's assistant questions, every level (db/039, api/chatbot); limit is
+// null only while loading. Every answer from /api/chatbot carries the new
 // `remaining`, passed in with update(data).
 export function useAssistantQuota() {
   const [quota, setQuota] = useState({ limit: null, remaining: null });

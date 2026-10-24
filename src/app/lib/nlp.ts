@@ -109,7 +109,7 @@ ano anong paano saan kailan sino bakit ilan dapat kailangan ngayon aralin simbah
 const REAL_WORDS = new Set(`were three thee form even evens lean cold mien dose odes abut stud anon star stat
 wold sion tite lian sana bait nayon kalan paan now nest fir bow tie top
 among ago mind gave hour hours tour tours nine neat thus dies foes cab cam fan gas van swan sink tome tow mow fog foe
-mas san ani ane`.split(/\s+/));
+mas san ani ane show shows snow know whom whose wham`.split(/\s+/));
 
 // Neighbouring keys on a QWERTY keyboard, for "tge" → "the", "nexr" → "next".
 const KEY_ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
@@ -245,7 +245,11 @@ export function detectIntent(question: string): Intent {
   if (/^(thanks?|thank you|ty|salamat|maraming salamat)( po| so much| a lot)?$/.test(q)) return { kind: 'thanks' };
   if (/^(bye|goodbye|paalam|sige)( po)?$/.test(q)) return { kind: 'goodbye' };
   // "what can you do (for me)?", "who are you?", "ano ang kaya mong gawin?"
-  if (/^((please |pls )?(help|help me|tulong|tulungan mo ako)|(what|how) (can|could|do) you (do|help)( me| us)?( for (me|us))?( with)?|what do you do|what are you|who are you|what is this( chat| bot| assistant)?|how (can|do) i use (this|you)|what (can|should) i ask( you)?|can you help( me)?|what are you for|ano ang (kaya|magagawa) mo( gawin)?|ano ang kaya mong gawin|ano ang pwede kong itanong|sino ka|ano ka|paano mo ako matutulungan|paano ka gamitin|ano ang ginagawa mo)( po| please| pls)?[ ?!.]*$/.test(q)) return { kind: 'help' };
+  // Trailing filler ("what can you do? suggest", "… examples please") is
+  // ignored, and asking for suggestions or examples on its own counts too.
+  const qh = q.replace(/( (any|some|suggest\w*|examples?|ideas?|please|pls|po|naman))+$/, '');
+  if (/^((any|some|give me|can you give( me)?|show me) )?(suggestions?|suggest( (something|some|questions?|topics?))?|examples?|ideas?|sample questions?|what to ask|mga halimbawa|halimbawa|magbigay ng (halimbawa|mungkahi)|mungkahi)( please| pls| po)?$/.test(q)) return { kind: 'help' };
+  if (/^((please |pls )?(help|help me|tulong|tulungan mo ako)|(what|how) (can|could|do) you (do|help)( me| us)?( for (me|us))?( with)?|what do you do|what are you|who are you|what is this( chat| bot| assistant)?|how (can|do) i use (this|you)|what (can|should) i ask( you)?|can you help( me)?|what are you for|ano ang (kaya|magagawa) mo( gawin)?|ano ang kaya mong gawin|ano ang pwede kong itanong|sino ka|ano ka|paano mo ako matutulungan|paano ka gamitin|ano ang ginagawa mo)( po| please| pls)?[ ?!.]*$/.test(qh)) return { kind: 'help' };
   // Questions about using FaithSync itself (pages, buttons, logins, staff
   // tools). The assistant declines these for Members (api/chatbot).
   if (isSystemQuestion(q)) return { kind: 'system' };
@@ -297,6 +301,48 @@ export function isSystemQuestion(q: string): boolean {
   return /\b(add|record|enter|edit|delete|remove|void|approve|reject|assign|post|publish|mag ?add|i ?approve|mag ?approve|i ?record)\b.*\b(finance|transactions?|entry|entries|members?|events?|announcements?|modules?|users?|handouts?|documents?|questions?|answers?)\b/.test(q);
 }
 
+// Is the question about the church, the Bible and faith, or FaithSync? The
+// Assistant answers only those; "what should I eat?" or "who won the game?"
+// get a polite no instead of the closest passage that happens to share a
+// word. A question without any of these words can still be answered when
+// a passage matches it very closely (api/chatbot), so an unusual faith
+// question isn't turned away. (q may be raw; it is normalized here.)
+const CHURCH_WORDS = new RegExp('\\b(' + [
+  // God, faith and doctrine
+  'god', 'gods', 'lord', 'jesus', 'christ', 'christs', 'messiah', 'holy spirit', 'spirit', 'trinity',
+  'bible', 'biblical', 'scriptures?', 'gospels?', 'word of god', 'verses?', 'psalms?', 'proverbs?', 'testament',
+  'faith', 'faithful', 'believe', 'believers?', 'belief', 'beliefs', 'doctrines?', 'creeds?', 'confession', 'catechism',
+  'salvation', 'grace', 'mercy', 'sin', 'sins', 'sinful', 'sinners?', 'repent\\w*', 'forgiv\\w*',
+  'heaven', 'hell', 'eternal', 'resurrection', 'crucif\\w*', 'atonement', 'redemption', 'redeem\\w*',
+  'justification', 'justified', 'sanctification', 'covenant', 'commandments?', 'sabbath', 'lords day',
+  'baptism', 'baptized', 'baptize', 'communion', 'lords supper', 'sacraments?', 'elect\\w*', 'predestination',
+  'pray', 'prayer', 'prayers', 'praying', 'worship', 'praise', 'hymns?', 'devotion\\w*', 'fasting', 'tithes?', 'tithing',
+  'offerings?', 'love gift', 'stewardship', 'disciples?', 'discipleship', 'evangelism', 'evangel\\w*', 'missions?',
+  'missionary', 'apostles?', 'prophets?', 'angels?', 'satan', 'devil', 'demons?', 'soul', 'holy', 'righteous\\w*',
+  'blessing', 'blessed', 'bless', 'amen', 'gospel', 'christian', 'christians', 'christianity', 'spiritual\\w*',
+  'adam', 'noah', 'abraham', 'moses', 'david', 'paul', 'peter', 'john', 'mary', 'israel', 'genesis', 'exodus',
+  'revelation', 'romans', 'corinthians', 'galatians', 'ephesians', 'hebrews', 'matthew', 'luke',
+  'isaiah', 'jeremiah', 'daniel', 'chapter', 'article', 'westminster',
+  // The church and its life
+  'church', 'churches', 'ggcf', 'gmi', 'congregation', 'fellowship', 'pastor', 'pastors', 'elders?', 'leaders?',
+  'deacons?', 'ministry', 'ministries', 'members?', 'membership', 'branch', 'branches', 'pandi', 'angat', 'marungko',
+  'meycauayan', 'services?', 'sunday', 'bible study', 'youth', 'small group', 'life group', 'cell group',
+  'events?', 'attendance', 'module', 'modules', 'lesson', 'lessons', 'handouts?', 'training', 'sermon', 'preach\\w*',
+  'pulpit', 'choir', 'music team', 'announcement\\w*', 'outreach', 'volunteer\\w*', 'visitors?', 'wedding',
+  'funeral', 'dedication', 'counsel\\w*',
+  // Tagalog
+  'diyos', 'dios', 'panginoon', 'hesus', 'jesukristo', 'kristo', 'espiritu', 'banal', 'biblia', 'bibliya',
+  'salita ng diyos', 'talata', 'pananampalataya', 'pananalig', 'kaligtasan', 'kasalanan', 'biyaya', 'langit',
+  'impyerno', 'panalangin', 'manalangin', 'magdasal', 'dasal', 'pagsamba', 'sumamba', 'papuri', 'ikapu', 'handog',
+  'simbahan', 'iglesia', 'kapatiran', 'pastor', 'ministeryo', 'kaanib', 'miyembro', 'pagsasanay', 'aralin',
+  'linggo', 'binyag', 'bautismo', 'banal na hapunan', 'pag ?aayuno', 'disipulo', 'pagdidisipulo',
+].join('|') + ')\\b');
+
+export function isChurchTopic(question: string): boolean {
+  const q = normalize(question);
+  return CHURCH_WORDS.test(q) || isSystemQuestion(q);
+}
+
 // "Explain in detail", "tell me everything about…", "step by step",
 // "ipaliwanag nang buo" — the person wants the whole section, not a summary.
 export function wantsDetail(question: string): boolean {
@@ -308,7 +354,7 @@ export function wantsDetail(question: string): boolean {
 // "elaborate", "ano pa?") — answer it with the previous question's topic.
 export function isMoreRequest(question: string): boolean {
   const q = normalize(fixCommonTypos(question));
-  return /^(please |pls |can you |could you )?(tell me more|more( please)?|more (info|information|details)( please)?|elaborate( more| please)?|explain (more|further|it)( please)?|go on|continue|and( then)?|ano pa( po)?|tapos( po)?|ituloy( mo)?|more about (it|that|this))( please| po)?$/.test(q);
+  return /^(please |pls |can you |could you )?(tell me more|more( please)?|more (info|information|details)( please)?|elaborate( more| please)?|explain (more|further|it)( please)?|go on|continue|keep going|and( then)?|(show|see|read|give)( me)? more|next( part| page)?|what else|ano pa( po)?|tapos( po)?|ituloy( mo)?( pa)?|(ipakita|dagdagan|sabihin) pa|more about (it|that|this))( please| po)?$/.test(q);
 }
 
 export type Analysis = {
@@ -446,4 +492,58 @@ export function coverage(passage: string, analysis: Analysis): number {
   let hit = 0;
   for (const w of analysis.stems) if (syn(w).some((x) => stems.has(x))) hit += 1;
   return hit / analysis.stems.length;
+}
+
+// ── Related questions (shown under an answer) ──────────────────────────────
+export type Related = { label: string; question: string };
+
+function fromRoman(s: string): number {
+  const v: Record<string, number> = { I: 1, V: 5, X: 10, L: 50, C: 100 };
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const a = v[s[i]], b = v[s[i + 1]] || 0;
+    n += a < b ? -a : a;
+  }
+  return n;
+}
+
+// A section heading as something to tap: "Chapter 29: Of Baptism" →
+// label "Chapter 29: Baptism", question "What is in chapter 29?" (answered
+// straight from the document, api/chatbot); other headings ("THE CHRIST OF
+// THE BIBLE") → "Tell me about the Christ of the Bible". numbered = false
+// inside a lesson, where "chapter N" isn't answered.
+export function headingQuestion(heading: string, numbered = true): Related | null {
+  const h = heading.replace(/\s+/g, ' ').trim();
+  if (!h) return null;
+  const tidy = (s: string) => s.replace(/^(of|on|about)\s+(the\s+)?/i, '').replace(/[\s:.,;-]+$/, '').trim();
+  const short = (s: string) => (s.length > 60 ? s.slice(0, 57).replace(/\s+\S*$/, '') + '…' : s);
+  const m = h.match(/^(?:(chapter|article|section|kabanata|seksyon)\s+)?(\d{1,3}|[IVXLC]{1,7})\s*[.:)\-–]\s*(.+)$/i);
+  if (m && (m[1] || /^[IVXLC]+$/.test(m[2]))) {
+    const n = /^\d+$/.test(m[2]) ? Number(m[2]) : fromRoman(m[2].toUpperCase());
+    const topic = tidy(m[3]);
+    if (!n || !topic) return null;
+    const word = (m[1] || 'Chapter').replace(/^\w/, (c) => c.toUpperCase());
+    return numbered
+      ? { label: short(`${word} ${n}: ${topic}`), question: `What is in ${word.toLowerCase()} ${n}?` }
+      : { label: short(topic), question: `Tell me about ${topic.toLowerCase()}` };
+  }
+  const topic = tidy(h);
+  if (topic.split(' ').length < 2 && topic.length < 5) return null;
+  // ALL CAPS → Title Case, small words lower ("The Christ of the Bible").
+  const small = new Set(['a', 'an', 'and', 'as', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with', 'ng', 'sa', 'at']);
+  const nice = topic === topic.toUpperCase()
+    ? topic.toLowerCase().split(' ').map((w, i) => (i > 0 && small.has(w) ? w : w.replace(/^\w/, (c) => c.toUpperCase()))).join(' ')
+    : topic;
+  return { label: short(nice), question: `Tell me about ${nice}` };
+}
+
+// A table of contents, not teaching: most of its lines are headings
+// ("Chapter 40 Effectual Calling", "PART SEVEN: ECCLESIOLOGY"). Such a
+// passage shares words with many questions but answers none of them.
+export function looksLikeContents(passage: string): boolean {
+  const lines = passage.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 4) return /table of contents/i.test(passage);
+  const headingLike = lines.filter((l) =>
+    isHeading(l) || /^(chapter|article|section|part)\s+(\d+|[ivxlc]+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i.test(l)).length;
+  return /table of contents/i.test(passage) || headingLike / lines.length >= 0.6;
 }

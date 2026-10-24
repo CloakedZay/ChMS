@@ -5,10 +5,12 @@ import { useAuth } from '@/app/context/AuthContext';
 import { supabase } from '@/app/lib/supabase';
 import { authFetch } from '@/app/lib/authFetch';
 import { useAssistantQuota, quotaText } from '@/app/lib/useAssistantQuota';
-import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Loader2 } from 'lucide-react';
 import BranchLabel from '@/app/components/BranchLabel';
 import ChatHistory from '@/app/components/ChatHistory';
+import AssistantWelcome, { FollowUps } from '@/app/components/AssistantWelcome';
 import { useAssistantChats } from '@/app/lib/useAssistantChats';
+import { useAssistantSuggestions } from '@/app/lib/useAssistantSuggestions';
 
 export default function MemberChatbotPage() {
   const { user } = useAuth();
@@ -31,6 +33,7 @@ export default function MemberChatbotPage() {
     setMessages([]);
   }
   const bottomRef = useRef(null);
+  const suggestions = useAssistantSuggestions(churchId);   // from the documents
 
   useEffect(() => {
     if (!user) return;
@@ -50,10 +53,14 @@ export default function MemberChatbotPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
 
-  async function handleSend(e) {
+  function handleSend(e) {
     e.preventDefault();
-    const question = input.trim();
-    if (!question || sending || !churchId) return;
+    ask(input.trim());
+  }
+
+  // Typed, or tapped on the welcome screen / "Tell me more".
+  async function ask(question) {
+    if (!question || sending || !churchId || quota.used) return;
 
     // the last few questions, so "tell me more" knows what it's about
     const previous = messages.filter((m) => m.role === 'user').slice(-6).map((m) => m.text);
@@ -70,7 +77,8 @@ export default function MemberChatbotPage() {
       const data = await res.json();
       quota.update(data);
       const answerText = data.answer || data.error || 'Sorry, something went wrong.';
-      setMessages((prev) => [...prev, { role: 'assistant', text: answerText, isError: !res.ok }]);
+      // "Tell me more" only makes sense after an answer from a document.
+      setMessages((prev) => [...prev, { role: 'assistant', text: answerText, isError: !res.ok, more: res.ok && (data.sources?.length || 0) > 0, related: res.ok ? data.related || [] : [] }]);
       hist.save(question, answerText, !res.ok);   // keep it in this chat (db/040)
     } catch {
       setMessages((prev) => [
@@ -100,20 +108,12 @@ export default function MemberChatbotPage() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
           {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center py-16">
-              <Sparkles className="w-8 h-8 text-slate-700 mb-3" />
-              <p className="text-sm font-bold text-white">Ask me anything about the church</p>
-              <p className="text-xs text-white/40 mt-1 max-w-xs">
-                {loadingChurch
-                  ? 'Loading your profile...'
-                  : !churchId
-                  ? 'No church is linked to your account yet — contact your admin.'
-                  : "Answers come only from the church's documents and discipleship handouts — in English or Tagalog."}
-              </p>
-            </div>
+            <AssistantWelcome member dark disabled={disabled} onAsk={ask} suggestions={suggestions}
+              note={loadingChurch ? 'Loading your profile...' : !churchId ? 'No church is linked to your account yet — contact your admin.' : null} />
           ) : (
             messages.map((m, i) => (
-              <div key={i} className={`flex items-start gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div key={i}>
+              <div className={`flex items-start gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
                   m.role === 'user' ? 'bg-blue-600/20 border-blue-500/20' : 'bg-slate-500/10 border-slate-500/20'
                 }`}>
@@ -124,6 +124,10 @@ export default function MemberChatbotPage() {
                 }`}>
                   {m.text}
                 </div>
+              </div>
+              {i === messages.length - 1 && !sending && (
+                <FollowUps more={m.more} related={m.related} disabled={disabled} onAsk={ask} />
+              )}
               </div>
             ))
           )}

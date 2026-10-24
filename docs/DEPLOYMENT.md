@@ -65,7 +65,7 @@ From then on, the Admin manages levels and branches on the **Users** page.
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co   # required
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key                  # required (public by design; the database rules protect the data)
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key              # required, secret: creating logins, resetting passwords, the assistant's index
-ASSISTANT_DAILY_LIMIT=50                                     # optional: questions per Member per day (staff have no limit)
+ASSISTANT_DAILY_LIMIT=50                                     # optional: Assistant questions per person per day, every level (default 50)
 NEXT_PUBLIC_PASSWORD_EMAIL_CODE=on                           # optional: email a 6-digit code before a password change (needs email sending, step 5)
 SMTP_USER=yourchurch@gmail.com                               # for "Forgot password?" and recovery emails (step 5): the Gmail sender
 SMTP_PASS=abcdefghijklmnop                                   # its app password (secret)

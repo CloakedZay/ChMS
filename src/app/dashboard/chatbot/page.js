@@ -7,12 +7,15 @@ import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import {
-  Send, Bot, User, Sparkles, Loader2, Sun, Moon,
+  Send, Bot, User, Loader2, Sun, Moon,
   Upload, FileText, Trash2, Eye, EyeOff, File as FileIcon, RefreshCw, Globe2
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import ChatHistory from "@/app/components/ChatHistory";
+import AssistantWelcome, { FollowUps } from "@/app/components/AssistantWelcome";
 import { useAssistantChats } from "@/app/lib/useAssistantChats";
+import { useAssistantSuggestions } from "@/app/lib/useAssistantSuggestions";
+import { useAssistantQuota, quotaText } from "@/app/lib/useAssistantQuota";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 
 import { baseTheme } from '@/app/lib/theme';
@@ -151,6 +154,8 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
   const hist = useAssistantChats();    // saved chats: New chat + history
+  const suggestions = useAssistantSuggestions(churchId);   // from the documents
+  const quota = useAssistantQuota();   // questions left today (every level)
 
   async function openChat(id) {
     if (sending) return;
@@ -165,10 +170,14 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
 
-  async function handleSend(e) {
+  function handleSend(e) {
     e.preventDefault();
-    const question = input.trim();
-    if (!question || sending || !churchId) return;
+    ask(input.trim());
+  }
+
+  // Typed, or tapped on the welcome screen / "Tell me more".
+  async function ask(question) {
+    if (!question || sending || !churchId || quota.used) return;
 
     // the last few questions, so "tell me more" knows what it's about
     const previous = messages.filter((m) => m.role === "user").slice(-6).map((m) => m.text);
@@ -183,8 +192,10 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
         body: JSON.stringify({ question, church_id: churchId, previous }),
       });
       const data = await res.json();
+      quota.update(data);
       const answerText = data.answer || data.error || "Sorry, something went wrong.";
-      setMessages((prev) => [...prev, { role: "assistant", text: answerText, isError: !res.ok }]);
+      // "Tell me more" only makes sense after an answer from a document.
+      setMessages((prev) => [...prev, { role: "assistant", text: answerText, isError: !res.ok, more: res.ok && (data.sources?.length || 0) > 0, related: res.ok ? data.related || [] : [] }]);
       hist.save(question, answerText, !res.ok);   // keep it in this chat (db/040)
     } catch {
       setMessages((prev) => [
@@ -196,7 +207,7 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
     }
   }
 
-  const disabled = sending || loadingChurch || !churchId;
+  const disabled = sending || loadingChurch || !churchId || quota.used;
 
   return (
     // Fixed to the window height so the question box stays in view; long
@@ -208,20 +219,12 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 min-h-0">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center py-16">
-            <Sparkles className={`w-8 h-8 ${t.emptyIcon} mb-3`} />
-            <p className={`text-sm font-bold ${t.textPrimary}`}>Ask me anything about the church</p>
-            <p className={`text-xs ${t.textMuted} mt-1 max-w-xs`}>
-              {loadingChurch
-                ? "Loading your profile..."
-                : !churchId
-                ? "No church is linked to your account yet — contact your admin."
-                : "Answers come only from the church's documents and discipleship handouts — in English or Tagalog."}
-            </p>
-          </div>
+          <AssistantWelcome dark={dark} disabled={disabled} onAsk={ask} suggestions={suggestions}
+            note={loadingChurch ? "Loading your profile..." : !churchId ? "No church is linked to your account yet — contact your admin." : null} />
         ) : (
           messages.map((m, i) => (
-            <div key={i} className={`flex items-start gap-3 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
+            <div key={i}>
+            <div className={`flex items-start gap-3 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
               <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
                 m.role === "user" ? "bg-blue-600/20 border-blue-500/20" : t.avatarBot
               }`}>
@@ -232,6 +235,10 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
               }`}>
                 {m.text}
               </div>
+            </div>
+            {i === messages.length - 1 && !sending && (
+              <FollowUps dark={dark} more={m.more} related={m.related} disabled={disabled} onAsk={ask} />
+            )}
             </div>
           ))
         )}
@@ -266,6 +273,9 @@ function ChatPanel({ t, dark, churchId, loadingChurch }) {
           <Send className="w-4 h-4" />
         </button>
       </form>
+      {quotaText(quota) && (
+        <p className={`px-4 pb-3 -mt-1 text-[11px] ${quota.used ? (dark ? "text-orange-400" : "text-orange-600") : t.textMuted}`}>{quotaText(quota)}</p>
+      )}
       </div>
     </div>
   );

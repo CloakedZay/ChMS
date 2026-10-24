@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { analyzeQuestion, coverage, exactCoverage, isHeading, type Analysis } from "@/app/lib/nlp";
+import { analyzeQuestion, coverage, exactCoverage, isHeading, headingQuestion, looksLikeContents, normalize, type Analysis, type Related } from "@/app/lib/nlp";
 import { embedQuery, embedPassages, toVector } from "@/app/lib/embeddings";
 import { correctQuestion } from "@/app/lib/spelling";
 
@@ -123,4 +123,55 @@ export async function searchPassages(
   if (error) return { results: [], analysis, vector, error: error.message };
   const hits = await fillSimilarity((data || []) as Hit[], vector);
   return { results: rerank(hits, analysis), analysis, vector, error: null };
+}
+
+// Up to 3 questions to tap under an answer: the next and previous sections
+// of the same document, and other sections the search found close to the
+// question. Each comes from a real heading, so it has an answer.
+//   numbered  "What is in chapter N?" is answered (not inside one lesson)
+//   asked     questions already asked in this chat, left out
+export async function relatedQuestions(
+  db: SupabaseClient, best: Hit, others: Hit[], opts: { numbered: boolean; asked: string[] }
+): Promise<Related[]> {
+  const firstLine = (s: string) => s.split("\n")[0].trim();
+  const headingOf = (s: string) => (isHeading(s) ? firstLine(s) : "");
+  const own = headingOf(best.content);
+  const found: { heading: string; type: Hit["source_type"] }[] = [];
+
+  let prev = "", next = "";
+  if (best.id > 0) {
+    const { data: me } = await db.from("knowledge_chunks")
+      .select("source_type, source_id, chunk_index").eq("id", best.id).maybeSingle();
+    if (me) {
+      const { data: rows } = await db.from("knowledge_chunks")
+        .select("chunk_index, content")
+        .eq("source_type", me.source_type).eq("source_id", me.source_id)
+        .gte("chunk_index", me.chunk_index - 30).lte("chunk_index", me.chunk_index + 30)
+        .order("chunk_index");
+      for (const r of rows || []) {
+        const h = headingOf(r.content);
+        if (!h || h === own || looksLikeContents(r.content)) continue;
+        if (r.chunk_index < me.chunk_index) prev = h;
+        else if (!next) next = h;
+      }
+    }
+  }
+  if (next) found.push({ heading: next, type: best.source_type });
+  for (const h of others) {
+    if (h === best || (h.similarity ?? 0) < 0.8) continue;
+    const hd = headingOf(h.content);
+    if (hd && hd !== own) found.push({ heading: hd, type: h.source_type });
+  }
+  if (prev) found.push({ heading: prev, type: best.source_type });
+
+  const seen = new Set(opts.asked.map((q) => normalize(q)));
+  const out: Related[] = [];
+  for (const f of found) {
+    const r = headingQuestion(f.heading, opts.numbered && f.type === "document");
+    if (!r || seen.has(normalize(r.question)) || seen.has(normalize(r.label))) continue;
+    seen.add(normalize(r.question));
+    out.push(r);
+    if (out.length === 3) break;
+  }
+  return out;
 }
