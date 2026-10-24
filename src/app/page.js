@@ -27,7 +27,7 @@ const FEATURES = [
   },
   {
     id: "ministry", Icon: Church, title: "Ministry Operations",
-    desc: "Coordinate all five active ministries under GGCF-GMI Pandi — assign members, manage departments, and track volunteer participation.",
+    desc: "Coordinate all five active ministries under GGCF-GMI — assign members, manage departments, and track volunteer participation.",
     bullets: ["5 ministry departments", "Ministry head assignment", "Member-to-ministry mapping", "Activity scheduling"],
   },
   {
@@ -40,13 +40,6 @@ const FEATURES = [
     desc: "Attendance trends, financial summaries, and ministry activity insights to support prayerful, data-informed decisions for church leadership.",
     bullets: ["Attendance trend reports", "Fund balance summaries", "Ministry activity logs", "Exportable records"],
   },
-];
-
-const STATS = [
-  { value: "100+", label: "Members" },
-  { value: "5",    label: "Ministries" },
-  { value: "3",    label: "Locations" },
-  { value: "4",    label: "Fund Categories" },
 ];
 
 // Branches come from the database (public_locations, db/079), so a new one
@@ -106,10 +99,6 @@ export default function HomePage() {
     : "100+";
   const locationWord = NUMBER_WORDS[locations.length] || String(locations.length);
   const locationsLabel = `${locations.length} location${locations.length === 1 ? "" : "s"}`;
-  const stats = STATS.map(s =>
-    s.label === "Members"   ? { ...s, value: memberTotal } :
-    s.label === "Locations" ? { ...s, value: String(locations.length) } : s
-  );
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -179,7 +168,7 @@ export default function HomePage() {
             <img src="/logo.png" alt="God's Grace Christian Fellowship Global Ministries Inc. logo" className="w-10 h-10 rounded-full" />
             <span className="leading-tight">
               <span className={`block text-[15px] font-bold tracking-tight ${t.heading}`}>FaithSync</span>
-              <span className={`hidden sm:block text-[11px] ${t.muted}`}>GGCF-GMI Pandi</span>
+              <span className={`hidden sm:block text-[11px] ${t.muted}`}>GGCF-GMI</span>
             </span>
           </Link>
 
@@ -233,7 +222,7 @@ export default function HomePage() {
 
           <div className="rise">
             <span className={`inline-flex items-center gap-2 text-xs font-semibold px-3.5 py-1.5 rounded-full border ${dark ? "border-[#c5a66a]/30 text-[#c5a66a] bg-[#c5a66a]/5" : "border-[#c5a66a]/50 text-[#7a6234] bg-[#c5a66a]/10"}`}>
-              <MapPin className="w-3.5 h-3.5" strokeWidth={1.75} /> GGCF-GMI Pandi · Bulacan, Philippines
+              <MapPin className="w-3.5 h-3.5" strokeWidth={1.75} /> GGCF-GMI · Bulacan, Philippines
             </span>
 
             <h1 className={`mt-6 text-4xl sm:text-5xl lg:text-[3.5rem] font-bold leading-[1.08] tracking-tight ${t.heading}`}>
@@ -326,18 +315,6 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* ── Stats ─────────────────────────────────────────────────────────── */}
-      <section className={`${t.sectionB} border-y ${t.divider}`}>
-        <div className="max-w-5xl mx-auto px-5 sm:px-8 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-          {stats.map((s) => (
-            <div key={s.label}>
-              <p className={`text-4xl font-bold tracking-tight ${t.stat}`}>{s.value}</p>
-              <p className={`text-xs mt-2 uppercase tracking-[0.14em] ${t.muted}`}>{s.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* ── About ─────────────────────────────────────────────────────────── */}
       <section id="about" className={`${t.sectionA} py-20 sm:py-28 scroll-mt-16`}>
         <div className="max-w-3xl mx-auto px-5 sm:px-8 text-center">
@@ -346,13 +323,15 @@ export default function HomePage() {
             Built for the heart of this ministry
           </h2>
           <p className={`mt-6 text-lg leading-relaxed ${t.body}`}>
-            Serving the congregation since its founding, GGCF-GMI Pandi needed a system that matched the scale and
-            heart of its ministry. FaithSync is that system — from Pandi to Angat to Meycauayan, every member,
-            every gathering, every tithe, accounted for.
+            GGCF-GMI formed out of three churches that is located in Pandi, Angat, and Meycauayan. The leaders of
+            said churches decided to build one association with the same belief and doctrine about God. From the
+            leaders of each church and to their members, FaithSync is a system that shall assist the association
+            with their day-to-day record keeping, member training and growth tracking, organizing of events and
+            services, and for the reports and analytics of their churches.
           </p>
           <div className={`mt-8 inline-flex items-center gap-2 text-xs uppercase tracking-[0.16em] ${t.muted}`}>
             <Heart className="w-3.5 h-3.5 text-[#c5a66a]" strokeWidth={1.75} />
-            Built with and for the GGCF-GMI Pandi congregation
+            Built with and for the GGCF-GMI congregation
           </div>
         </div>
       </section>
@@ -468,7 +447,7 @@ export default function HomePage() {
             {NAV.map(n => <a key={n.href} href={n.href} className={t.link}>{n.label}</a>)}
             <Link href="/login" className={t.link}>Log in</Link>
           </div>
-          <p className={`text-xs ${t.muted}`}>© {new Date().getFullYear()} GGCF-GMI Pandi · Church Management System</p>
+          <p className={`text-xs ${t.muted}`}>© {new Date().getFullYear()} GGCF-GMI · Church Management System</p>
         </div>
       </footer>
     </div>
