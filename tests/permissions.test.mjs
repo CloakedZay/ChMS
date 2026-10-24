@@ -24,15 +24,14 @@ test('every page lists only features that exist', () => {
 
 test('accessFor returns a list, empty when there is no access', () => {
   assert.deepEqual(accessFor('finance', 'finance'), ['edit']);
-  assert.deepEqual(accessFor('leader', 'expenseRequests'), ['submit', 'approve']);
+  assert.deepEqual(accessFor('leader', 'finance'), ['view']);
   assert.deepEqual(accessFor('admin', 'finance'), []);
   assert.deepEqual(accessFor('member', 'no-such-feature'), []);
 });
 
-test('edit, approve and submit also let you view', () => {
+test('edit and approve also let you view', () => {
   assert.equal(can('secretary', 'members'), true);      // edit
   assert.equal(can('leader', 'events'), true);          // approve
-  assert.equal(can('leader', 'expenseRequests'), true); // submit + approve
   assert.equal(can('leader', 'finance', 'edit'), false);
 });
 

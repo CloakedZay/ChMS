@@ -1,15 +1,14 @@
 'use client';
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { can } from "@/app/lib/permissions";
-import { useAuth } from "@/app/context/AuthContext";
-import SpendingRequests from "@/app/components/SpendingRequests";
+import LedgerReceipts from "@/app/components/LedgerReceipts";
 import {
   Wallet, TrendingUp, TrendingDown, Plus,
-  Search, X, Ban, Pencil, History, Sun, Moon
+  Search, X, Ban, Pencil, History, Sun, Moon, Paperclip
 } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import { phToday } from "@/app/lib/phDate";
@@ -109,12 +108,12 @@ function Finance() {
   const [filterType, setFilterType]     = useState("all");
   const [form, setForm]                 = useState(EMPTY_FORM);
   const [page, setPage]                 = useState(1);
-  // Reminders link here with ?tab=requests.
-  const [tab, setTab]                   = useState(() => params.get('tab') === 'requests' ? "requests" : "ledger");
-  // Ledger entry id → spending request number, for entries a request made
-  // (release, returned change). Those are locked (db/054).
+  // Ledger entry id → old spending request number, for entries a request
+  // made before requests were removed (db/086). Those stay locked (db/054).
   const [fromRequest, setFromRequest]   = useState({});
-  const { user } = useAuth();
+  // Receipts on expenses (db/086): entry id → how many; the entry open.
+  const [receiptCounts, setReceiptCounts] = useState({});
+  const [receiptsFor, setReceiptsFor]   = useState(null);
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
   // Only the Finance level records money; Pastor and Leaders view.
@@ -182,13 +181,23 @@ function Finance() {
         return;
       }
       if (page > 1 && !data?.length) { setPage(1); return; }
-      // Entries a spending request made (release, returned change) are locked (db/054).
+      // Entries an old spending request made are locked (db/054); how many
+      // receipts each expense has (db/086; none before it's run).
       const ids = (data || []).map((tx) => tx.id);
-      const { data: reqs } = ids.length
-        ? await supabase.from('expense_requests').select('id, transaction_id, change_transaction_id')
-            .or(`transaction_id.in.(${ids.join(',')}),change_transaction_id.in.(${ids.join(',')})`)
-        : { data: [] };
+      const expenseIds = (data || []).filter((tx) => tx.type === 'expense').map((tx) => tx.id);
+      const [{ data: reqs }, { data: rcpts }] = await Promise.all([
+        ids.length
+          ? supabase.from('expense_requests').select('id, transaction_id, change_transaction_id')
+              .or(`transaction_id.in.(${ids.join(',')}),change_transaction_id.in.(${ids.join(',')})`)
+          : { data: [] },
+        expenseIds.length
+          ? supabase.from('transaction_receipts').select('transaction_id').in('transaction_id', expenseIds)
+          : { data: [] },
+      ]);
       if (stale) return;
+      const counts = {};
+      (rcpts || []).forEach((r) => { counts[r.transaction_id] = (counts[r.transaction_id] || 0) + 1; });
+      setReceiptCounts(counts);
       const links = {};
       (reqs || []).forEach((r) => {
         if (r.transaction_id) links[r.transaction_id] = r.id;
@@ -309,9 +318,9 @@ function Finance() {
       form.category;
     const { otherCategory, ministryName, ...rest } = form;
     const payload = { ...rest, category: finalCategory, amount: parseFloat(form.amount) || 0, member: showMember ? (form.member || 'Anonymous') : '', church_id: isGlobal ? form.church_id : profile?.church_id };
-    const { error } = editingTx
-      ? await supabase.from('transactions').update(payload).eq('id', editingTx.id)
-      : await supabase.from('transactions').insert([payload]);
+    const { data: saved, error } = editingTx
+      ? await supabase.from('transactions').update(payload).eq('id', editingTx.id).select('*').maybeSingle()
+      : await supabase.from('transactions').insert([payload]).select('*').maybeSingle();
     setSaving(false);
     // Keep the form open with what was typed, so it can just be saved again.
     if (error) {
@@ -322,7 +331,11 @@ function Finance() {
     setEditingTx(null);
     setForm(EMPTY_FORM);
     await fetchTransactions();
+    // A new expense: straight on to its receipts.
+    if (!editingTx && saved?.type === 'expense') setReceiptsFor(saved);
   }
+
+  const receiptsChanged = useCallback((id, n) => setReceiptCounts((c) => ({ ...c, [id]: n })), []);
 
   // Entries are never deleted, only voided, so the record stays traceable.
   async function handleVoid(tx) {
@@ -393,7 +406,7 @@ function Finance() {
           >
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          {canEdit && tab === "ledger" && (
+          {canEdit && (
             <button onClick={openAdd} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-blue-900/20 shrink-0">
               <Plus size={16} /> New Entry
             </button>
@@ -412,29 +425,6 @@ function Finance() {
         </div>
       )}
 
-      {/* Tabs: ledger and spending requests (F2) */}
-      <div className={`flex gap-1 ${t.cardBg} border ${t.cardBorder} rounded-xl p-1 w-fit mb-6`}>
-        {[
-          { key: "ledger",   label: "Ledger" },
-          { key: "requests", label: "Spending requests" },
-        ].map((x) => (
-          <button key={x.key} onClick={() => setTab(x.key)}
-            className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-all ${tab === x.key ? "bg-blue-600 text-white shadow" : t.textSub}`}>
-            {x.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "requests" && (
-        <SpendingRequests
-          t={t} dark={dark}
-          role={profile?.role} userId={user?.id}
-          churches={churches} isGlobal={isGlobal} branch={selectedBranch}
-          onReleased={fetchTransactions}
-        />
-      )}
-
-      {tab === "ledger" && (<>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <StatCard label="Total Balance"  amount={totalBalance} icon={Wallet}       color={A(dark, "blue")} t={t} />
         <StatCard label="Total Income"   amount={totalIncome}  icon={TrendingUp}   color={A(dark, "emerald")} t={t} />
@@ -513,17 +503,26 @@ function Finance() {
                     <td className={`px-6 py-4 font-black text-sm font-mono ${tx.status === VOID ? `${t.textMuted} line-through` : tx.type === 'income' ? A(dark, "emerald") : tx.type === 'expense' ? A(dark, "rose") : t.textPrimary}`}>{tx.type === 'expense' ? '−' : '+'}{peso(tx.amount)}</td>
                     <td className="px-6 py-4 text-center"><span className={`border text-[10px] uppercase font-bold px-3 py-1 rounded-full ${tx.status === VOID ? STATUS_BADGE.Void : STATUS_BADGE.Verified}`}>{tx.status === VOID ? 'Void' : 'Verified'}</span></td>
                     <td className="px-6 py-4">
-                      {fromRequest[tx.id] ? (
-                        <button onClick={() => setTab('requests')} title="Made by a spending request — correct it through the request"
-                          className={`whitespace-nowrap text-[10px] font-bold px-2 py-1 rounded-lg border ${t.iconBtn}`}>
-                          From request #{fromRequest[tx.id]}
-                        </button>
-                      ) : canEdit && tx.status !== VOID && (
-                        <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Receipts: expenses only (db/086). Finance adds them; the rest open them. */}
+                        {tx.type === 'expense' && (receiptCounts[tx.id] || (canEdit && tx.status !== VOID)) ? (
+                          <button onClick={() => setReceiptsFor(tx)}
+                            title={receiptCounts[tx.id] ? 'Receipts' : 'Add a receipt'}
+                            aria-label={receiptCounts[tx.id] ? `Receipts (${receiptCounts[tx.id]})` : 'Add a receipt'}
+                            className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-bold px-2 py-1 rounded-lg border transition-colors ${receiptCounts[tx.id] ? `${A(dark, "blue")} border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20` : `${t.textMuted} ${t.iconBtn}`}`}>
+                            <Paperclip size={12} /> {receiptCounts[tx.id] || 'Receipt'}
+                          </button>
+                        ) : null}
+                        {fromRequest[tx.id] ? (
+                          <span title="Made by an old spending request; it can't be changed"
+                            className={`whitespace-nowrap text-[10px] font-bold px-2 py-1 rounded-lg border ${t.iconBtn}`}>
+                            From request #{fromRequest[tx.id]}
+                          </span>
+                        ) : canEdit && tx.status !== VOID && (<>
                           <button onClick={() => openEdit(tx)} title="Edit" className={`${t.textMuted} hover:text-blue-400 transition-colors p-1 rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-300"}`}><Pencil size={13} /></button>
                           <button onClick={() => handleVoid(tx)} title="Void" className={`${t.textMuted} hover:text-red-400 transition-colors p-1 rounded-lg hover:bg-red-500/10`}><Ban size={13} /></button>
-                        </div>
-                      )}
+                        </>)}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -548,7 +547,12 @@ function Finance() {
           </div>
         )}
       </div>
-      </>)}
+
+      {receiptsFor && (
+        <LedgerReceipts tx={receiptsFor} t={t}
+          canEdit={canEdit && receiptsFor.status !== VOID}
+          onClose={() => setReceiptsFor(null)} onChanged={receiptsChanged} />
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

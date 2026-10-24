@@ -148,15 +148,6 @@ export default function KpiCards({ role, dark, t, followUpCount = 0 }) {
       note: data ? (data.rate90 === null ? "No attendance taken yet" : "Last 90 days") : "",
       spark: data?.monthlyRate,
     },
-    ...(showFinance ? [{
-      key: "giving", label: `Giving · ${monthLabel(m.at(-1))}`, Icon: HandCoins, href: "/dashboard/finance", tone: dark ? "text-purple-400" : "text-purple-600",
-      value: data && peso(data.givingBy.at(-1)),
-      delta: data && (data.lastSameDays
-        ? compare(data.givingBy.at(-1), data.lastSameDays, (d) => `${pct(Math.round((d / data.lastSameDays) * 100))} vs same days last month`)
-        : null),
-      note: data ? `Balance ${peso(data.balance)}` : "",
-      spark: data?.givingBy,
-    }] : []),
     {
       key: "events", label: "Upcoming Events", Icon: CalendarDays, href: "/dashboard/events", tone: dark ? "text-pink-400" : "text-pink-600",
       value: data?.upcoming.toString(),
@@ -170,6 +161,16 @@ export default function KpiCards({ role, dark, t, followUpCount = 0 }) {
       delta: null,
       note: followUpCount ? "Members to reach out to" : "Everyone is accounted for",
       spark: null,
+    }] : []),
+    // Finance last (Giving), after the church-life figures.
+    ...(showFinance ? [{
+      key: "giving", label: `Giving · ${monthLabel(m.at(-1))}`, Icon: HandCoins, href: "/dashboard/finance", tone: dark ? "text-purple-400" : "text-purple-600",
+      value: data && peso(data.givingBy.at(-1)),
+      delta: data && (data.lastSameDays
+        ? compare(data.givingBy.at(-1), data.lastSameDays, (d) => `${pct(Math.round((d / data.lastSameDays) * 100))} vs same days last month`)
+        : null),
+      note: data ? `Balance ${peso(data.balance)}` : "",
+      spark: data?.givingBy,
     }] : []),
   ];
 

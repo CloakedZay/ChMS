@@ -40,7 +40,7 @@ flowchart LR
 | Layer | Where | Role |
 |---|---|---|
 | Pages | `src/app/dashboard/*`, `src/app/member-dashboard/*`, `src/app/(auth)/*` | Screens for each feature; the layout checks `canOpenPage()` before showing a page |
-| Shared components | `src/app/components/*` | Attendance sheet, spending requests, messenger, date / time pickers, dialogs, reminders, person profile, app shell |
+| Shared components | `src/app/components/*` | Attendance sheet, ledger receipts, messenger, date / time pickers, dialogs, reminders, person profile, app shell |
 | Helpers | `src/app/lib/*` | `permissions.js` (levels and features), Supabase clients (settings from the environment), `errors.js` (plain error messages), `format.js` (money), `theme.js` (shared colours), `useStoredValue.js` (settings remembered in the browser), Philippine dates, event series, the assistant's language and search helpers |
 | Server routes | `src/app/api/*` | Actions that need the secret service key. Each route first checks the caller's session and level (`lib/apiAuth.ts`) |
 | Database | `db/000 … 068` | Tables, **row level security**, functions for multi-step actions (approvals, attendance, follow-up), triggers (activity log, locks, automatic stamps), the nightly job |
@@ -95,7 +95,7 @@ erDiagram
 
 **Design choices**
 - **Never deleted, only closed:** members are *archived*, finance entries *voided*, events *cancelled* — the record stays traceable.
-- **Some names are stored as text on purpose:** the payee on a transaction (can be a store, not a member), and the requester / approver names on spending requests (Finance can't read logins, but must see who asked).
+- **Some names are stored as text on purpose:** the payee on a transaction (can be a store, not a member), and the requester / approver names on the old spending requests (Finance can't read logins, but must see who asked).
 - **Dates follow the Philippines:** `ph_today()` and `Asia/Manila` everywhere a "today" matters.
 - **Long lists are paged by the database:** the ledger and the members list ask for one page at a time (`ledger_entries`, `member_list` with the page's search and filters), and their totals and counts are worked out in the database (`finance_summary`, `member_counts`, db/069). Supabase returns at most 1,000 rows per request, so adding up rows in the browser would go wrong on a large ledger. These run as the signed-in person, so the row rules still apply. The staff dashboard's total funds use `finance_summary` too; lists that need every row (Reports, the member import's duplicate check) read them 1,000 at a time with `lib/fetchAll.js`.
 
@@ -109,7 +109,7 @@ erDiagram
 | Events | View | View | **Add, edit, cancel** (Upcoming on save, no approval) | View | View | View |
 | Attendance | View | View (all) | View | View | Take | Own; helpers take |
 | Finance ledger | — | View (all) | View | **Record, void** | — | — |
-| Spending requests | — | Request, approve, set limits | Request, approve (Elders: large, love gifts) | Release, check receipts | — | — |
+| Expense receipts (db/086; spending requests removed) | — | View | View | **Add, remove** | — | — |
 | Ministries | View | **Manage**, pick each head (a Leader) | **Add / remove members** of the ministry they head | — | View | Own |
 | Training | View | Manage, review | Manage (general + own ministry), review | — | — | Take |
 | Announcements | View | Post (all branches) | Post (own branch) | View | View | View |

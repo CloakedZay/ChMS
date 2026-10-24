@@ -84,8 +84,8 @@ export const PERMISSIONS = {
   // Finance — no Admin, no Secretary. Members' own giving history is still
   // an open question in the doc, so members have no access for now.
   finance:            { pastor: 'view', leader: 'view', finance: 'edit' },
+  // Receipts on ledger expenses (db/086); spending requests are gone.
   receipts:           { pastor: 'view', leader: 'view', finance: 'edit' },
-  expenseRequests:    { pastor: 'approve', leader: ['submit', 'approve'], finance: 'edit' },
   financeReports:     { pastor: 'view', leader: 'view', finance: 'view' },
 
   // Reports — every level gets reports, each scoped to what they can see.

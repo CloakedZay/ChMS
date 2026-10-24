@@ -35,11 +35,12 @@ const TYPE_LABELS = {
   expense_requests:       "Spending request",
   expense_approvals:      "Spending approval",
   expense_receipts:       "Receipt",
+  transaction_receipts:   "Receipt",
   finance_settings:       "Approval limit",
 };
 
 // Finance records: only for levels with finance access (never Admin).
-const FINANCE_TYPES = ["transactions", "expense_requests", "expense_approvals", "expense_receipts", "finance_settings"];
+const FINANCE_TYPES = ["transactions", "expense_requests", "expense_approvals", "expense_receipts", "transaction_receipts", "finance_settings"];
 
 const ACTIONS = ["added", "changed", "archived", "restored", "voided", "deleted"];
 

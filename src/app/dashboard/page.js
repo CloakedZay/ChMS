@@ -20,7 +20,6 @@ import ScriptureLink from "@/app/components/ScriptureLink";
 import AnnouncementsBanner from "@/app/components/AnnouncementsBanner";
 import FollowUpReminder from "@/app/components/FollowUpReminder";
 import AttendanceReminder from "@/app/components/AttendanceReminder";
-import SpendingReminder from "@/app/components/SpendingReminder";
 import { useFollowUpReminder, REMINDER_DAYS, MISSED_EVENTS } from "@/app/lib/useFollowUpReminder";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
@@ -183,11 +182,6 @@ export default function DashboardPage() {
   const showReminder   = followUp.count > 0 && !followUp.snoozed;
   const bellCount      = showReminder ? 1 : 0;
   const activityFeed = [
-    ...recentTransactions.slice(0, 3).map((t) => ({
-      type: "finance",
-      text: `${t.type === 'income' ? 'Income' : 'Expense'}: ${t.category} — ₱${Number(t.amount).toLocaleString()}`,
-      time: t.date || "—",
-    })),
     ...recentMembers.map((m) => ({
       type: "member",
       text: `${m.full_name} — ${m.status || 'active'} · ${m.ministry || 'Unassigned'}`,
@@ -197,6 +191,12 @@ export default function DashboardPage() {
       type: "event",
       text: `${e.title} — ${eventStatusLabel(e.status)}`,
       time: e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : "—",
+    })),
+    // Finance last.
+    ...recentTransactions.slice(0, 3).map((t) => ({
+      type: "finance",
+      text: `${t.type === 'income' ? 'Income' : 'Expense'}: ${t.category} — ₱${Number(t.amount).toLocaleString()}`,
+      time: t.date || "—",
     })),
   ].slice(0, 6);
 
@@ -303,8 +303,6 @@ export default function DashboardPage() {
         {/* Attendance not taken (Leader, Secretary; db/051) */}
         {['leader', 'secretary'].includes(role) && <AttendanceReminder />}
 
-        {/* Spending requests waiting (Pastor, Leader, Finance) */}
-        {['pastor', 'leader', 'finance'].includes(role) && <SpendingReminder />}
 
         <div className={`${card} p-6 flex items-start gap-4`}>
           <div className="w-10 h-10 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center shrink-0">

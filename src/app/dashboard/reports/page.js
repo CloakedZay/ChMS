@@ -337,9 +337,9 @@ export default function ReportsPage() {
 
       // ── Summary cards ─────────────────────────────────────────────
       const cards = showFinance ? [
-        { label: 'NET BALANCE',    value: peso(balance) },
         { label: 'ACTIVE MEMBERS', value: `${activeMembers} of ${totalMembers}` },
         { label: 'EVENTS',         value: `${totalEvents} (${upcomingEvents} upcoming)` },
+        { label: 'NET BALANCE',    value: peso(balance) },
         { label: 'TOTAL EXPENSES', value: peso(totalExpense) },
       ] : [
         { label: 'ACTIVE MEMBERS',   value: `${activeMembers} of ${totalMembers}` },
@@ -551,14 +551,6 @@ export default function ReportsPage() {
 
   const summaryCards = showFinance ? [
           {
-            label: "Total Balance",
-            val: loading ? "..." : peso(balance),
-            sub: "Income minus expenses",
-            up: balance >= 0,
-            icon: Wallet,
-            color: A(dark, "blue"),
-          },
-          {
             label: "Active Members",
             val: loading ? "..." : activeMembers.toString(),
             sub: `${attendanceRate}% of ${totalMembers} total`,
@@ -573,6 +565,14 @@ export default function ReportsPage() {
             up: true,
             icon: Calendar,
             color: A(dark, "pink"),
+          },
+          {
+            label: "Total Balance",
+            val: loading ? "..." : peso(balance),
+            sub: "Income minus expenses",
+            up: balance >= 0,
+            icon: Wallet,
+            color: A(dark, "blue"),
           },
           {
             label: "Total Expenses",
@@ -688,8 +688,7 @@ export default function ReportsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 
-        {/* Events by Status (levels without finance) */}
-        {!showFinance && (
+        {/* Events by Status */}
           <div className={`lg:col-span-2 ${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
             <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2 mb-6 border-b ${t.divider} pb-4`}>
               <Calendar className={`w-4 h-4 ${A(dark, "pink")}`} /> Events by Status
@@ -719,64 +718,6 @@ export default function ReportsPage() {
               </div>
             )}
           </div>
-        )}
-
-        {/* Income vs Expense Bar Chart */}
-        {showFinance && (
-        <div className={`lg:col-span-2 ${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
-          <div className={`flex justify-between items-center mb-6 border-b ${t.divider} pb-4`}>
-            <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2`}>
-              <BarChart3 className={`w-4 h-4 ${A(dark, "blue")}`} /> Monthly Finance
-            </h3>
-            <div className="flex gap-3 text-[10px] font-bold uppercase">
-              <span className={`flex items-center gap-1 ${A(dark, "emerald")}`}>
-                <span className="w-2 h-2 rounded-full bg-emerald-500" /> Income
-              </span>
-              <span className={`flex items-center gap-1 ${A(dark, "rose")}`}>
-                <span className="w-2 h-2 rounded-full bg-rose-500" /> Expense
-              </span>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="h-48 flex items-center justify-center">
-              <p className={`${t.textFaint} text-sm`}>Syncing...</p>
-            </div>
-          ) : monthlyTotals.length === 0 ? (
-            <div className={`h-48 flex items-center justify-center border border-dashed ${t.dashed} rounded-2xl`}>
-              <p className={`${t.textFaint} text-sm`}>No transaction data yet.</p>
-            </div>
-          ) : (
-            <div className="h-52 flex items-end justify-between gap-2 px-2">
-              {monthlyTotals.map((m, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-                  <div className="w-full flex gap-1 items-end" style={{ height: '160px' }}>
-                    {/* Income bar */}
-                    <div
-                      className="flex-1 bg-emerald-500/30 hover:bg-emerald-500/60 rounded-t-md transition-all relative group/bar"
-                      style={{ height: `${Math.max((m.income / maxMonthly) * 100, 2)}%` }}
-                    >
-                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[9px] py-0.5 px-1.5 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap">
-                        ₱{m.income.toLocaleString()}
-                      </div>
-                    </div>
-                    {/* Expense bar */}
-                    <div
-                      className="flex-1 bg-rose-500/30 hover:bg-rose-500/60 rounded-t-md transition-all relative group/bar"
-                      style={{ height: `${Math.max((m.expense / maxMonthly) * 100, 2)}%` }}
-                    >
-                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-[9px] py-0.5 px-1.5 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap">
-                        ₱{m.expense.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                  <span className={`text-[9px] ${t.textFaint} font-bold`}>{m.month}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        )}
 
         {/* Members by Ministry */}
         <div className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
@@ -826,8 +767,64 @@ export default function ReportsPage() {
 
       {can(role, 'attendance') && <EventAttendanceReport t={t} dark={dark} reloadKey={reloadKey} church={church} canTake={can(role, 'attendance', 'edit')} />}
 
-      {/* Finance Summary + Recent Transactions (finance levels only) */}
+      {/* Finance last (finance levels only): monthly chart, summary and
+          recent transactions, after the church-life sections. */}
       {showFinance && (
+      <>
+        <div className={`mb-6 ${t.cardBg} border ${t.cardBorder} rounded-3xl p-6`}>
+          <div className={`flex justify-between items-center mb-6 border-b ${t.divider} pb-4`}>
+            <h3 className={`text-sm font-black ${t.textPrimary} uppercase tracking-widest flex items-center gap-2`}>
+              <BarChart3 className={`w-4 h-4 ${A(dark, "blue")}`} /> Monthly Finance
+            </h3>
+            <div className="flex gap-3 text-xs font-bold uppercase">
+              <span className={`flex items-center gap-1 ${A(dark, "emerald")}`}>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" /> Income
+              </span>
+              <span className={`flex items-center gap-1 ${A(dark, "rose")}`}>
+                <span className="w-2 h-2 rounded-full bg-rose-500" /> Expense
+              </span>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="h-48 flex items-center justify-center">
+              <p className={`${t.textFaint} text-sm`}>Syncing...</p>
+            </div>
+          ) : monthlyTotals.length === 0 ? (
+            <div className={`h-48 flex items-center justify-center border border-dashed ${t.dashed} rounded-2xl`}>
+              <p className={`${t.textFaint} text-sm`}>No transaction data yet.</p>
+            </div>
+          ) : (
+            <div className="h-52 flex items-end justify-between gap-2 px-2">
+              {monthlyTotals.map((m, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+                  <div className="w-full flex gap-1 items-end" style={{ height: '160px' }}>
+                    {/* Income bar */}
+                    <div
+                      className="flex-1 bg-emerald-500/30 hover:bg-emerald-500/60 rounded-t-md transition-all relative group/bar"
+                      style={{ height: `${Math.max((m.income / maxMonthly) * 100, 2)}%` }}
+                    >
+                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold py-1 px-2 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap">
+                        ₱{m.income.toLocaleString()}
+                      </div>
+                    </div>
+                    {/* Expense bar */}
+                    <div
+                      className="flex-1 bg-rose-500/30 hover:bg-rose-500/60 rounded-t-md transition-all relative group/bar"
+                      style={{ height: `${Math.max((m.expense / maxMonthly) * 100, 2)}%` }}
+                    >
+                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-xs font-bold py-1 px-2 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap">
+                        ₱{m.expense.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                  <span className={`text-xs ${t.textSub} font-bold`}>{m.month}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Income vs Expense Summary */}
@@ -901,6 +898,7 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
+      </>
       )}
     </div>
   );
@@ -929,16 +927,16 @@ function MonthlyColumns({ t, points, color, unit, ariaLabel }) {
     <div>
       <div className="flex gap-2" role="group" aria-label={ariaLabel}>
         {/* Y axis */}
-        <div className={`flex flex-col justify-between h-44 text-[10px] tabular-nums ${t.textSub} text-right shrink-0 -mt-1.5`} aria-hidden="true">
+        <div className={`flex flex-col justify-between h-60 text-xs font-semibold tabular-nums ${t.textSub} text-right shrink-0 -mt-2`} aria-hidden="true">
           {ticks.map((v) => <span key={v}>{fmt(v)}</span>)}
         </div>
         <div className="relative flex-1 min-w-0">
           {/* Gridlines */}
-          <div className="absolute inset-x-0 top-0 h-44 flex flex-col justify-between pointer-events-none" aria-hidden="true">
+          <div className="absolute inset-x-0 top-0 h-60 flex flex-col justify-between pointer-events-none" aria-hidden="true">
             {ticks.map((v) => <div key={v} className={`border-t ${t.divider}`} />)}
           </div>
           {/* Columns */}
-          <div className="relative h-44 flex items-end">
+          <div className="relative h-60 flex items-end">
             {points.map((p, i) => {
               const h = top > 0 ? (p.value / top) * 100 : 0;
               const show = hover === i;
@@ -955,19 +953,19 @@ function MonthlyColumns({ t, points, color, unit, ariaLabel }) {
                 >
                   {/* Value on the latest month */}
                   {i === last && !show && (
-                    <span className={`absolute text-[10px] font-bold tabular-nums ${t.textPrimary}`} style={{ bottom: `calc(${h}% + 4px)` }}>
+                    <span className={`absolute text-sm font-black tabular-nums ${t.textPrimary}`} style={{ bottom: `calc(${h}% + 4px)` }}>
                       {fmt(p.value)}
                     </span>
                   )}
                   <span
-                    className={`block w-full max-w-[24px] mx-[1px] rounded-t ${color} transition-opacity ${hover !== null && !show ? 'opacity-50' : ''} group-focus-visible:ring-2 group-focus-visible:ring-blue-400`}
+                    className={`block w-full max-w-[44px] mx-[3px] rounded-t-md ${color} transition-opacity ${hover !== null && !show ? 'opacity-50' : ''} group-focus-visible:ring-2 group-focus-visible:ring-blue-400`}
                     style={{ height: p.value > 0 ? `max(${h}%, 2px)` : '0' }}
                   />
                   {show && (
                     <span className={`absolute z-10 px-2.5 py-1.5 rounded-lg shadow-lg border text-left whitespace-nowrap pointer-events-none ${t.modalBg} ${t.modalBorder}`}
                       style={{ bottom: `calc(${h}% + 6px)`, left: i > points.length / 2 ? 'auto' : '50%', right: i > points.length / 2 ? '50%' : 'auto' }}>
-                      <span className={`block text-sm font-black tabular-nums ${t.textPrimary}`}>{fmt(p.value)} <span className="text-[10px] font-semibold">{unit}</span></span>
-                      <span className={`block text-[10px] ${t.textSub}`}>{p.monthName}{p.detail ? ` · ${p.detail}` : ''}</span>
+                      <span className={`block text-sm font-black tabular-nums ${t.textPrimary}`}>{fmt(p.value)} <span className="text-xs font-semibold">{unit}</span></span>
+                      <span className={`block text-xs ${t.textSub}`}>{p.monthName}{p.detail ? ` · ${p.detail}` : ''}</span>
                     </span>
                   )}
                 </button>
@@ -978,22 +976,22 @@ function MonthlyColumns({ t, points, color, unit, ariaLabel }) {
           <div className={`border-t ${t.cardBorder}`} />
           <div className="flex" aria-hidden="true">
             {points.map((p) => (
-              <span key={p.key} className={`flex-1 text-center text-[9px] font-bold leading-tight pt-1 ${t.textSub}`}>
-                {p.label}{p.sub && <span className="block font-normal">{p.sub}</span>}
+              <span key={p.key} className={`flex-1 text-center text-xs font-bold leading-tight pt-2 ${t.textSub}`}>
+                {p.label}{p.sub && <span className="block text-[11px] font-semibold opacity-80">{p.sub}</span>}
               </span>
             ))}
           </div>
         </div>
       </div>
-      <details className="mt-3">
-        <summary className={`text-[11px] font-semibold cursor-pointer ${t.textSub}`}>Show as table</summary>
-        <table className="w-full mt-2 text-xs">
-          <thead><tr className={`text-left ${t.textSub}`}><th className="py-1 font-semibold">Month</th><th className="py-1 font-semibold text-right">{unit}</th></tr></thead>
+      <details className="mt-5">
+        <summary className={`text-sm font-bold cursor-pointer ${t.textPrimary}`}>Show as table</summary>
+        <table className="w-full mt-3 text-sm">
+          <thead><tr className={`text-left ${t.textSub}`}><th className="py-2 font-bold">Month</th><th className="py-2 font-bold text-right">{unit}</th></tr></thead>
           <tbody>
             {[...points].reverse().map((p) => (
               <tr key={p.key} className={`border-t ${t.divider} ${t.textPrimary}`}>
-                <td className="py-1">{p.monthName}{p.detail ? <span className={t.textSub}> · {p.detail}</span> : ''}</td>
-                <td className="py-1 text-right font-bold tabular-nums">{fmt(p.value)}</td>
+                <td className="py-2 font-medium">{p.monthName}{p.detail ? <span className={t.textSub}> · {p.detail}</span> : ''}</td>
+                <td className="py-2 text-right font-black tabular-nums">{fmt(p.value)}</td>
               </tr>
             ))}
           </tbody>
