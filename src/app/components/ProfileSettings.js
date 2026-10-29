@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Save, Loader2, KeyRound, Cake, UserCircle, Sun, Moon } from 'lucide-react';
+import { Save, Loader2, KeyRound, Cake, UserCircle, Sun, Moon, Camera, MessageSquareText } from 'lucide-react';
 import { supabase } from '@/app/lib/supabase';
 import { useAuth } from '@/app/context/AuthContext';
 import { useTheme } from '@/app/context/ThemeContext';
@@ -13,6 +13,8 @@ import GoogleAccountCard from '@/app/components/GoogleAccountCard';
 import RecoveryEmailCard from '@/app/components/RecoveryEmailCard';
 import DatePicker from '@/app/components/DatePicker';
 import { phToday } from '@/app/lib/phDate';
+import { shrinkPhoto } from '@/app/lib/shrinkPhoto';
+import { avatarUrl } from '@/app/lib/avatar';
 
 import { friendlyError } from '@/app/lib/errors';
 // "My profile" for everyone — the member portal and the staff dashboard.
@@ -39,8 +41,20 @@ export default function ProfileSettings() {
   const [savingBday, setSavingBday]       = useState(false);
   const [bdayMsg, setBdayMsg]             = useState('');
 
+  // Photo, About me and texts on/off (db/096, db/097). Hidden until run.
+  const [extras, setExtras] = useState(null);   // { avatar_path, bio, sms_opt_out } | 'unavailable'
+  const [bio, setBio] = useState('');
+  const [busyPhoto, setBusyPhoto] = useState(false);
+  const [extrasMsg, setExtrasMsg] = useState('');
+
   useEffect(() => {
     if (!user) return;
+    supabase.from('profiles').select('avatar_path, bio, sms_opt_out').eq('id', user.id).single()
+      .then(({ data, error }) => {
+        if (error) { setExtras('unavailable'); return; }
+        setExtras(data);
+        setBio(data?.bio || '');
+      });
     supabase.from('profiles').select('full_name').eq('id', user.id).single()
       .then(({ data }) => { setDisplayName(data?.full_name || ''); setSavedName(data?.full_name || ''); });
     supabase.rpc('get_my_birthday').then(({ data, error }) => {
@@ -53,6 +67,42 @@ export default function ProfileSettings() {
   }, [user]);
 
   function flash(set, msg) { set(msg); setTimeout(() => set(''), 4000); }
+
+  async function saveExtras(fields, okText) {
+    const { error } = await supabase.from('profiles').update(fields).eq('id', user.id);
+    if (!error) setExtras((x) => ({ ...x, ...fields }));
+    flash(setExtrasMsg, error ? friendlyError(error) : okText);
+    return !error;
+  }
+
+  async function changePhoto(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    setBusyPhoto(true);
+    const body = await shrinkPhoto(file, 400, 0.85);
+    if (body.size > 2 * 1024 * 1024) { setBusyPhoto(false); flash(setExtrasMsg, 'That picture is too large (max 2 MB).'); return; }
+    const path = `${user.id}/${crypto.randomUUID()}.jpg`;
+    const { error } = await supabase.storage.from('avatars').upload(path, body, { contentType: body === file ? file.type : 'image/jpeg' });
+    if (error) { setBusyPhoto(false); flash(setExtrasMsg, friendlyError(error)); return; }
+    const old = extras?.avatar_path;
+    if (await saveExtras({ avatar_path: path }, '✓ Photo saved')) {
+      if (old) supabase.storage.from('avatars').remove([old]);
+      window.dispatchEvent(new Event('faithsync-avatar'));
+    } else {
+      supabase.storage.from('avatars').remove([path]);
+    }
+    setBusyPhoto(false);
+  }
+
+  async function removePhoto() {
+    const old = extras?.avatar_path;
+    if (!old) return;
+    setBusyPhoto(true);
+    if (await saveExtras({ avatar_path: null }, '✓ Photo removed')) {
+      supabase.storage.from('avatars').remove([old]);
+      window.dispatchEvent(new Event('faithsync-avatar'));
+    }
+    setBusyPhoto(false);
+  }
 
   async function saveDisplayName() {
     const name = displayName.trim();
@@ -90,7 +140,7 @@ export default function ProfileSettings() {
     <div className={`p-4 sm:p-6 lg:p-8 min-h-screen ${t.page}`}>
       <div className="mb-8">
         <h1 className={`text-2xl font-black ${t.text}`}>My Profile</h1>
-        <p className={`text-sm mt-1 ${t.sub}`}>Your name, birthday and sign-in settings.</p>
+        <p className={`text-sm mt-1 ${t.sub}`}>Your photo, name, about me, birthday, texts and sign-in settings.</p>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5 max-w-5xl items-start">
@@ -98,7 +148,23 @@ export default function ProfileSettings() {
           {/* Identity */}
           <section className={card}>
             <div className="flex items-center gap-4 mb-6">
-              <span className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold shrink-0 ${t.avatar}`}>{initials}</span>
+              <div className="shrink-0 flex flex-col items-center gap-1">
+                {extras?.avatar_path
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={avatarUrl(extras.avatar_path)} alt="Your profile photo" className="w-16 h-16 rounded-2xl object-cover" />
+                  : <span className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold ${t.avatar}`}>{initials}</span>}
+                {extras && extras !== 'unavailable' && (
+                  <span className="flex gap-2">
+                    <label className={`text-[10px] font-bold cursor-pointer text-blue-500 hover:underline ${busyPhoto ? 'opacity-50 pointer-events-none' : ''}`}>
+                      {busyPhoto ? <Loader2 size={11} className="inline animate-spin" /> : <Camera size={11} className="inline -mt-0.5" />} {extras.avatar_path ? 'Change' : 'Add photo'}
+                      <input type="file" accept="image/*" className="sr-only" onChange={(e) => { changePhoto(e.target.files?.[0]); e.target.value = ''; }} />
+                    </label>
+                    {extras.avatar_path && !busyPhoto && (
+                      <button type="button" onClick={removePhoto} className={`text-[10px] font-bold ${t.muted} hover:text-rose-500`}>Remove</button>
+                    )}
+                  </span>
+                )}
+              </div>
               <div className="min-w-0">
                 <p className={`text-lg font-bold truncate ${t.text}`}>{savedName || 'No display name set'}</p>
                 <p className={`text-xs truncate ${t.muted}`}>{user?.email}</p>
@@ -121,6 +187,36 @@ export default function ProfileSettings() {
                 {savingName ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} {savingName ? 'Saving...' : 'Save name'}
               </button>
             </div>
+
+            {extras && extras !== 'unavailable' && (
+              <>
+                <label htmlFor="p-bio" className={`block text-xs font-semibold mb-1.5 mt-6 ${t.label}`}>About me</label>
+                <textarea id="p-bio" value={bio} maxLength={300} rows={3} onChange={(e) => setBio(e.target.value)}
+                  placeholder="A line or two: your ministry, your favourite verse, how you came to church" className={`${field} resize-none`} />
+                <p className={`text-[11px] mt-1.5 ${t.muted}`}>Shown with your photo when someone opens your name in Messages. {300 - bio.length} characters left.</p>
+                <div className="flex items-center justify-between gap-3 mt-4">
+                  {msg(extrasMsg) || <span />}
+                  <button onClick={() => saveExtras({ bio: bio.trim() || null }, '✓ About me saved')}
+                    disabled={(bio.trim() || null) === (extras.bio || null)} className={primary}>
+                    <Save size={15} /> Save about me
+                  </button>
+                </div>
+
+                <label className="mt-6 flex items-start justify-between gap-4 cursor-pointer">
+                  <span>
+                    <span className={`flex items-center gap-1.5 text-sm font-semibold ${t.text}`}><MessageSquareText size={14} /> Text messages from the church</span>
+                    <span className={`block text-[11px] mt-0.5 ${t.muted}`}>
+                      Announcements and the day-before event reminders, sent to the mobile number on your member record.
+                    </span>
+                  </span>
+                  <button type="button" role="switch" aria-checked={!extras.sms_opt_out}
+                    onClick={() => saveExtras({ sms_opt_out: !extras.sms_opt_out }, extras.sms_opt_out ? '✓ Texts turned on' : '✓ Texts turned off')}
+                    className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${!extras.sms_opt_out ? 'bg-blue-600' : dark ? 'bg-slate-700' : 'bg-[#d9d6c8]'}`}>
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${!extras.sms_opt_out ? 'translate-x-5' : ''}`} />
+                  </button>
+                </label>
+              </>
+            )}
           </section>
 
           {/* Birthday */}

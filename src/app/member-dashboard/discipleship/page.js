@@ -11,6 +11,7 @@ import {
 import BranchLabel from '@/app/components/BranchLabel';
 import LessonAsk from '@/app/components/LessonAsk';
 import RelatedReading from '@/app/components/RelatedReading';
+import { AnswerRecorder, AnswerPlayback, uploadAnswerMedia } from '@/app/components/AnswerMedia';
 import { alertDialog } from '@/app/lib/dialog';
 
 const ANSWER_STATUS = {
@@ -27,6 +28,7 @@ export default function DiscipleshipPage() {
   const [progress, setProgress]             = useState([]);
   const [expandedModule, setExpandedModule] = useState(null);
   const [answers, setAnswers]               = useState({});
+  const [recordings, setRecordings]         = useState({});   // voice / video drafts (db/098)
   const [submitting, setSubmitting]         = useState(false);
   const [submitMsg, setSubmitMsg]           = useState({});
   const [handouts, setHandouts]             = useState({});
@@ -123,21 +125,26 @@ export default function DiscipleshipPage() {
     const qs = moduleQuestions(moduleId);
     const toSubmit = qs.filter(q => {
       const existing = getProgress(q.id);
-      const draft = answers[q.id]?.trim();
+      const draft = answers[q.id]?.trim() || recordings[q.id];
       return draft && (!existing || existing.status === 'rejected');
     });
 
     if (toSubmit.length === 0) {
-      setSubmitMsg(p => ({ ...p, [moduleId]: 'Please write your answers before submitting.' }));
+      setSubmitMsg(p => ({ ...p, [moduleId]: 'Please write or record your answers before submitting.' }));
       return;
     }
 
     setSubmitting(true);
     try {
-      const rows = toSubmit.map(q => ({
-        member_id: user.id, module_id: moduleId,
-        question_id: q.id, answer: answers[q.id].trim(), status: 'pending',
-      }));
+      // Voice / video answers (db/098) are uploaded first.
+      const rows = [];
+      for (const q of toSubmit) {
+        const media = recordings[q.id] ? await uploadAnswerMedia(user.id, recordings[q.id]) : { media_path: null, media_type: null };
+        rows.push({
+          member_id: user.id, module_id: moduleId,
+          question_id: q.id, answer: answers[q.id]?.trim() || null, status: 'pending', ...media,
+        });
+      }
 
       const { error } = await supabase
         .from('discipleship_progress')
@@ -150,8 +157,10 @@ export default function DiscipleshipPage() {
       setProgress(prog || []);
 
       const cleared = { ...answers };
-      toSubmit.forEach(q => delete cleared[q.id]);
+      const clearedRec = { ...recordings };
+      toSubmit.forEach(q => { delete cleared[q.id]; if (clearedRec[q.id]) URL.revokeObjectURL(clearedRec[q.id].url); delete clearedRec[q.id]; });
       setAnswers(cleared);
+      setRecordings(clearedRec);
       setSubmitMsg(p => ({ ...p, [moduleId]: '✓ Submitted! Your pastor will review your answers.' }));
     } catch (err) {
       console.error('Submit error:', err);
@@ -289,7 +298,8 @@ export default function DiscipleshipPage() {
                             <p className="font-bold mb-1 flex items-center gap-1.5">
                               <CheckCircle className="w-3 h-3" /> {style.label}
                             </p>
-                            <p className="text-white/60">{prog.answer}</p>
+                            {prog.answer && <p className="text-white/60">{prog.answer}</p>}
+                            {prog.media_path && <AnswerPlayback path={prog.media_path} type={prog.media_type} className="mt-2" />}
                             {prog.notes && (
                               <p className="mt-2 text-white/40 italic">Pastor&apos;s note: {prog.notes}</p>
                             )}
@@ -301,7 +311,8 @@ export default function DiscipleshipPage() {
                             <p className="font-bold mb-1 flex items-center gap-1.5">
                               <Clock className="w-3 h-3" /> {style.label}
                             </p>
-                            <p className="text-white/60">{prog.answer}</p>
+                            {prog.answer && <p className="text-white/60">{prog.answer}</p>}
+                            {prog.media_path && <AnswerPlayback path={prog.media_path} type={prog.media_type} className="mt-2" />}
                           </div>
                         )}
 
@@ -310,7 +321,7 @@ export default function DiscipleshipPage() {
                             {st === 'rejected' && (
                               <div className={`p-3 rounded-2xl border text-xs ${style.cls}`}>
                                 <p className="font-bold mb-1">Needs Revision</p>
-                                <p className="text-white/60">Your previous answer: {prog.answer}</p>
+                                <p className="text-white/60">Your previous answer: {prog.answer || (prog.media_path ? `(${prog.media_type} recording)` : '')}</p>
                                 {prog.notes && (
                                   <p className="mt-1 text-white/40 italic">Pastor&apos;s note: {prog.notes}</p>
                                 )}
@@ -323,6 +334,8 @@ export default function DiscipleshipPage() {
                               onChange={(e) => setAnswers(p => ({ ...p, [q.id]: e.target.value }))}
                               className="w-full bg-[#111815] border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 resize-none transition-colors"
                             />
+                            <AnswerRecorder draft={recordings[q.id] || null}
+                              onChange={(d) => setRecordings(p => { const n = { ...p }; if (d) n[q.id] = d; else delete n[q.id]; return n; })} />
                             {/* Where to read for this question — not the answer itself */}
                             <RelatedReading
                               moduleId={mod.id}

@@ -20,6 +20,7 @@ import { fetchAll } from "@/app/lib/fetchAll";
 import { friendlyError } from '@/app/lib/errors';
 import { peso, pesoPdf } from "@/app/lib/format";
 import { baseTheme } from '@/app/lib/theme';
+import MeetingMinutes, { loadMinutes } from '@/app/components/MeetingMinutes';
 // Event statuses in order, for the "Events by Status" section shown to
 // levels without finance access.
 const EVENT_STATUSES = [
@@ -269,7 +270,7 @@ export default function ReportsPage() {
       );
     }
     try {
-      const [{ jsPDF }, autoTableMod, joinRes, attRes, logo] = await Promise.all([
+      const [{ jsPDF }, autoTableMod, joinRes, attRes, minutesRes, logo] = await Promise.all([
         import('jspdf'),
         import('jspdf-autotable'),
         financeOnly ? Promise.resolve({ data: [] })
@@ -277,6 +278,7 @@ export default function ReportsPage() {
         can(role, 'attendance') && !financeOnly
           ? supabase.rpc('attendance_events', { p_church: church })
           : Promise.resolve({ data: [] }),
+        can(role, 'minutes') ? loadMinutes(church, 5) : Promise.resolve({ data: [] }),
         fetch('/logo.png')
           .then((r) => (r.ok ? r.blob() : null))
           .then((b) => b && new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(null); fr.readAsDataURL(b); }))
@@ -463,6 +465,21 @@ export default function ReportsPage() {
             `${e.active_members ? Math.min(100, Math.round((e.members_present / e.active_members) * 100)) : 0}%`,
           ]),
           { 2: right, 3: right, 4: right },
+        );
+      }
+
+      // ── Minutes of meetings (db/095): the latest five ──────────────
+      const minutes = minutesRes.error ? [] : minutesRes.data || [];
+      if (minutes.length) {
+        section('Minutes of Meetings', 'The latest meetings');
+        table(
+          ['Date', 'Meeting', 'Summary and decisions'],
+          minutes.map((m) => [
+            fmtDate(m.meeting_date),
+            m.title,
+            [m.summary, m.decisions && `Decided: ${m.decisions}`].filter(Boolean).join(' — ').slice(0, 900),
+          ]),
+          { 0: { cellWidth: 70 }, 1: { cellWidth: 110 } },
         );
       }
 
@@ -782,6 +799,12 @@ export default function ReportsPage() {
 
       {can(role, 'attendance') && <EventAttendanceReport t={t} dark={dark} reloadKey={reloadKey} church={church} canTake={can(role, 'attendance', 'edit')} />}
       </>)}
+
+      {can(role, 'minutes') && (
+        <MeetingMinutes t={t} dark={dark} church={church} reloadKey={reloadKey}
+          canEdit={can(role, 'minutes', 'edit')}
+          branchName={isGlobal && churches.length > 1 ? (id) => churches.find((c) => c.id === id)?.name || '' : null} />
+      )}
 
       {/* Finance last (finance levels only): monthly chart, summary and
           recent transactions, after the church-life sections. */}

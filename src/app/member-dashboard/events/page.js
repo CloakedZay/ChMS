@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { Search, CalendarDays, Clock, MapPin, Repeat, LayoutGrid, X, Video } from 'lucide-react';
+import { Search, CalendarDays, Clock, MapPin, Repeat, LayoutGrid, X, Video, ImageIcon } from 'lucide-react';
 import { formatEventTime } from '@/app/lib/eventTime';
 import { phToday } from '@/app/lib/phDate';
 import { groupSeries, seriesLabel } from '@/app/lib/eventSeries';
 import BranchLabel from '@/app/components/BranchLabel';
 import EventCalendar, { eventStatusLabel } from '@/app/components/EventCalendar';
+import EventPhotos from '@/app/components/EventPhotos';
 
 import Pagination, { usePaged } from '@/app/components/Pagination';
 import { useDialog } from '@/app/lib/useDialog';
@@ -284,6 +285,12 @@ export default function MemberEventsPage() {
                     <Video size={12} className="shrink-0" /> Join online
                   </a>
                 )}
+                {past && ev.status !== 'cancelled' && (
+                  <button type="button" onClick={() => setOpenId(ev.id)}
+                    className="relative z-10 flex items-center gap-1.5 text-xs font-semibold text-blue-400 hover:underline mt-1">
+                    <ImageIcon size={12} className="shrink-0" /> Photos
+                  </button>
+                )}
                 {ev.status === 'cancelled' && (
                   <p className="text-xs mt-2 rounded-xl px-3 py-2 bg-red-500/10 border border-red-500/20 text-white/70">
                     <span className="font-bold text-red-400">Cancelled{ev.cancel_note ? ':' : ''}</span> {ev.cancel_note}
@@ -309,7 +316,7 @@ export default function MemberEventsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onMouseDown={(e) => { if (e.target === e.currentTarget) setOpenId(null); }}>
           <div ref={openedDialogRef} role="dialog" aria-modal="true" aria-label={opened.title}
-            className="w-full max-w-md bg-[#1b2420] border border-white/10 rounded-3xl p-6 shadow-2xl">
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-[#1b2420] border border-white/10 rounded-3xl p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${STATUS_COLORS[opened.status] || STATUS_COLORS.approved}`}>
                 {opened.status}
@@ -333,6 +340,7 @@ export default function MemberEventsPage() {
               </p>
             )}
             {opened.description && <p className="text-sm text-white/60 leading-relaxed mt-3 whitespace-pre-wrap">{opened.description}</p>}
+            {opened.status !== 'cancelled' && opened.date && opened.date <= phToday() && <EventPhotos eventId={opened.id} canAdd={false} />}
           </div>
         </div>
       )}

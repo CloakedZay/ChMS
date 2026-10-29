@@ -18,6 +18,7 @@ import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 import { friendlyError } from '@/app/lib/errors';
 import { baseTheme } from '@/app/lib/theme';
 import { useDialog } from '@/app/lib/useDialog';
+import { AnswerPlayback } from '@/app/components/AnswerMedia';
 import {
   useTrainingFollowUp, notifyTrainingFollowUpChanged, NEVER_STARTED_DAYS, STALLED_DAYS,
 } from '@/app/lib/useTrainingFollowUp';
@@ -699,7 +700,8 @@ export default function TrainingPage() {
                                           {sub.discipleship_questions?.question || "—"}
                                         </p>
                                         <div className={`${dark ? "bg-[#111815]" : "bg-slate-200"} border ${t.innerDivider} rounded-xl px-4 py-3`}>
-                                          <p className={`text-sm ${t.textPrimary} leading-relaxed`}>{sub.answer}</p>
+                                          {sub.answer && <p className={`text-sm ${t.textPrimary} leading-relaxed`}>{sub.answer}</p>}
+                                          {sub.media_path && <AnswerPlayback path={sub.media_path} type={sub.media_type} className={sub.answer ? "mt-2" : ""} />}
                                           <p className={`text-[10px] ${t.textMuted} mt-2`}>
                                             Submitted {sub.created_at ? new Date(sub.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                                           </p>

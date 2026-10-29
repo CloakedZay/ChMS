@@ -14,11 +14,12 @@ import Pagination, { usePaged } from '@/app/components/Pagination';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 import { friendlyError } from '@/app/lib/errors';
 import { useDialog } from '@/app/lib/useDialog';
+import { authFetch } from '@/app/lib/authFetch';
 // Announcements (db/031, db/038, db/091). Only the Secretary posts, to
 // their own branch, and can aim one at a single ministry's members. Everyone else who opens this page can only read. The database
 // enforces the same rules.
 
-const EMPTY = { title: '', body: '', church_id: '', ministry_id: '', is_pinned: false, expires_on: '' };
+const EMPTY = { title: '', body: '', church_id: '', ministry_id: '', is_pinned: false, expires_on: '', send_sms: false };
 
 export default function AnnouncementsPage() {
   const { user, role } = useAuth();
@@ -88,7 +89,7 @@ export default function AnnouncementsPage() {
     setEditing({});
   }
   function openEdit(a) {
-    setForm({ title: a.title, body: a.body || '', church_id: a.church_id || '', ministry_id: a.ministry_id || '', is_pinned: a.is_pinned, expires_on: a.expires_on || '' });
+    setForm({ title: a.title, body: a.body || '', church_id: a.church_id || '', ministry_id: a.ministry_id || '', is_pinned: a.is_pinned, expires_on: a.expires_on || '', send_sms: false });
     setFormError('');
     setEditing(a);
   }
@@ -113,13 +114,29 @@ export default function AnnouncementsPage() {
     };
     setSaving(true);
     setFormError('');
-    const { error } = editing?.id
-      ? await supabase.from('announcements').update(row).eq('id', editing.id)
-      : await supabase.from('announcements').insert([row]);
+    const { data: saved, error } = editing?.id
+      ? await supabase.from('announcements').update(row).eq('id', editing.id).select('id').single()
+      : await supabase.from('announcements').insert([row]).select('id').single();
+    if (error) { setSaving(false); setFormError(friendlyError(error)); return; }
+    // Also as a text message to the members (db/096, Twilio).
+    let smsNote = '';
+    if (form.send_sms && saved?.id) {
+      try {
+        const res = await authFetch('/api/sms/announcement', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ announcement_id: saved.id }),
+        });
+        const json = await res.json();
+        smsNote = res.ok
+          ? `Texted to ${json.sent} member${json.sent === 1 ? '' : 's'}${json.failed ? `; ${json.failed} could not be sent` : ''}${json.skipped ? `; ${json.skipped} already had it` : ''}.`
+          : json.error || 'The text messages could not be sent.';
+      } catch (err) {
+        smsNote = 'The text messages could not be sent: ' + friendlyError(err);
+      }
+    }
     setSaving(false);
-    if (error) { setFormError(friendlyError(error)); return; }
     setEditing(null);
     load();
+    if (smsNote) alertDialog(smsNote);
   }
 
   async function togglePin(a) {
@@ -265,6 +282,12 @@ export default function AnnouncementsPage() {
               <label className={`flex items-center gap-2.5 text-sm cursor-pointer w-fit ${t.sub}`}>
                 <input type="checkbox" name="is_pinned" checked={form.is_pinned} onChange={change} className="w-4 h-4 accent-[#c5a66a]" />
                 Pin to the top
+              </label>
+              <label className={`flex items-start gap-2.5 text-sm cursor-pointer w-fit ${t.sub}`}>
+                <input type="checkbox" name="send_sms" checked={form.send_sms} onChange={change} className="w-4 h-4 mt-0.5 accent-[#c5a66a]" />
+                <span>Also send as a text message (SMS)
+                  <span className="block text-[11px] opacity-80">To every {form.ministry_id ? 'member of that ministry' : 'member of the branch'} with a mobile number who hasn&apos;t turned texts off. Each person gets it once.</span>
+                </span>
               </label>
 
               {formError && <p className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3">{formError}</p>}

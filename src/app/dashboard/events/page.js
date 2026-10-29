@@ -9,7 +9,7 @@ import { can } from "@/app/lib/permissions";
 import { notifyEventsChanged } from "@/app/lib/useEventNotices";
 import {
   Calendar, Plus, Search, MoreHorizontal,
-  X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, MapPin, Repeat, ArrowLeft, Ban, RotateCcw, LayoutGrid, Video
+  X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, MapPin, Repeat, ArrowLeft, Ban, RotateCcw, LayoutGrid, Video, ImageIcon
 } from "lucide-react";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
@@ -18,6 +18,7 @@ import TimePicker from "@/app/components/TimePicker";
 import { weeklyDates, lastSeriesDate, weekdayOf, groupSeries, seriesLabel, MAX_SERIES_DATES } from "@/app/lib/eventSeries";
 import BranchLabel from "@/app/components/BranchLabel";
 import EventCalendar, { EVENT_STATUS_LABEL, eventStatusLabel } from "@/app/components/EventCalendar";
+import EventPhotos from "@/app/components/EventPhotos";
 
 import Pagination, { usePaged } from "@/app/components/Pagination";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
@@ -113,6 +114,8 @@ export default function EventsPage() {
   // give a past date.
   const canManageAll = can(role, 'events', 'approve');
   const canSeeAttendance = can(role, 'attendance', 'view');   // db/041
+  // Photos of the gathering (db/094): Pastor, Secretary and Leaders add them.
+  const canAddPhotos = ['pastor', 'secretary', 'leader'].includes(role);
   // Only the Secretary takes it; the Pastor and Leaders just view (db/081).
   const attendanceLabel  = can(role, 'attendance', 'edit') ? 'Take attendance' : 'View attendance';
 
@@ -369,6 +372,9 @@ export default function EventsPage() {
       onCancel: wrap(canManageAll && event.status === 'approved' ? (ev) => { setCancelFor(ev); setCancelNote(''); } : null),
       onRestore: wrap(canManageAll && event.status === 'cancelled' ? restore : null),
       byline: whoLine(event),
+      inModal,
+      canAddPhotos,
+      onPhotos: inModal ? null : () => setSelectedId(event.id),
       t, dark,
     };
   }
@@ -687,13 +693,15 @@ function inputStyle(t) {
 }
 
 
-function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel, onRestore, byline, attendance, t, dark }) {
+function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel, onRestore, byline, attendance, inModal, canAddPhotos, onPhotos, t, dark }) {
   const [menuOpen, setMenuOpen] = useState(false);
   // Anything not Done or Cancelled shows as Upcoming (db/085).
   const phase = ['done', 'cancelled'].includes(event.status) ? event.status : 'approved';
   const cancelled = phase === 'cancelled';
   // Attendance opens on the event's date (Philippine time).
   const showAttendance = attendance && !cancelled && event.date && event.date <= phToday();
+  // Photos once the gathering has happened (db/094).
+  const happened = !cancelled && event.date && event.date <= phToday();
 
   return (
     <div className={`${t.cardBg} border ${t.cardBorder} p-6 rounded-3xl backdrop-blur-sm hover:border-blue-500/40 transition-all group relative`}>
@@ -758,7 +766,16 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
           </p>
         )}
         {byline && <p className={`text-[11px] ${t.textMuted}`}>{byline}</p>}
+        {happened && onPhotos && (
+          <button type="button" onClick={onPhotos} className={`flex items-center gap-2 text-xs font-semibold ${A(dark, 'blue')} hover:underline`}>
+            <ImageIcon size={13} className="shrink-0" /> Photos
+          </button>
+        )}
       </div>
+
+      {happened && inModal && (
+        <div className="mb-4"><EventPhotos eventId={event.id} canAdd={canAddPhotos} dark={dark} /></div>
+      )}
 
       {/* The status is on the badge at the top; this footer only has the
           attendance button, or why there's none. */}

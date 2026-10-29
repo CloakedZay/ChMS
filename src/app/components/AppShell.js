@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useStoredValue } from '@/app/lib/useStoredValue';
+import { supabase } from '@/app/lib/supabase';
+import { avatarUrl } from '@/app/lib/avatar';
 import {
   LogOut, Menu, PanelLeftClose, PanelLeftOpen, ChevronRight,
   ChevronDown, Sun, Moon, X,
@@ -54,6 +56,16 @@ export default function AppShell({
   const allLinks = groups.flatMap((g) => g.links);
   const current = allLinks.find((l) => l.href === pathname);
   const initials = user?.email ? user.email.slice(0, 2).toUpperCase() : '··';
+  // Profile photo (db/097), refreshed when it's changed on My Profile.
+  const [avatar, setAvatar] = useState(null);
+  useEffect(() => {
+    if (!user) return;
+    const load = () => supabase.from('profiles').select('avatar_path').eq('id', user.id).single()
+      .then(({ data }) => setAvatar(avatarUrl(data?.avatar_path)));
+    load();
+    window.addEventListener('faithsync-avatar', load);
+    return () => window.removeEventListener('faithsync-avatar', load);
+  }, [user]);
 
   // On desktop the labels hide when collapsed; in the phone drawer they always show.
   const label = collapsed ? 'lg:hidden' : '';
@@ -209,9 +221,14 @@ export default function AppShell({
                 aria-expanded={userMenu}
                 className={`flex items-center gap-2.5 h-10 pl-1.5 pr-2.5 rounded-full border ${iconBtn}`}
               >
-                <span className="w-7 h-7 rounded-full bg-[#173f35] text-[#c5a66a] text-[11px] font-bold flex items-center justify-center">
-                  {initials}
-                </span>
+                {avatar
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
+                  : (
+                    <span className="w-7 h-7 rounded-full bg-[#173f35] text-[#c5a66a] text-[11px] font-bold flex items-center justify-center">
+                      {initials}
+                    </span>
+                  )}
                 <span className="hidden sm:block text-left leading-tight max-w-[10rem]">
                   <span className={`block text-xs font-semibold truncate ${topText}`}>{roleLabel}</span>
                   <span className={`block text-[10px] truncate ${topMuted}`}>{subLabel}</span>

@@ -8,6 +8,7 @@ import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
 import { friendlyError } from '@/app/lib/errors';
 import { cleanPhone, PHONE_HINT } from '@/app/lib/format';
+import { shrinkPhoto } from '@/app/lib/shrinkPhoto';
 // The attendance sheet of one event (db/041). People sign a paper sheet at
 // the event; afterwards the Secretary or a helper ticks the members on it
 // (the branch's whole member list is already here) and types in only the
@@ -396,23 +397,6 @@ function VisitorsBox({ t, eventId, canMark, visitors, onChange }) {
 // Photos of the paper sign-in sheet (db/060): attached by whoever takes
 // attendance, seen by whoever can see it. Kept 6 months after the event.
 const SHEET_BUCKET = 'attendance-sheets';
-const MAX_SIDE = 2000;   // phone photos are shrunk to this many pixels on the long side
-
-// A phone photo is often 4–8 MB; a smaller JPEG is still easy to read.
-async function shrinkPhoto(file) {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise((done) => canvas.toBlob(done, 'image/jpeg', 0.82));
-    return blob && blob.size < file.size ? blob : file;
-  } catch {
-    return file;   // a format the browser can't draw: upload as it is
-  }
-}
 
 function SheetPhotos({ t, dark, eventId, canMark }) {
   const [photos, setPhotos] = useState(null);   // with .url (signed)

@@ -7,7 +7,8 @@ import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import { authFetch } from "@/app/lib/authFetch";
 import MemberImport from "@/app/components/MemberImport";
-import { FileSpreadsheet, UserPlus, MoreVertical, X, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink, ClipboardCheck } from "lucide-react";
+import JoinRequests from "@/app/components/JoinRequests";
+import { FileSpreadsheet, UserPlus, MoreVertical, X, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Mail, Copy, Check, Link2, Unlink, ClipboardCheck } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import { levelBadge } from "@/app/lib/roleColors";
 
@@ -361,6 +362,32 @@ export default function MembersPage() {
     }
   }
 
+  // Invite by email (api/members/invite): the member gets an email with a
+  // one-click Google sign-in and a link to choose a password.
+  async function handleInvite(member) {
+    if (!await confirmDialog({
+      title: 'Invite by email',
+      message: `Send ${member.full_name} an invitation at ${member.email}? Their login uses that email; they choose their own password, or tap "Sign in with Google" if it's a Gmail.`,
+      confirmText: 'Send invitation',
+    })) return;
+    setCreatingLoginId(member.id);
+    try {
+      const res = await authFetch('/api/members/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member_id: member.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alertDialog(data.error || 'Could not send the invitation.'); return; }
+      alertDialog(data.sent ? `Invitation sent to ${data.email}.` : data.error);
+      await fetchMembers();
+    } catch (err) {
+      alertDialog('Could not send the invitation: ' + friendlyError(err));
+    } finally {
+      setCreatingLoginId(null);
+    }
+  }
+
   async function copyNewLogin() {
     if (!newLogin) return;
     try {
@@ -519,6 +546,9 @@ export default function MembersPage() {
         ))}
       </div>
 
+      {/* "Ask to join" requests (db/093) */}
+      {canEdit && <JoinRequests t={t} branchName={branchName} showBranch={isGlobal && churches.length > 1} onApproved={fetchMembers} />}
+
       {/* Search + Filter Bar */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1">
@@ -627,8 +657,17 @@ export default function MembersPage() {
                             disabled={creatingLoginId === member.id}
                             className="flex items-center gap-1.5 text-xs font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
                           >
-                            <KeyRound size={12} /> {creatingLoginId === member.id ? 'Creating...' : 'Create login'}
+                            <KeyRound size={12} /> {creatingLoginId === member.id ? 'Working...' : 'Create login'}
                           </button>
+                          {member.email && !member.email.endsWith('@members.faithsync.app') && (
+                            <button
+                              onClick={() => handleInvite(member)}
+                              disabled={creatingLoginId === member.id}
+                              className={`flex items-center gap-1 text-[11px] font-semibold ${t.textSub} hover:text-blue-400 transition-colors whitespace-nowrap disabled:opacity-50`}
+                            >
+                              <Mail size={11} /> or invite by email
+                            </button>
+                          )}
                           <button
                             onClick={() => openLinkExisting(member)}
                             className={`flex items-center gap-1 text-[11px] font-semibold ${t.textSub} hover:text-blue-400 transition-colors whitespace-nowrap`}

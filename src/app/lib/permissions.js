@@ -93,6 +93,9 @@ export const PERMISSIONS = {
   receipts:           { pastor: 'view', leader: 'view', finance: 'edit' },
   financeReports:     { pastor: 'view', leader: 'view', finance: 'view' },
 
+  // Minutes of meetings on Reports (db/095): the Secretary writes them.
+  minutes:            { admin: 'view', pastor: 'view', leader: 'view', secretary: 'edit' },
+
   // Reports — every level gets reports, each scoped to what they can see.
   reports:            { admin: 'view', pastor: 'view', leader: 'view', finance: 'view', secretary: 'view', member: 'own' },
 }

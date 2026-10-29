@@ -6,6 +6,7 @@ import { supabase } from '@/app/lib/supabase';
 import { useTheme } from '@/app/context/ThemeContext';
 import { ROLE_LABELS } from '@/app/lib/permissions';
 import { levelBadge } from '@/app/lib/roleColors';
+import { avatarUrl } from '@/app/lib/avatar';
 
 // A person's profile (db/061): name, level, branch and ministries — only
 // for people you can message, and nothing private (no phone, email,
@@ -22,11 +23,15 @@ const initials = (name) =>
 export default function PersonProfile({ personId, onMessage, onClose }) {
   const { dark } = useTheme();
   const [person, setPerson] = useState(undefined);   // undefined = loading, null = not available
+  const [extras, setExtras] = useState(null);         // photo and About me (db/097)
 
   useEffect(() => {
     let gone = false;
     supabase.rpc('person_profile', { p_id: personId }).then(({ data }) => {
       if (!gone) setPerson(data?.[0] || null);
+    });
+    supabase.rpc('person_extras', { p_id: personId }).then(({ data }) => {
+      if (!gone) setExtras(data?.[0] || null);
     });
     return () => { gone = true; };
   }, [personId]);
@@ -64,9 +69,14 @@ export default function PersonProfile({ personId, onMessage, onClose }) {
         ) : (
           <div className="flex-1 overflow-y-auto px-6 pb-6">
             <div className="flex flex-col items-center text-center">
-              <span className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-black ${t.avatar}`}>
-                {initials(person.display_name)}
-              </span>
+              {extras?.avatar_path
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={avatarUrl(extras.avatar_path)} alt="" className="w-20 h-20 rounded-full object-cover" />
+                : (
+                  <span className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl font-black ${t.avatar}`}>
+                    {initials(person.display_name)}
+                  </span>
+                )}
               <h2 className={`mt-3 text-xl font-black ${t.text}`}>{person.display_name}</h2>
               <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
                 {person.contact_role && (
@@ -79,6 +89,10 @@ export default function PersonProfile({ personId, onMessage, onClose }) {
                 )}
               </div>
             </div>
+
+            {extras?.bio && (
+              <p className={`mt-4 text-sm text-center whitespace-pre-wrap leading-relaxed ${t.sub}`}>{extras.bio}</p>
+            )}
 
             <div className="mt-6">
               <p className={`text-[10px] uppercase tracking-widest font-bold mb-2 flex items-center gap-1.5 ${t.muted}`}><Users size={12} /> Ministries</p>

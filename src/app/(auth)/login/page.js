@@ -53,7 +53,7 @@ export default function LoginPage() {
       const back = new URLSearchParams(window.location.hash.slice(1)).get('error_description')
         || new URLSearchParams(window.location.search).get('error_description');
       if (back) setError(/signups not allowed/i.test(back)
-        ? 'That Google account is not linked to a FaithSync login. Sign in with your username and password, then link Google on the Password & Google page.'
+        ? 'That Google account is not linked to a FaithSync login yet. New here? Use "Ask to join" below. Already a member? Sign in with your username and password, then link Google on the Password & Google page.'
         : `Google sign-in didn't work: ${back}`);
 
       // Signed out because the account was disabled? Say so.
@@ -262,6 +262,9 @@ export default function LoginPage() {
               </svg>
               Sign in with Google
             </button>
+            <p className={`text-center text-xs pt-1 ${textSub}`}>
+              New here? <Link href="/join" className="font-semibold text-blue-500 hover:underline">Ask to join</Link>
+            </p>
           </div>
 
           <p className={`mt-6 text-center text-[10px] ${dark ? 'text-white/20' : 'text-slate-400'} leading-relaxed`}>

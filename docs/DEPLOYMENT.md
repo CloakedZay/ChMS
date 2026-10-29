@@ -74,6 +74,10 @@ SMTP_PASS=abcdefghijklmnop                                   # its app password 
 NEXT_PUBLIC_SITE_URL=https://faithsync.vercel.app            # optional: the app's address for reset links (default: the address the request came to)
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x4AAAA...                    # optional: "Verify you are human" check (step 5); public
 TURNSTILE_SECRET_KEY=0x4AAAA...                              # its secret key (secret); set both or neither
+TWILIO_ACCOUNT_SID=AC...                                     # optional: text messages (db/096, step 5)
+TWILIO_AUTH_TOKEN=...                                        # its auth token (secret)
+TWILIO_FROM=+1...                                            # the Twilio number or approved sender name (or TWILIO_MESSAGING_SERVICE_SID=MG...)
+CRON_SECRET=a-long-random-string                             # protects the daily event-reminder job (Vercel sends it)
 ```
 
    The `NEXT_PUBLIC_` values are built into the app, so after changing them restart `npm run dev` or build again.
@@ -103,12 +107,14 @@ npm run dev        # http://localhost:3000
   3. In **Authentication → Rate Limits**, raise **emails per hour** (for example 30). Gmail sends up to about 500 emails a day.
   4. In **Authentication → Emails → Templates → Reauthentication**, keep `{{ .Token }}` in the message: that is the 6-digit code.
 - **Forgot password** (db/080): put the same Gmail address and app password in `SMTP_USER` / `SMTP_PASS` (step 4, and Vercel). The app sends recovery-email codes and reset links itself, because most logins are made-up usernames that Supabase can't email. Members add a recovery email on **Password & Google** (or Profile); then "Forgot password?" on the sign-in page emails them a reset link. Without a recovery email they still ask the Admin.
+- **Invitations and "Ask to join"** (db/093): with `SMTP_USER` / `SMTP_PASS` set, **Invite by email** on the Members page emails the person a link to choose a password. A Gmail address can instead tap **Sign in with Google** at once: Supabase joins the Google account to the login with the same email (automatic linking, on by default). People can also ask to join from the sign-in page (`/join`); the branch's Secretary approves on the Members page. Keep **Allow new users to sign up** off: every login is still made by the church.
+- **Text messages (SMS)** (db/096, optional): create a Twilio account (<https://www.twilio.com>), buy or register a sender that can text Philippine numbers (+63), and put `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `TWILIO_FROM` (or `TWILIO_MESSAGING_SERVICE_SID`) in `.env.local` and Vercel. Then the Secretary can tick **Also send as a text message** on an announcement, and every morning at 8:00 (Manila) `vercel.json` runs `/api/sms/event-reminders`, which texts each branch's members about tomorrow's events. Set `CRON_SECRET` too, or the reminder job refuses to run. Members with a login can turn texts off on My Profile. Each text costs Twilio credit.
 - **Password-change code**: after email sending works, turn on **Secure password change** (Authentication → Providers → Email), so the server itself refuses a password change without a recent sign-in or code. Then add `NEXT_PUBLIC_PASSWORD_EMAIL_CODE=on` to `.env.local` (and Vercel) and restart / redeploy. From then on, changing a password asks for the current password and then a code sent to the person's email. Not asked: the first sign-in with a temporary password, and logins with a made-up username (`…@members.faithsync.app`, no real email), which keep the current-password check.
 
 ## 6. Put it online (Vercel)
 
 1. Push the project to GitHub and **Import** it in Vercel (framework: Next.js; the defaults are right).
-2. In **Settings → Environment Variables**, add the same values as `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and `ASSISTANT_DAILY_LIMIT`, `NEXT_PUBLIC_PASSWORD_EMAIL_CODE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` if wanted).
+2. In **Settings → Environment Variables**, add the same values as `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (and `ASSISTANT_DAILY_LIMIT`, `NEXT_PUBLIC_PASSWORD_EMAIL_CODE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `CRON_SECRET` if wanted).
 3. Deploy. Every push to the main branch deploys again.
 4. Put the Vercel address in Supabase's Site URL / Redirect URLs (step 5).
 
