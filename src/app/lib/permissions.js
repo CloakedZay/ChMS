@@ -53,7 +53,10 @@ export const PERMISSIONS = {
   ministryEnrollment: { pastor: 'edit', leader: 'edit', secretary: 'view' },
 
   // Discipleship and AI assistant
-  modules:            { admin: 'view', pastor: 'edit', leader: 'edit', member: 'view' },
+  modules:            { admin: 'view', pastor: 'edit', leader: 'edit', secretary: 'view', member: 'view' },
+  // Handout files: the Pastor and Leaders hand them over, the Secretary
+  // uploads them (db/092).
+  handouts:           { admin: 'view', pastor: 'view', leader: 'view', secretary: 'edit', member: 'view' },
   moduleProgress:     { admin: 'view', pastor: 'view', leader: 'view', member: 'own' },
   // Approving / rejecting answers is the Pastor's (db/089); Leaders see them.
   answerReview:       { pastor: 'approve', leader: 'view', member: 'own' },
@@ -75,7 +78,8 @@ export const PERMISSIONS = {
   // Pastor or Secretary make "attendance helpers" also take it — checked by
   // the database.
   attendance:         { admin: 'view', pastor: 'view', leader: 'view', finance: 'view', secretary: 'edit', member: 'own' },
-  announcements:      { admin: 'view', pastor: 'edit', leader: 'edit', finance: 'view', secretary: 'view', member: 'view' },
+  // Announcements: only the Secretary posts, own branch (db/091).
+  announcements:      { admin: 'view', pastor: 'view', leader: 'view', finance: 'view', secretary: 'edit', member: 'view' },
   bibleVerses:        { admin: 'view', pastor: 'edit', leader: 'edit', member: 'view' },
 
   // Devotional journal — private to each person: everyone writes their own,

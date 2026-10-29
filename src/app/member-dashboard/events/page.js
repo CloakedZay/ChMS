@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { Search, CalendarDays, Clock, MapPin, Repeat, LayoutGrid, X } from 'lucide-react';
+import { Search, CalendarDays, Clock, MapPin, Repeat, LayoutGrid, X, Video } from 'lucide-react';
 import { formatEventTime } from '@/app/lib/eventTime';
 import { phToday } from '@/app/lib/phDate';
 import { groupSeries, seriesLabel } from '@/app/lib/eventSeries';
@@ -60,6 +60,7 @@ export default function MemberEventsPage() {
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [ministryFilter, setMinistryFilter] = useState('all');
+  const [archive, setArchive]     = useState(false);     // cancelled events only
   const [view, setView]           = useState('cards');   // or 'calendar'; remembered on this browser
   const [openId, setOpenId]       = useState(null);      // event opened from the calendar
 
@@ -99,7 +100,8 @@ export default function MemberEventsPage() {
   const matching = events.filter((ev) => {
     const term = search.toLowerCase();
     const matchesText = ev.title?.toLowerCase().includes(term) || ev.ministry?.toLowerCase().includes(term);
-    return matchesText && (ministryFilter === 'all' || ev.ministry === ministryFilter);
+    // Cancelled events sit in the Archive, out of the normal list.
+    return matchesText && (ministryFilter === 'all' || ev.ministry === ministryFilter) && (ev.status === 'cancelled') === archive;
   });
   // A weekly event (db/049) is one card: its next date. The calendar shows every date.
   const filtered = groupSeries(matching, today)
@@ -151,7 +153,11 @@ export default function MemberEventsPage() {
           className="w-full bg-[#1b2420] border border-white/10 rounded-xl py-2 pl-9 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 transition-colors"
         />
       </div>
-        <div className="flex gap-1 p-1 rounded-xl border border-white/10 bg-[#1b2420] self-start sm:ml-auto" role="tablist" aria-label="View">
+        <button type="button" onClick={() => setArchive((a) => !a)} aria-pressed={archive}
+          className={`self-start sm:ml-auto h-9 px-3 rounded-xl border text-xs font-bold ${archive ? 'bg-blue-600 border-blue-600 text-white' : 'border-white/10 bg-[#1b2420] text-white/60 hover:text-white'}`}>
+          {archive ? 'Back to events' : `Archive (${events.filter((e) => e.status === 'cancelled').length})`}
+        </button>
+        <div className="flex gap-1 p-1 rounded-xl border border-white/10 bg-[#1b2420] self-start" role="tablist" aria-label="View">
           {[['cards', 'Cards', LayoutGrid], ['calendar', 'Calendar', CalendarDays]].map(([key, label, Icon]) => (
             <button key={key} role="tab" aria-selected={view === key} onClick={() => switchView(key)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${view === key ? 'bg-blue-600 text-white' : 'text-white/50 hover:text-white'}`}>
@@ -272,6 +278,12 @@ export default function MemberEventsPage() {
                     <MapPin size={12} className="shrink-0 mt-px" /> {ev.venue}
                   </p>
                 )}
+                {ev.meeting_link && ev.status !== 'cancelled' && (
+                  <a href={ev.meeting_link} target="_blank" rel="noopener noreferrer"
+                    className="relative z-10 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400 hover:underline mt-1">
+                    <Video size={12} className="shrink-0" /> Join online
+                  </a>
+                )}
                 {ev.status === 'cancelled' && (
                   <p className="text-xs mt-2 rounded-xl px-3 py-2 bg-red-500/10 border border-red-500/20 text-white/70">
                     <span className="font-bold text-red-400">Cancelled{ev.cancel_note ? ':' : ''}</span> {ev.cancel_note}
@@ -310,6 +322,10 @@ export default function MemberEventsPage() {
               <CalendarDays size={14} className="shrink-0" /> {formatDate(opened.date)}{opened.start_time && ` · ${formatEventTime(opened.start_time)}`}
             </p>
             {opened.venue && <p className="text-sm text-white/70 mt-1.5 flex items-center gap-2"><MapPin size={14} className="shrink-0" /> {opened.venue}</p>}
+            {opened.meeting_link && opened.status !== 'cancelled' && (
+              <a href={opened.meeting_link} target="_blank" rel="noopener noreferrer"
+                className="text-sm text-blue-400 font-semibold mt-1.5 flex items-center gap-2 hover:underline"><Video size={14} className="shrink-0" /> Join online</a>
+            )}
             {opened.series && <p className="text-sm text-white/70 mt-1.5 flex items-center gap-2"><Repeat size={14} className="shrink-0" /> {seriesLabel(opened)}</p>}
             {opened.status === 'cancelled' && (
               <p className="text-xs mt-3 rounded-xl px-3 py-2 bg-red-500/10 border border-red-500/20 text-white/70">

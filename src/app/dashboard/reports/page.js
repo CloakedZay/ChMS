@@ -72,6 +72,8 @@ export default function ReportsPage() {
   // Finance). Admin and Secretary get member and event figures instead —
   // the database wouldn't return finance rows to them anyway.
   const showFinance = can(role, 'financeReports');
+  // The Finance level sees finance only — no member, event or attendance figures.
+  const financeOnly = role === 'finance';
   // Admin and Pastor see every branch, together or one at a time; everyone
   // else only ever gets their own branch from the database.
   const isGlobal = GLOBAL_ROLES.includes(role);
@@ -270,8 +272,9 @@ export default function ReportsPage() {
       const [{ jsPDF }, autoTableMod, joinRes, attRes, logo] = await Promise.all([
         import('jspdf'),
         import('jspdf-autotable'),
-        supabase.rpc('member_join_trend', church ? { p_months: 12, p_church: church } : { p_months: 12 }),
-        can(role, 'attendance')
+        financeOnly ? Promise.resolve({ data: [] })
+          : supabase.rpc('member_join_trend', church ? { p_months: 12, p_church: church } : { p_months: 12 }),
+        can(role, 'attendance') && !financeOnly
           ? supabase.rpc('attendance_events', { p_church: church })
           : Promise.resolve({ data: [] }),
         fetch('/logo.png')
@@ -407,6 +410,7 @@ export default function ReportsPage() {
       const right = { halign: 'right' };
 
       // ── Membership ────────────────────────────────────────────────
+      if (!financeOnly) {
       section('Membership', `${totalMembers} members · ${activeMembers} active · ${inactiveMembers} inactive`);
       table(
         ['Ministry', 'Members', '% of members'],
@@ -438,6 +442,7 @@ export default function ReportsPage() {
         EVENT_STATUSES.map((st) => [st.label, String(eventsByStatus[st.key] || 0)]),
         { 1: right },
       );
+      }
 
       // ── Attendance ────────────────────────────────────────────────
       const taken = (attRes.data || []).filter((e) => e.members_present + e.visitors > 0);
@@ -616,6 +621,15 @@ export default function ReportsPage() {
             color: A(dark, "emerald"),
           },
   ];
+  // Finance level: income instead of the member and event cards.
+  if (financeOnly) summaryCards.splice(0, 2, {
+    label: "Total Income",
+    val: loading ? "..." : peso(totalIncome),
+    sub: "All recorded income",
+    up: true,
+    icon: Wallet,
+    color: A(dark, "emerald"),
+  });
 
   const maxStatus = Math.max(...EVENT_STATUSES.map((st) => eventsByStatus[st.key] || 0), 1);
 
@@ -672,7 +686,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div className={`grid grid-cols-2 ${financeOnly ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-5 mb-8`}>
         {summaryCards.map((s, i) => (
           <div key={i} className={`${t.cardBg} border ${t.cardBorder} rounded-3xl p-6 relative overflow-hidden group`}>
             <s.icon className="absolute -right-2 -bottom-2 w-16 h-16 text-white/3 group-hover:text-blue-500/10 transition-colors" />
@@ -686,6 +700,7 @@ export default function ReportsPage() {
         ))}
       </div>
 
+      {!financeOnly && (<>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 
         {/* Events by Status */}
@@ -766,6 +781,7 @@ export default function ReportsPage() {
       <NewMembersTrend t={t} dark={dark} reloadKey={reloadKey} church={church} />
 
       {can(role, 'attendance') && <EventAttendanceReport t={t} dark={dark} reloadKey={reloadKey} church={church} canTake={can(role, 'attendance', 'edit')} />}
+      </>)}
 
       {/* Finance last (finance levels only): monthly chart, summary and
           recent transactions, after the church-life sections. */}

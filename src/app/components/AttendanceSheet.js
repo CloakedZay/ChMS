@@ -7,6 +7,7 @@ import { supabase } from '@/app/lib/supabase';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 
 import { friendlyError } from '@/app/lib/errors';
+import { cleanPhone, PHONE_HINT } from '@/app/lib/format';
 // The attendance sheet of one event (db/041). People sign a paper sheet at
 // the event; afterwards the Secretary or a helper ticks the members on it
 // (the branch's whole member list is already here) and types in only the
@@ -278,18 +279,20 @@ function VisitorsBox({ t, eventId, canMark, visitors, onChange }) {
 
   async function add(e, existing) {
     e?.preventDefault();
-    setSaving(true);
     setError('');
+    const cleaned = existing ? '' : cleanPhone(phone);
+    if (cleaned === null) { setError(PHONE_HINT); return; }
+    setSaving(true);
     // Families often share one phone: a new name with an earlier visitor's
     // number may be someone else, so ask (db/058).
     let samePhone = null;
-    if (!existing && phone.trim()) {
-      const { data } = await supabase.rpc('visitor_by_phone', { p_event: eventId, p_phone: phone });
+    if (!existing && cleaned) {
+      const { data } = await supabase.rpc('visitor_by_phone', { p_event: eventId, p_phone: cleaned });
       const earlier = data?.[0];
       if (earlier && earlier.full_name.trim().toLowerCase() !== name.trim().toLowerCase()) {
         samePhone = await confirmDialog({
           title: 'Same phone number',
-          message: `${phone.trim()} belongs to an earlier visitor, ${earlier.full_name}. Is "${name.trim()}" the same person?`,
+          message: `${cleaned} belongs to an earlier visitor, ${earlier.full_name}. Is "${name.trim()}" the same person?`,
           confirmText: `Same person (${earlier.full_name})`,
           cancelText: 'Different person',
         }) ? earlier : false;
@@ -297,7 +300,7 @@ function VisitorsBox({ t, eventId, canMark, visitors, onChange }) {
     }
     const { error: err } = await supabase.rpc('add_event_visitor', existing || samePhone
       ? { p_event: eventId, p_visitor: (existing || samePhone).visitor_id }
-      : { p_event: eventId, p_name: name, p_phone: phone || null, p_invited_by: invitedBy || null, p_new_person: samePhone === false });
+      : { p_event: eventId, p_name: name, p_phone: cleaned || null, p_invited_by: invitedBy || null, p_new_person: samePhone === false });
     setSaving(false);
     if (err) { setError(friendlyError(err)); return; }
     reset();
@@ -328,7 +331,7 @@ function VisitorsBox({ t, eventId, canMark, visitors, onChange }) {
         <form onSubmit={(e) => add(e)} className={`rounded-2xl p-3 mb-4 space-y-2.5 ${t.inner}`}>
           <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} required maxLength={120}
             placeholder="Name" aria-label="Visitor name" className={`w-full border rounded-xl px-3 h-10 text-sm ${t.input}`} />
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={40} inputMode="tel"
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={16} inputMode="tel"
             placeholder="Phone number" aria-label="Phone number" className={`w-full border rounded-xl px-3 h-10 text-sm ${t.input}`} />
           <input value={invitedBy} onChange={(e) => setInvitedBy(e.target.value)} maxLength={120}
             placeholder="Invited by (optional)" aria-label="Invited by" className={`w-full border rounded-xl px-3 h-10 text-sm ${t.input}`} />

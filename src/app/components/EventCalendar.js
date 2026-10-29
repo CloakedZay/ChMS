@@ -65,6 +65,13 @@ export default function EventCalendar({ events, onSelect, dark, legend = STATUS_
   while (cells.length % 7) cells.push(null);
   const listDays = [...byDay.keys()].sort();
 
+  // Next schedules, under the calendar: the coming events from today on,
+  // whatever month is shown.
+  const nextUp = useMemo(() => events
+    .filter((e) => e.status === 'approved' && e.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.start_time || '99').localeCompare(b.start_time || '99'))
+    .slice(0, 5), [events, today]);
+
   const label = (e) => `${e.start_time ? `${formatEventTime(e.start_time)} ` : ''}${e.title}`;
 
   return (
@@ -135,6 +142,28 @@ export default function EventCalendar({ events, onSelect, dark, legend = STATUS_
                     </button>
                   ))}
                 </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Next schedules */}
+      <div className={`mt-5 pt-4 border-t ${s.line}`}>
+        <h3 className={`text-xs font-bold uppercase tracking-widest mb-2 ${s.muted}`}>Next schedules</h3>
+        {nextUp.length === 0 ? (
+          <p className={`text-sm ${s.muted}`}>No upcoming events.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {nextUp.map((e) => (
+              <li key={e.id}>
+                <button type="button" onClick={() => onSelect?.(e)}
+                  className={`w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 text-sm ${s.hover}`}>
+                  <span className={`w-24 shrink-0 text-xs font-bold ${e.date === today ? 'text-[#c5a66a]' : s.muted}`}>
+                    {e.date === today ? 'Today' : new Date(`${e.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                  <span className={`font-semibold truncate ${s.head}`}>{label(e)}</span>
+                </button>
               </li>
             ))}
           </ul>

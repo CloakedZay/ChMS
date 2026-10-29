@@ -62,6 +62,9 @@ export default function TrainingPage() {
   const { user, role } = useAuth();
   const canEdit   = can(role, 'modules', 'edit');
   const canReview = can(role, 'answerReview', 'approve');
+  // The Secretary uploads handouts for the module owners (db/092).
+  const canHandouts = can(role, 'handouts', 'edit');
+  const seesProgress = can(role, 'moduleProgress');
   // Members behind in training (db/075). Admin sees the list; Pastor and
   // Leaders can also log follow-ups.
   const training = useTrainingFollowUp(can(role, 'moduleProgress'));
@@ -379,7 +382,7 @@ export default function TrainingPage() {
           { key: "modules",     label: "Modules & Content" },
           { key: "submissions", label: "Submissions Review" },
           { key: "progress",    label: "Member Progress", count: training.count },
-        ].map((tab) => (
+        ].filter((tab) => tab.key === "modules" || seesProgress).map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -554,7 +557,7 @@ export default function TrainingPage() {
                                     <button onClick={() => handleDownload(hf)} title="Download" className={`p-1.5 ${t.textSub} hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors`}>
                                       <Download className="w-3.5 h-3.5" />
                                     </button>
-                                    {canEditMod && (
+                                    {canHandouts && (
                                     <button onClick={() => handleDeleteHandout(hf, mod.id)} title="Delete" className={`p-1.5 ${t.textSub} hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors`}>
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -565,7 +568,7 @@ export default function TrainingPage() {
                             </div>
                           )}
 
-                          {canEditMod && (
+                          {canHandouts && (
                           <div className="space-y-2">
                             <input
                               type="text"

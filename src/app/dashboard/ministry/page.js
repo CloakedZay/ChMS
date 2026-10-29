@@ -5,7 +5,7 @@ import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
 import Link from "next/link";
-import { GLOBAL_ROLES, ROLE_LABELS } from "@/app/lib/permissions";
+import { GLOBAL_ROLES, ROLE_LABELS, can } from "@/app/lib/permissions";
 import {
   ChevronRight, ChevronDown, Plus, X, Sun, Moon, Pencil, UserPlus,
   Trash2, Loader2, Users, CalendarClock, Link2, BookOpen,
@@ -348,7 +348,7 @@ export default function MinistriesPage() {
                 <div className={`border ${t.cardBorder} rounded-2xl divide-y ${t.divider} mb-3`}>
                   {ministryModules.map((x, i) => (
                     <div key={x.id}>
-                    {/* Tap a module for its handouts; its head uploads them here (db/088). */}
+                    {/* Tap a module for its handouts; the Secretary uploads them here (db/092). */}
                     <button type="button" onClick={() => setOpenModule(openModule === x.id ? null : x.id)} aria-expanded={openModule === x.id}
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-left ${t.hoverRow} transition-colors`}>
                       <span className={`text-xs font-black ${t.textMuted} w-5`}>{i + 1}</span>
@@ -356,12 +356,12 @@ export default function MinistriesPage() {
                       <p className={`flex-1 min-w-0 text-sm font-semibold ${t.textPrimary} truncate`}>{x.title}</p>
                       <span className={`text-[10px] ${t.textMuted}`}>{questionCount[x.id] || 0} question{questionCount[x.id] === 1 ? "" : "s"}</span>
                       {!x.is_active && <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Hidden</span>}
-                      <span className={`text-[11px] font-bold ${assignable ? "text-blue-400" : t.textMuted}`}>{assignable ? "Handouts" : "View handouts"}</span>
+                      <span className={`text-[11px] font-bold ${assignable ? "text-blue-400" : t.textMuted}`}>{can(role, 'handouts', 'edit') ? "Handouts" : "View handouts"}</span>
                       {openModule === x.id ? <ChevronDown size={14} className={t.textMuted} /> : <ChevronRight size={14} className={t.textMuted} />}
                     </button>
                     {openModule === x.id && (
                       <div className="px-4 pb-4 pt-1">
-                        <ModuleHandouts moduleId={x.id} canEdit={assignable} t={t} />
+                        <ModuleHandouts moduleId={x.id} canEdit={can(role, 'handouts', 'edit')} t={t} />
                       </div>
                     )}
                     </div>

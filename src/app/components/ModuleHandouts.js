@@ -9,8 +9,8 @@ import { friendlyError } from '@/app/lib/errors';
 
 // The handouts of one training module (module_handouts + the private
 // 'handouts' bucket, under module-<id>/), same as on the Training page.
-// canEdit: may upload and delete — the database decides that (db/025,
-// db/088: a ministry's modules belong to the Leader who heads it). A new
+// canEdit: may upload and delete — the database decides that (db/092:
+// the Secretary uploads, own branch's ministries and the general path). A new
 // handout is also made searchable by the Assistant (api/knowledge/handout).
 
 const MAX_BYTES = 20 * 1024 * 1024;

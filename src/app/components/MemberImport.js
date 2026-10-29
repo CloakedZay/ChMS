@@ -6,6 +6,7 @@ import { X, Upload, Download, Loader2, CheckCircle2, AlertTriangle, XCircle } fr
 
 import { friendlyError, UserError } from '@/app/lib/errors';
 import { phToday } from '@/app/lib/phDate';
+import { cleanPhone } from '@/app/lib/format';
 import { useDialog } from '@/app/lib/useDialog';
 // Secretary: add many members at once from an Excel (.xlsx) file, using
 // the template in public/templates (Members sheet + a Choices sheet).
@@ -87,10 +88,9 @@ function parseBirthday(cell) {
 }
 
 // Excel stores 09171234567 as the number 9171234567; put the 0 back.
+// '' blank, null not a mobile number (shown as an error), else 09XXXXXXXXX.
 function fixPhone(v) {
-  let s = norm(v);
-  if (/^9\d{9}$/.test(s)) s = '0' + s;
-  return s;
+  return cleanPhone(norm(v));
 }
 
 function checkRows(rows, existingNames) {
@@ -141,6 +141,7 @@ function checkRows(rows, existingNames) {
     if (!r.full_name) r.errors.push('Full name is missing');
     if (r.role && !ROLES.includes(r.role)) r.errors.push(`Role "${get('role')}" — use ${ROLES.join(', ')}`);
     if (!STATUSES.includes(r.status)) r.errors.push(`Status "${get('status')}" — use ${STATUSES.join(', ')}`);
+    if (r.phone === null) { r.errors.push(`Phone "${norm(cells[col.phone])}" — use a mobile number starting with 09`); r.phone = ''; }
     if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) r.errors.push('Email looks wrong');
 
     const key = nameKey(r.full_name);

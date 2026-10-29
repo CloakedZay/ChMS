@@ -9,7 +9,7 @@ import { can } from "@/app/lib/permissions";
 import { notifyEventsChanged } from "@/app/lib/useEventNotices";
 import {
   Calendar, Plus, Search, MoreHorizontal,
-  X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, MapPin, Repeat, ArrowLeft, Ban, RotateCcw, LayoutGrid
+  X, Trash2, Pencil, CalendarDays, Sun, Moon, ClipboardCheck, MapPin, Repeat, ArrowLeft, Ban, RotateCcw, LayoutGrid, Video
 } from "lucide-react";
 import { formatEventTime } from "@/app/lib/eventTime";
 import { phToday } from "@/app/lib/phDate";
@@ -29,6 +29,7 @@ const EMPTY_FORM = {
   date: '',
   start_time: '',
   venue: '',
+  meeting_link: '',
   status: 'approved',
   description: '',
   church_id: '',
@@ -174,6 +175,7 @@ export default function EventsPage() {
       date:        event.date        || '',
       start_time:  event.start_time?.slice(0, 5) || '',
       venue:       event.venue       || '',
+      meeting_link: event.meeting_link || '',
       status:      event.status      || 'approved',
       description: event.description || '',
       church_id:   event.church_id   || '',
@@ -190,6 +192,10 @@ export default function EventsPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (form.meeting_link.trim() && !/^https:\/\/\S+$/.test(form.meeting_link.trim())) {
+      alertDialog('The online meeting link must start with https:// (e.g. a Zoom, Google Meet or Jitsi link).');
+      return;
+    }
     if (isGlobal && !form.church_id) {
       alertDialog('Please select which branch this event belongs to.');
       return;
@@ -204,7 +210,7 @@ export default function EventsPage() {
       return;
     }
     setSaving(true);
-    const { start_time, venue, repeat: _repeat, until: _until, ...rest } = form;
+    const { start_time, venue, meeting_link, repeat: _repeat, until: _until, ...rest } = form;
     const payload = {
       ...rest,
       church_id: isGlobal ? form.church_id : profile?.church_id,
@@ -216,6 +222,7 @@ export default function EventsPage() {
     // before db/043 has been run.
     if (start_time || editingEvent?.start_time) payload.start_time = start_time || null;
     if (venue.trim() || editingEvent?.venue) payload.venue = venue.trim() || null;
+    if (meeting_link.trim() || editingEvent?.meeting_link) payload.meeting_link = meeting_link.trim() || null;
 
     let error;
     if (editingEvent && applyLater && editingEvent.series_id) {
@@ -237,6 +244,8 @@ export default function EventsPage() {
       const missing = /schema cache|does not exist|Could not find/i.test(error.message);
       alertDialog(missing && /series_id/.test(error.message)
         ? 'Repeating events need db/049_event_series.sql. Ask the administrator to run it.'
+        : missing && /meeting_link/.test(error.message)
+          ? 'Online meeting links need db/090_event_meeting_link.sql. Ask the administrator to run it, or clear that field for now.'
         : missing && /start_time|venue/.test(error.message)
           ? 'Time and venue need db/043_event_details.sql. Ask the administrator to run it, or clear those two fields for now.'
           : `Error ${editingEvent ? 'updating' : 'saving'} event: ${friendlyError(error)}`);
@@ -326,7 +335,8 @@ export default function EventsPage() {
 
   const matching = events.filter((ev) => {
     const matchSearch = ev.title?.toLowerCase().includes(search.toLowerCase()) || ev.ministry?.toLowerCase().includes(search.toLowerCase());
-    const matchFilter = activeFilter === "all" || ev.status === activeFilter;
+    // Cancelled events move to the Archive tab, out of "All".
+    const matchFilter = activeFilter === "all" ? ev.status !== "cancelled" : ev.status === activeFilter;
     return matchSearch && matchFilter && (!seriesView || ev.series_id === seriesView);
   });
   // A weekly event is one card (its next date) unless all its dates are open.
@@ -435,7 +445,7 @@ export default function EventsPage() {
           {FILTERS.map((f) => (
             <button key={f} onClick={() => setActiveFilter(f)}
               className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${activeFilter === f ? "bg-blue-600 text-white" : t.filterInactive}`}>
-              {EVENT_STATUS_LABEL[f] || f}
+              {f === 'cancelled' ? `Archive (${counts.cancelled})` : EVENT_STATUS_LABEL[f] || f}
             </button>
           ))}
         </div>
@@ -635,6 +645,19 @@ export default function EventsPage() {
                 <input type="text" name="venue" value={form.venue} onChange={handleChange} maxLength={200} placeholder="e.g. Main Sanctuary" className={inputStyle(t)} />
               </Field>
 
+              <Field label="Online meeting link (optional)" t={t}>
+                <div className="flex gap-2">
+                  <input type="url" name="meeting_link" value={form.meeting_link} onChange={handleChange} maxLength={500}
+                    placeholder="https://meet.google.com/… or Zoom link" className={inputStyle(t)} />
+                  <button type="button"
+                    onClick={() => setForm({ ...form, meeting_link: `https://meet.jit.si/FaithSync-${crypto.randomUUID().slice(0, 13)}` })}
+                    className={`shrink-0 px-3 rounded-xl border text-xs font-bold ${t.cardBorder} ${t.textPrimary}`}>
+                    Generate
+                  </button>
+                </div>
+                <p className={`text-[11px] mt-1.5 ${t.textSub}`}>For online gatherings. Paste your own link, or Generate makes a free Jitsi Meet room.</p>
+              </Field>
+
               <Field label="Description" t={t}>
                 <textarea name="description" value={form.description} onChange={handleChange} placeholder="Optional notes about this event..." rows={3} className={`${inputStyle(t)} resize-none`} />
               </Field>
@@ -710,6 +733,12 @@ function EventCard({ event, branchName, onEdit, onDelete, onShowSeries, onCancel
             <MapPin size={13} className={`${t.textMuted} shrink-0`} />
             <span className="text-xs truncate">{event.venue}</span>
           </div>
+        )}
+        {event.meeting_link && !cancelled && (
+          <a href={event.meeting_link} target="_blank" rel="noopener noreferrer"
+            className={`flex items-center gap-2 text-xs font-semibold ${A(dark, 'blue')} hover:underline`}>
+            <Video size={13} className="shrink-0" /> Join online
+          </a>
         )}
         {event.series && (
           <div className={`flex items-center gap-2 ${t.textSub}`}>

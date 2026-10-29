@@ -32,8 +32,13 @@ export default function RecoveryEmailCard({ dark = true }) {
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState('');
   const [note, setNote]       = useState('');
+  const [gmail, setGmail]     = useState('');          // linked Google account's email
 
   useEffect(() => {
+    // A linked Google account (GoogleAccountCard) can be the recovery email in one tap.
+    supabase.auth.getUserIdentities().then(({ data }) => {
+      setGmail(data?.identities?.find((i) => i.provider === 'google')?.identity_data?.email || '');
+    });
     supabase.rpc('my_recovery_email').then(({ data, error: loadError }) => {
       // Before db/080 the function doesn't exist; show the empty card.
       if (loadError && !/my_recovery_email/i.test(loadError.message)) setError(friendlyError(loadError));
@@ -52,11 +57,11 @@ export default function RecoveryEmailCard({ dark = true }) {
     return json;
   }
 
-  async function sendCode(e) {
+  async function sendCode(e, to) {
     e?.preventDefault();
     setBusy(true); setError(''); setNote('');
     try {
-      const { pending_email } = await call('POST', { action: 'send', email: (pending || email).trim() });
+      const { pending_email } = await call('POST', { action: 'send', email: (to || pending || email).trim() });
       setPending(pending_email);
       setCode('');
       setNote(`A 6-digit code was sent to ${maskEmail(pending_email)}. Check the spam folder too.`);
@@ -154,6 +159,12 @@ export default function RecoveryEmailCard({ dark = true }) {
             </button>
             {saved && <button type="button" onClick={cancel} className={`text-xs font-semibold ${sub} hover:text-blue-400 px-2`}>Cancel</button>}
           </div>
+          {gmail && gmail.toLowerCase() !== (saved || '').toLowerCase() && (
+            <button type="button" onClick={() => sendCode(null, gmail)} disabled={busy}
+              className={`text-xs font-semibold ${sub} hover:text-blue-400 disabled:opacity-50 text-left`}>
+              Or use your linked Google account: <span className="font-bold">{maskEmail(gmail)}</span>
+            </button>
+          )}
         </form>
       ) : (
         <div className="flex items-center justify-between gap-3">

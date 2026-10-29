@@ -9,8 +9,9 @@ export const GLOBAL_ROLES = ["admin", "pastor"];
 // Matches the content policies in db/007; Admin is view-only.
 export const CONTENT_ROLES = ["pastor", "leader"];
 
-// Roles that can add discipleship handouts to the assistant's search.
-export const HANDOUT_ROLES = CONTENT_ROLES;
+// Roles that can add discipleship handouts to the assistant's search:
+// the Secretary uploads them (db/092).
+export const HANDOUT_ROLES = ["secretary"];
 
 // Roles that can see the chatbot document list (aiDocuments in permissions.js).
 export const AI_DOCUMENT_VIEWERS = ["admin", ...CONTENT_ROLES];

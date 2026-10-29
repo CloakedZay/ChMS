@@ -14,9 +14,8 @@ import Pagination, { usePaged } from '@/app/components/Pagination';
 import { alertDialog, confirmDialog } from '@/app/lib/dialog';
 import { friendlyError } from '@/app/lib/errors';
 import { useDialog } from '@/app/lib/useDialog';
-// Announcements (db/031, db/038). Pastor: any branch or all branches.
-// Leader: own branch. Either can aim an announcement at one ministry's
-// members. Everyone else who opens this page can only read. The database
+// Announcements (db/031, db/038, db/091). Only the Secretary posts, to
+// their own branch, and can aim one at a single ministry's members. Everyone else who opens this page can only read. The database
 // enforces the same rules.
 
 const EMPTY = { title: '', body: '', church_id: '', ministry_id: '', is_pinned: false, expires_on: '' };
@@ -25,7 +24,6 @@ export default function AnnouncementsPage() {
   const { user, role } = useAuth();
   const { dark } = useTheme();
   const canEdit = can(role, 'announcements', 'edit');
-  const isPastor = role === 'pastor';
 
   const [items, setItems] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -78,15 +76,14 @@ export default function AnnouncementsPage() {
   const branchName = (id) => (id ? branches.find((b) => b.id === id)?.name || 'One branch' : 'All branches');
   const ministryName = (id) => ministries.find((m) => m.id === id)?.name || 'One ministry';
   // Which rows this person may change (the database checks it too).
-  const canEditRow = (a) => isPastor
-    || (role === 'leader' && a.church_id && a.church_id === myChurch);
+  const canEditRow = (a) => role === 'secretary' && a.church_id && a.church_id === myChurch;
   // Ministries the form offers: the chosen branch's.
-  const formChurch = isPastor ? form.church_id : myChurch;
+  const formChurch = myChurch;
   const ministryChoices = ministries.filter((m) => m.church_id === formChurch);
   const today = todayManila();
 
   function openNew() {
-    setForm({ ...EMPTY, church_id: isPastor ? '' : myChurch || '', ministry_id: '' });
+    setForm({ ...EMPTY, church_id: myChurch || '', ministry_id: '' });
     setFormError('');
     setEditing({});
   }
@@ -103,13 +100,13 @@ export default function AnnouncementsPage() {
   async function save(e) {
     e.preventDefault();
     if (!form.title.trim()) { setFormError('Give the announcement a title.'); return; }
-    if (!isPastor && !myChurch) { setFormError('Your account has no branch, so you can’t post. Ask the admin to set your branch.'); return; }
+    if (!myChurch) { setFormError('Your account has no branch, so you can’t post. Ask the admin to set your branch.'); return; }
     const chosenMinistry = ministries.find((m) => m.id === form.ministry_id) || null;
     const row = {
       title: form.title.trim(),
       body: form.body.trim() || null,
       // a ministry announcement belongs to that ministry's branch
-      church_id: chosenMinistry ? chosenMinistry.church_id : isPastor ? form.church_id || null : myChurch,
+      church_id: chosenMinistry ? chosenMinistry.church_id : myChurch,
       ministry_id: chosenMinistry ? chosenMinistry.id : null,
       is_pinned: form.is_pinned,
       expires_on: form.expires_on || null,
@@ -153,8 +150,7 @@ export default function AnnouncementsPage() {
           <h1 className={`text-2xl font-black ${t.text}`}>Announcements</h1>
           <p className={`text-sm mt-1 ${t.sub}`}>
             Shown at the top of everyone&apos;s overview. Pinned ones stay first.
-            {canEdit && (isPastor ? ' You can post to one branch, all branches, or one ministry.'
-              : ' You can post to your own branch or one of its ministries.')}
+            {canEdit && ' You can post to your own branch or one of its ministries.'}
           </p>
         </div>
         {canEdit && (
@@ -176,7 +172,7 @@ export default function AnnouncementsPage() {
           </span>
           <h2 className={`font-bold ${t.text}`}>No announcements yet</h2>
           <p className={`text-sm mt-1 ${t.sub}`}>
-            {canEdit ? 'Post one and it appears at the top of everyone’s overview.' : 'Announcements from your pastor and leaders will appear here.'}
+            {canEdit ? 'Post one and it appears at the top of everyone’s overview.' : 'Announcements from your church secretary will appear here.'}
           </p>
         </div>
       ) : (
@@ -252,15 +248,7 @@ export default function AnnouncementsPage() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className={label} htmlFor="a-branch">Show to</label>
-                  {isPastor ? (
-                    <select id="a-branch" name="church_id" value={form.church_id}
-                      onChange={(e) => setForm((f) => ({ ...f, church_id: e.target.value, ministry_id: '' }))} className={field}>
-                      <option value="">All branches</option>
-                      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
-                  ) : (
-                    <p className={`${field} opacity-80`}>{branchName(myChurch)}</p>
-                  )}
+                  <p id="a-branch" className={`${field} opacity-80`}>{branchName(myChurch)}</p>
                   {formChurch && (
                     <select id="a-ministry" name="ministry_id" value={form.ministry_id} onChange={change} className={field}
                       aria-label="Ministry">

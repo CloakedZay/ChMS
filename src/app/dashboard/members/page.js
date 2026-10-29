@@ -7,7 +7,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { can } from "@/app/lib/permissions";
 import { authFetch } from "@/app/lib/authFetch";
 import MemberImport from "@/app/components/MemberImport";
-import { FileSpreadsheet, UserPlus, MoreVertical, X, Archive, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink, ClipboardCheck } from "lucide-react";
+import { FileSpreadsheet, UserPlus, MoreVertical, X, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Copy, Check, Link2, Unlink, ClipboardCheck } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import { levelBadge } from "@/app/lib/roleColors";
 
@@ -18,6 +18,7 @@ import DatePicker from "@/app/components/DatePicker";
 import { phToday } from "@/app/lib/phDate";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
 import { friendlyError } from '@/app/lib/errors';
+import { cleanPhone, PHONE_HINT } from '@/app/lib/format';
 import { baseTheme } from '@/app/lib/theme';
 import { useDialog } from '@/app/lib/useDialog';
 const EMPTY_FORM = {
@@ -40,8 +41,10 @@ const STATUS_COLORS = {
   archived: "bg-slate-500/5 text-slate-500 border-slate-500/30",
 };
 
-// Members are archived, never deleted. Archived members drop out of the
-// directory and every count, and show only under the "archived" filter.
+// Members can no longer be archived (panel feedback, Oct 2026): someone who
+// stops coming turns Inactive by itself. Members archived before that drop
+// out of the directory and every count; the "Archived" filter appears only
+// while there are some, so they can still be restored.
 const ARCHIVED = 'archived';
 
 // Nightly check (db/056, 072): Active → Inactive after this many days
@@ -116,6 +119,7 @@ export default function MembersPage() {
   const [members, setMembers]             = useState([]);
   const [matchCount, setMatchCount]       = useState(0);
   const [counts, setCounts]               = useState({ total: 0, active: 0, busy: 0, inactive: 0 });
+  const [archivedCount, setArchivedCount] = useState(0);   // old archived members, to restore
   const [page, setPage]                   = useState(1);
   const [reload, setReload]               = useState(0);
   const [loadError, setLoadError]         = useState('');
@@ -186,6 +190,9 @@ export default function MembersPage() {
       const c = data?.[0] || {};
       setCounts({ total: Number(c.total) || 0, active: Number(c.active) || 0, busy: Number(c.busy) || 0, inactive: Number(c.inactive) || 0 });
     });
+    let aq = supabase.from('members').select('id', { count: 'exact', head: true }).eq('status', ARCHIVED);
+    if (branchFilter) aq = aq.eq('church_id', branchFilter);
+    aq.then(({ count }) => { if (!stale) setArchivedCount(count || 0); });
     return () => { stale = true; };
   }, [branchFilter, reload]);
 
@@ -260,6 +267,8 @@ export default function MembersPage() {
     const fullName = tidyName(form.full_name);
     if (!fullName) { alertDialog('Please enter the full name.'); return; }
     if (isGlobal && !editingMember && !form.church_id) { alertDialog('Please choose the branch.'); return; }
+    const phone = cleanPhone(form.phone);
+    if (phone === null) { alertDialog(`"${form.phone.trim()}" isn't a mobile number. ${PHONE_HINT}`); return; }
     // Two people can share a name, so ask rather than refuse (same branch only).
     const targetChurch = editingMember ? editingMember.church_id : (isGlobal ? form.church_id : null);
     const twin = editingMember && sameName(editingMember.full_name, fullName) ? null : await findSameName(fullName, targetChurch);
@@ -269,7 +278,7 @@ export default function MembersPage() {
     })) return;
     setSaving(true);
     const { church_id: chosenChurch, ...fields } = form;
-    const payload = { ...fields, full_name: fullName, email: form.email.trim().toLowerCase() || null };
+    const payload = { ...fields, full_name: fullName, phone: phone || null, email: form.email.trim().toLowerCase() || null };
     // The Secretary's new members go to their own branch by default; the
     // Pastor picks one. A branch is never changed here.
     if (isGlobal && !editingMember) payload.church_id = chosenChurch;
@@ -295,6 +304,8 @@ export default function MembersPage() {
     await fetchMembers();
   }
 
+  // Only restoring is left (archiving was removed); the archive branch stays
+  // so the restore message and the database call keep one shape.
   async function handleArchive(member, archive) {
     // Archiving switches off a Member login; restoring switches it back on (db/055).
     const login = member.login_role ? { role: member.login_role, email: member.login_email, disabled: member.login_disabled } : null;
@@ -528,7 +539,7 @@ export default function MembersPage() {
               {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
-          {["all", "active", "inactive", ARCHIVED].map((s) => (
+          {["all", "active", "inactive", ...(archivedCount > 0 || filterStatus === ARCHIVED ? [ARCHIVED] : [])].map((s) => (
             <button
               key={s}
               onClick={() => changeStatus(s)}
@@ -695,21 +706,14 @@ export default function MembersPage() {
                 <ClipboardCheck size={13} className="shrink-0" /> {activeMenuMember.is_helper ? 'Remove helper' : 'Attendance helper'}
               </button>
             )}
-            {canArchive && (activeMenuMember.status === ARCHIVED ? (
+            {canArchive && activeMenuMember.status === ARCHIVED && (
               <button
                 onClick={() => handleArchive(activeMenuMember, false)}
                 className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}
               >
                 <ArchiveRestore size={13} /> Restore
               </button>
-            ) : (
-              <button
-                onClick={() => handleArchive(activeMenuMember, true)}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
-              >
-                <Archive size={13} /> Archive
-              </button>
-            ))}
+            )}
           </div>
         </>
       )}
@@ -879,9 +883,10 @@ export default function MembersPage() {
                 <input
                   type="tel" name="phone" value={form.phone}
                   onChange={handleChange}
-                  placeholder="e.g. 09XX XXX XXXX"
+                  placeholder="e.g. 09XX XXX XXXX" maxLength={16} inputMode="tel"
                   className={inputStyle(t)}
                 />
+                <p className={`text-[11px] mt-1.5 ${t.textMuted}`}>Mobile numbers only (starts with 09 or +63 9). Hotlines like 911 are not accepted.</p>
               </Field>
 
               <Field label="Email (optional)" t={t}>
