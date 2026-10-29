@@ -500,10 +500,11 @@ export default function EventsPage() {
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onMouseDown={(e) => { if (e.target === e.currentTarget) setSelectedId(null); }}>
-          <div ref={openedDialogRef} role="dialog" aria-modal="true" aria-label={selected.title} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <div ref={openedDialogRef} role="dialog" aria-modal="true" aria-label={selected.title} className="relative w-full max-w-md">
+            {/* Only the card scrolls, so the close button isn't clipped. */}
             <button onClick={() => setSelectedId(null)} aria-label="Close"
-              className="absolute -top-3 -right-1 z-10 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center"><X size={16} /></button>
-            <div className={`${t.modalBg} rounded-3xl`}>
+              className="absolute -top-3 -right-3 z-10 w-8 h-8 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center shadow-lg"><X size={16} /></button>
+            <div className={`${t.modalBg} rounded-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden`}>
               <EventCard {...cardProps(selected, true)} />
             </div>
           </div>

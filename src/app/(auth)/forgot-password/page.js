@@ -7,8 +7,8 @@ import { KeyRound, Loader2 } from 'lucide-react';
 import Turnstile, { TURNSTILE_ON, TURNSTILE_NEEDED } from '@/app/components/Turnstile';
 
 // "Forgot password?" from the sign-in page (db/080). The person types their
-// username or recovery email; api/auth/forgot-password emails a reset link
-// to the recovery email they added (or the login's own email, if real).
+// username or email; api/auth/forgot-password emails a reset link to the
+// login's own email (if real) or the Gmail linked with "Sign in with Google".
 // The answer is the same whether or not anything matched.
 
 export default function ForgotPasswordPage() {
@@ -22,7 +22,7 @@ export default function ForgotPasswordPage() {
 
   async function submit(e) {
     e.preventDefault();
-    if (!login.trim()) { setError('Enter your username or recovery email.'); return; }
+    if (!login.trim()) { setError('Enter your username or email.'); return; }
     if (TURNSTILE_ON && !captcha) { setError(TURNSTILE_NEEDED); return; }
     setBusy(true);
     setError('');
@@ -67,16 +67,16 @@ export default function ForgotPasswordPage() {
           {sent ? (
             <>
               <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 leading-relaxed">
-                If that login has a recovery email, a reset link is on its way. Check the inbox and the spam folder. The link works once, for a short time.
+                If that login has an email or a linked Google account, a reset link is on its way. Check the inbox and the spam folder. The link works once, for a short time.
               </p>
               <p className={`${textSub} text-xs leading-relaxed`}>
-                No email after a few minutes? Your login may not have a recovery email yet. Ask the church admin for a temporary password, then add one on the Password &amp; Google page.
+                Linked your Gmail? You don&apos;t need a password: tap &ldquo;Sign in with Google&rdquo; on the sign-in page. No email and no Google? Ask the church admin for a temporary password, then link Google on My Profile.
               </p>
             </>
           ) : (
             <form onSubmit={submit} className="space-y-4">
               <div>
-                <label htmlFor="forgot-login" className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Username or recovery email</label>
+                <label htmlFor="forgot-login" className={`block text-xs ${labelCls} font-semibold mb-1.5`}>Username or email</label>
                 <input
                   id="forgot-login"
                   autoComplete="username"

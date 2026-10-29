@@ -9,7 +9,6 @@ import { useTheme } from '@/app/context/ThemeContext';
 import { homePathFor } from '@/app/lib/permissions';
 import { Eye, EyeOff, KeyRound } from 'lucide-react';
 import GoogleAccountCard from '@/app/components/GoogleAccountCard';
-import RecoveryEmailCard from '@/app/components/RecoveryEmailCard';
 import Turnstile, { TURNSTILE_ON, TURNSTILE_NEEDED, TURNSTILE_FAILED } from '@/app/components/Turnstile';
 
 import { friendlyError } from '@/app/lib/errors';
@@ -331,7 +330,6 @@ export default function ChangePasswordPage() {
         {!mustChangePassword && (
           <div className="mt-5 space-y-5">
             <GoogleAccountCard dark={dark} />
-            <RecoveryEmailCard dark={dark} />
           </div>
         )}
       </div>

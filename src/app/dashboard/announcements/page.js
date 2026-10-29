@@ -118,7 +118,7 @@ export default function AnnouncementsPage() {
       ? await supabase.from('announcements').update(row).eq('id', editing.id).select('id').single()
       : await supabase.from('announcements').insert([row]).select('id').single();
     if (error) { setSaving(false); setFormError(friendlyError(error)); return; }
-    // Also as a text message to the members (db/096, Twilio).
+    // Also as a text message to the members (db/096, lib/sms.ts).
     let smsNote = '';
     if (form.send_sms && saved?.id) {
       try {
@@ -127,7 +127,7 @@ export default function AnnouncementsPage() {
         });
         const json = await res.json();
         smsNote = res.ok
-          ? `Texted to ${json.sent} member${json.sent === 1 ? '' : 's'}${json.failed ? `; ${json.failed} could not be sent` : ''}${json.skipped ? `; ${json.skipped} already had it` : ''}.`
+          ? `Texted to ${json.sent} member${json.sent === 1 ? '' : 's'}${json.failed ? `; ${json.failed} could not be sent (${json.error || 'unknown error'})` : ''}${json.skipped ? `; ${json.skipped} already had it` : ''}.`
           : json.error || 'The text messages could not be sent.';
       } catch (err) {
         smsNote = 'The text messages could not be sent: ' + friendlyError(err);

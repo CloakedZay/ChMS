@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Not allowed" }, { status: 401 });
   }
-  if (!smsReady()) return NextResponse.json({ skipped: "Twilio is not set up" });
+  if (!smsReady()) return NextResponse.json({ skipped: "Text messages are not set up" });
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: "The server is missing SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 });
 

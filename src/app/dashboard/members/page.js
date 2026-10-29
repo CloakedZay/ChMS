@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useTheme } from "@/app/context/ThemeContext";
 import { useAuth } from "@/app/context/AuthContext";
@@ -123,6 +123,7 @@ export default function MembersPage() {
   const [loading, setLoading]             = useState(true);
   const [showModal, setShowModal]         = useState(false);
   const [saving, setSaving]               = useState(false);
+  const submitLock = useRef(false);                          // see handleSubmit
   const [openMenuId, setOpenMenuId]       = useState(null);
   const [menuPos, setMenuPos]             = useState({ top: 0, right: 0 });
   const [editingMember, setEditingMember] = useState(null);
@@ -256,8 +257,20 @@ export default function MembersPage() {
     return (data || []).find((m) => m.id !== editingMember?.id && sameName(m.full_name, fullName)) || null;
   }
 
+  // One save at a time: a double click (or Enter + click) while the
+  // same-name check runs used to add the member twice.
   async function handleSubmit(e) {
     e.preventDefault();
+    if (submitLock.current) return;
+    submitLock.current = true;
+    try {
+      await saveMember();
+    } finally {
+      submitLock.current = false;
+    }
+  }
+
+  async function saveMember() {
     const fullName = tidyName(form.full_name);
     if (!fullName) { alertDialog('Please enter the full name.'); return; }
     if (isGlobal && !editingMember && !form.church_id) { alertDialog('Please choose the branch.'); return; }

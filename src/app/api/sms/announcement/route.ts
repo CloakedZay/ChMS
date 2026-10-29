@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const caller = await getCaller(req, ["secretary"]);
   if (caller instanceof NextResponse) return caller;
   if (!smsReady()) {
-    return NextResponse.json({ error: "Text messages are not set up yet (Twilio keys). The announcement was still posted." }, { status: 503 });
+    return NextResponse.json({ error: "Text messages are not set up yet (SMSGATE_USERNAME / SMSGATE_PASSWORD). The announcement was still posted." }, { status: 503 });
   }
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: "The server is missing SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 });

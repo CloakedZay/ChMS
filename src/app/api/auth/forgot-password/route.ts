@@ -11,8 +11,9 @@ const MAX_LOGINS = 5;     // logins one shared recovery email can reset at once
 // "Forgot password?" on the sign-in page (db/080). Not signed in. The person
 // types their username (with or without @members.faithsync.app) or their
 // recovery email. Each matching login gets a one-time reset link, sent to
-// its confirmed recovery email, or to the login's own email when that is a
-// real address. Disabled logins get nothing.
+// its confirmed recovery email (added before that card was removed), the
+// login's own email when that is a real address, or else the Gmail linked
+// with "Sign in with Google". Disabled logins get nothing.
 //
 // The answer is always the same, whether or not anything matched, so this
 // can't be used to find out which usernames or emails exist.
@@ -56,9 +57,15 @@ export async function POST(req: NextRequest) {
     ]);
     if (!profile?.email || profile.disabled || (count ?? 0) >= PER_HOUR) continue;
 
-    const to = recovery?.verified_at && recovery.email
+    let to = recovery?.verified_at && recovery.email
       ? recovery.email
       : isRealEmail(profile.email) ? profile.email : null;
+    if (!to) {
+      // The Gmail linked with "Sign in with Google" (GoogleAccountCard).
+      const { data: u } = await admin.auth.admin.getUserById(id);
+      const google = u?.user?.identities?.find((i) => i.provider === "google");
+      to = (google?.identity_data?.email as string | undefined) || null;
+    }
     if (!to) continue;
 
     // The link goes to our own page, which spends the token only when the
