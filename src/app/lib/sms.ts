@@ -133,7 +133,7 @@ export async function smsRecipients(admin: SupabaseClient, churchId: string, min
 // skipped, so a retry or a second cron run never doubles up.
 // refId: the event id or announcement uuid (sms_log.ref_id is text, db/100).
 export async function sendToAll(
-  admin: SupabaseClient, kind: "announcement" | "event_reminder", refId: number | string, people: Recipient[], body: string,
+  admin: SupabaseClient, kind: "announcement" | "event_reminder" | "event_new" | "event_cancelled", refId: number | string, people: Recipient[], body: string,
 ): Promise<{ sent: number; failed: number; skipped: number; error?: string }> {
   const ref = String(refId);
   const { data: done } = await admin.from("sms_log").select("member_id").eq("kind", kind).eq("ref_id", ref);

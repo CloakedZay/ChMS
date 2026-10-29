@@ -22,6 +22,7 @@ import EventPhotos from "@/app/components/EventPhotos";
 
 import Pagination, { usePaged } from "@/app/components/Pagination";
 import { alertDialog, confirmDialog } from "@/app/lib/dialog";
+import { authFetch } from '@/app/lib/authFetch';
 import { friendlyError } from '@/app/lib/errors';
 import { baseTheme } from '@/app/lib/theme';
 import { useDialog } from '@/app/lib/useDialog';
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
   status: 'approved',
   description: '',
   church_id: '',
+  send_sms: false,    // text the branch's members now (db/101) — new events only
   repeat: 'none',     // 'none' | 'weekly' (db/049) — new events only
   until: '',
 };
@@ -103,6 +105,7 @@ export default function EventsPage() {
   const [toDelete, setToDelete]     = useState(null);   // { event, later, counts }
   const [cancelFor, setCancelFor]   = useState(null);   // event being cancelled (db/051)
   const [cancelNote, setCancelNote] = useState("");
+  const [cancelSms, setCancelSms]   = useState(true);    // text members it's cancelled (db/101)
   const [people, setPeople]         = useState({});     // login id → { full_name, email, role }
 
   const isGlobal = profile && GLOBAL_ROLES.includes(profile.role);
@@ -182,6 +185,7 @@ export default function EventsPage() {
       status:      event.status      || 'approved',
       description: event.description || '',
       church_id:   event.church_id   || '',
+      send_sms: false,
       repeat: 'none',
       until: '',
     });
@@ -213,7 +217,7 @@ export default function EventsPage() {
       return;
     }
     setSaving(true);
-    const { start_time, venue, meeting_link, repeat: _repeat, until: _until, ...rest } = form;
+    const { start_time, venue, meeting_link, send_sms, repeat: _repeat, until: _until, ...rest } = form;
     const payload = {
       ...rest,
       church_id: isGlobal ? form.church_id : profile?.church_id,
@@ -228,6 +232,7 @@ export default function EventsPage() {
     if (meeting_link.trim() || editingEvent?.meeting_link) payload.meeting_link = meeting_link.trim() || null;
 
     let error;
+    let firstId = null;   // the new event, for the text message
     if (editingEvent && applyLater && editingEvent.series_id) {
       // Everything but the date and status, for this date and the later ones.
       const { date, status: _status, ...shared } = payload;
@@ -240,8 +245,11 @@ export default function EventsPage() {
       ({ error } = await supabase.from('events').update(payload).eq('id', editingEvent.id));
     } else {
       const series_id = dates.length > 1 ? crypto.randomUUID() : null;
-      ({ error } = await supabase.from('events')
-        .insert(dates.map((date) => ({ ...payload, date, ...(series_id ? { series_id } : {}) }))));
+      let rows;
+      ({ data: rows, error } = await supabase.from('events')
+        .insert(dates.map((date) => ({ ...payload, date, ...(series_id ? { series_id } : {}) })))
+        .select('id, date'));
+      firstId = rows?.slice().sort((a, b) => a.date.localeCompare(b.date))[0]?.id ?? null;
     }
     if (error) {
       const missing = /schema cache|does not exist|Could not find/i.test(error.message);
@@ -256,11 +264,27 @@ export default function EventsPage() {
       return;
     }
     if (!editingEvent) notifyEventsChanged();
+    // Text the branch's members about it (db/101, lib/sms.ts).
+    let smsNote = '';
+    if (send_sms && firstId) {
+      try {
+        const res = await authFetch('/api/sms/event', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_id: firstId }),
+        });
+        const json = await res.json();
+        smsNote = res.ok
+          ? `Texted to ${json.sent} member${json.sent === 1 ? '' : 's'}${json.failed ? `; ${json.failed} could not be sent (${json.error || 'unknown error'})` : ''}${json.skipped ? `; ${json.skipped} already had it` : ''}.`
+          : json.error || 'The text messages could not be sent.';
+      } catch (err) {
+        smsNote = 'The text messages could not be sent: ' + friendlyError(err);
+      }
+    }
     setSaving(false);
     setShowModal(false);
     setEditingEvent(null);
     setForm(EMPTY_FORM);
     await fetchEvents();
+    if (smsNote) alertDialog(smsNote);
   }
 
   // ── Delete: one date, or this date and the later ones of its series ─────
@@ -304,9 +328,26 @@ export default function EventsPage() {
         : friendlyError(error));
       return;
     }
+    // Text the branch's members, only for a date still to come.
+    let smsNote = '';
+    if (cancelSms && cancelFor.date >= phToday()) {
+      try {
+        const res = await authFetch('/api/sms/event', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event_id: cancelFor.id, cancelled: true }),
+        });
+        const json = await res.json();
+        smsNote = res.ok
+          ? `Texted ${json.sent} member${json.sent === 1 ? '' : 's'} that it's cancelled${json.failed ? `; ${json.failed} could not be sent (${json.error || 'unknown error'})` : ''}.`
+          : json.error || 'The text messages could not be sent.';
+      } catch (err) {
+        smsNote = 'The text messages could not be sent: ' + friendlyError(err);
+      }
+    }
     setCancelFor(null);
     await fetchEvents();
     notifyEventsChanged();
+    if (smsNote) alertDialog(smsNote);
   }
 
   async function restore(ev) {
@@ -369,7 +410,7 @@ export default function EventsPage() {
       onDelete: wrap(canManageAll ? openDelete : null),
       attendance: canSeeAttendance ? attendanceLabel : null,
       onShowSeries: event.series ? wrap(() => { setSeriesView(event.series_id); switchView('cards'); }) : null,
-      onCancel: wrap(canManageAll && event.status === 'approved' ? (ev) => { setCancelFor(ev); setCancelNote(''); } : null),
+      onCancel: wrap(canManageAll && event.status === 'approved' ? (ev) => { setCancelFor(ev); setCancelNote(''); setCancelSms(true); } : null),
       onRestore: wrap(canManageAll && event.status === 'cancelled' ? restore : null),
       byline: whoLine(event),
       inModal,
@@ -566,6 +607,15 @@ export default function EventsPage() {
             <textarea value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} maxLength={500} rows={3} autoFocus
               placeholder="Reason (optional) — e.g. Moved to next Sunday because of the typhoon."
               className={`${inputStyle(t)} resize-none`} />
+            {cancelFor.date >= phToday() && (
+              <label className={`flex items-start gap-2.5 text-sm cursor-pointer mt-3 ${t.textSub}`}>
+                <input type="checkbox" checked={cancelSms} onChange={(e) => setCancelSms(e.target.checked)} className="w-4 h-4 mt-0.5 accent-blue-600" />
+                <span>
+                  <span className={`font-semibold ${t.textPrimary}`}>Text members that it&apos;s cancelled (SMS)</span>
+                  <span className="block text-[11px]">With your reason, to every member of the branch with a mobile number. No day-before reminder goes out for it.</span>
+                </span>
+              </label>
+            )}
             <div className="flex gap-3 pt-4">
               <button type="button" onClick={() => setCancelFor(null)} disabled={acting} className={`flex-1 ${t.cancelBtn} rounded-xl py-2.5 text-sm font-semibold`}>Keep it</button>
               <button type="submit" disabled={acting} className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-bold">
@@ -668,6 +718,17 @@ export default function EventsPage() {
               <Field label="Description" t={t}>
                 <textarea name="description" value={form.description} onChange={handleChange} placeholder="Optional notes about this event..." rows={3} className={`${inputStyle(t)} resize-none`} />
               </Field>
+
+              {!editingEvent && (
+                <label className={`flex items-start gap-2.5 text-sm cursor-pointer ${t.textSub}`}>
+                  <input type="checkbox" checked={form.send_sms} onChange={(e) => setForm({ ...form, send_sms: e.target.checked })}
+                    className="w-4 h-4 mt-0.5 accent-blue-600" />
+                  <span>
+                    <span className={`font-semibold ${t.textPrimary}`}>Text members about this event (SMS)</span>
+                    <span className="block text-[11px]">Sent now to every member of the branch with a mobile number who hasn&apos;t turned texts off. A reminder also goes out the day before.</span>
+                  </span>
+                </label>
+              )}
 
               {!editingEvent && (
                 <p className={`text-[11px] ${t.textSub}`}>
