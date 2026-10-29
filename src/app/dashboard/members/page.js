@@ -8,7 +8,7 @@ import { can } from "@/app/lib/permissions";
 import { authFetch } from "@/app/lib/authFetch";
 import MemberImport from "@/app/components/MemberImport";
 import JoinRequests from "@/app/components/JoinRequests";
-import { FileSpreadsheet, UserPlus, MoreVertical, X, ArchiveRestore, Pencil, Search, Users, Sun, Moon, KeyRound, Mail, Copy, Check, Link2, Unlink, ClipboardCheck } from "lucide-react";
+import { FileSpreadsheet, UserPlus, MoreVertical, X, Pencil, Search, Users, Sun, Moon, KeyRound, Mail, Copy, Check, Link2, Unlink, ClipboardCheck } from "lucide-react";
 import BranchLabel from "@/app/components/BranchLabel";
 import { levelBadge } from "@/app/lib/roleColors";
 
@@ -39,13 +39,10 @@ const EMPTY_FORM = {
 const STATUS_COLORS = {
   active:   "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   inactive: "bg-slate-500/10 text-slate-400 border-slate-500/20",
-  archived: "bg-slate-500/5 text-slate-500 border-slate-500/30",
 };
 
-// Members can no longer be archived (panel feedback, Oct 2026): someone who
-// stops coming turns Inactive by itself. Members archived before that drop
-// out of the directory and every count; the "Archived" filter appears only
-// while there are some, so they can still be restored.
+// Members are never archived (panel feedback, Oct 2026; db/099 brought the
+// old ones back): someone who stops coming turns Inactive by itself.
 const ARCHIVED = 'archived';
 
 // Nightly check (db/056, 072): Active → Inactive after this many days
@@ -109,7 +106,7 @@ export default function MembersPage() {
   // Branch shown on each row only when several branches are listed together.
   const showBranch = isGlobal && branch === 'all' && churches.length > 1;
   // Secretary (own branch) and Pastor (any branch, db/062) add and edit;
-  // both archive; others view.
+  // both make attendance helpers; others view.
   const canEdit    = can(role, 'members', 'edit');
   const canArchive = can(role, 'memberArchive', 'edit');
   const canImport  = can(role, 'memberImport', 'edit');
@@ -120,7 +117,6 @@ export default function MembersPage() {
   const [members, setMembers]             = useState([]);
   const [matchCount, setMatchCount]       = useState(0);
   const [counts, setCounts]               = useState({ total: 0, active: 0, busy: 0, inactive: 0 });
-  const [archivedCount, setArchivedCount] = useState(0);   // old archived members, to restore
   const [page, setPage]                   = useState(1);
   const [reload, setReload]               = useState(0);
   const [loadError, setLoadError]         = useState('');
@@ -191,9 +187,6 @@ export default function MembersPage() {
       const c = data?.[0] || {};
       setCounts({ total: Number(c.total) || 0, active: Number(c.active) || 0, busy: Number(c.busy) || 0, inactive: Number(c.inactive) || 0 });
     });
-    let aq = supabase.from('members').select('id', { count: 'exact', head: true }).eq('status', ARCHIVED);
-    if (branchFilter) aq = aq.eq('church_id', branchFilter);
-    aq.then(({ count }) => { if (!stale) setArchivedCount(count || 0); });
     return () => { stale = true; };
   }, [branchFilter, reload]);
 
@@ -274,7 +267,7 @@ export default function MembersPage() {
     const targetChurch = editingMember ? editingMember.church_id : (isGlobal ? form.church_id : null);
     const twin = editingMember && sameName(editingMember.full_name, fullName) ? null : await findSameName(fullName, targetChurch);
     if (twin && !await confirmDialog({
-      message: `There is already a member named "${twin.full_name}"${twin.status === ARCHIVED ? ' (archived — you can restore them instead)' : ''}${twin.phone ? `, phone ${twin.phone}` : ''}. Is this a different person?`,
+      message: `There is already a member named "${twin.full_name}"${twin.status === ARCHIVED ? ' (archived)' : ''}${twin.phone ? `, phone ${twin.phone}` : ''}. Is this a different person?`,
       confirmText: editingMember ? 'Yes, save' : 'Yes, add',
     })) return;
     setSaving(true);
@@ -302,40 +295,6 @@ export default function MembersPage() {
     setShowModal(false);
     setEditingMember(null);
     setForm(EMPTY_FORM);
-    await fetchMembers();
-  }
-
-  // Only restoring is left (archiving was removed); the archive branch stays
-  // so the restore message and the database call keep one shape.
-  async function handleArchive(member, archive) {
-    // Archiving switches off a Member login; restoring switches it back on (db/055).
-    const login = member.login_role ? { role: member.login_role, email: member.login_email, disabled: member.login_disabled } : null;
-    const loginNote = archive
-      ? (login && login.role === 'member' && !login.disabled ? ` Their login (${login.email}) will be switched off too.`
-        : login && login.role !== 'member' ? ` Their ${login.role} login keeps working — only the Admin can switch it off.` : '')
-      : (member.archive_disabled_login ? ' Their login will be switched back on.' : '');
-    const confirmed = await confirmDialog(archive
-      ? `Archive "${member.full_name}"? They'll be hidden from the directory and counts, and can be restored later.${loginNote}`
-      : `Restore "${member.full_name}"? They'll be Active if seen in the last ${AUTO_DAYS} days and they haven't missed their last ${AUTO_MISSED} events, otherwise Inactive until they come back.${loginNote}`);
-    if (!confirmed) return;
-    setOpenMenuId(null);
-
-    const { data, error } = await supabase
-      .from('members')
-      // On restore the database picks Active or Inactive (db/057).
-      .update({ status: archive ? ARCHIVED : 'active' })
-      .eq('id', member.id)
-      .select('id');
-
-    if (error) {
-      alertDialog('Error updating member: ' + friendlyError(error));
-      return;
-    }
-    if (!data?.length) {
-      alertDialog("You don't have permission to change this member.");
-      return;
-    }
-
     await fetchMembers();
   }
 
@@ -569,7 +528,7 @@ export default function MembersPage() {
               {churches.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
-          {["all", "active", "inactive", ...(archivedCount > 0 || filterStatus === ARCHIVED ? [ARCHIVED] : [])].map((s) => (
+          {["all", "active", "inactive"].map((s) => (
             <button
               key={s}
               onClick={() => changeStatus(s)}
@@ -743,14 +702,6 @@ export default function MembersPage() {
                 className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${t.textSub} ${t.menuHover} transition-colors`}
               >
                 <ClipboardCheck size={13} className="shrink-0" /> {activeMenuMember.is_helper ? 'Remove helper' : 'Attendance helper'}
-              </button>
-            )}
-            {canArchive && activeMenuMember.status === ARCHIVED && (
-              <button
-                onClick={() => handleArchive(activeMenuMember, false)}
-                className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm ${t.textSub} ${t.menuHover} transition-colors`}
-              >
-                <ArchiveRestore size={13} /> Restore
               </button>
             )}
           </div>

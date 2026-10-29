@@ -129,7 +129,7 @@ export default function FollowUpPage() {
       .eq('church_id', v.church_id).ilike('full_name', name.replace(/[\\%_]/g, '\\$&'));
     const twin = twins?.[0];
     if (twin && !await confirmDialog({
-      message: `There is already a member named "${twin.full_name}"${twin.status === 'archived' ? ' (archived — you can restore them on the Members page instead)' : ''}${twin.phone ? `, phone ${twin.phone}` : ''}. Is ${v.full_name} a different person?`,
+      message: `There is already a member named "${twin.full_name}"${twin.phone ? `, phone ${twin.phone}` : ''}. Is ${v.full_name} a different person?`,
       confirmText: 'Yes, different person',
     })) return;
     if (!await confirmDialog(`Add ${v.full_name} as a member? Their ${v.visits} visit${v.visits === 1 ? '' : 's'} will count as attendance, and they'll leave the visitor list.`)) return;
